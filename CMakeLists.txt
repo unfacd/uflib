@@ -78,6 +78,15 @@ if(_PACKAGE_TESTS)
     add_subdirectory(test)
 endif()
 
+find_package(OpenSSL REQUIRED)
+if (OPENSSL_FOUND)
+    target_include_directories(${_PROJECT_NAME} PUBLIC ${OPENSSL_INCLUDE_DIR})
+    target_link_libraries(${_PROJECT_NAME} OpenSSL::SSL OpenSSL::Crypto)
+    message(STATUS "Found OpenSSL ${OPENSSL_VERSION}")
+else()
+    message(STATUS "OpenSSL Not Found")
+endif()
+
 target_include_directories(${_PROJECT_NAME}
         PUBLIC
         $<INSTALL_INTERFACE:include>
