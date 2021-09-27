@@ -1,0 +1,18 @@
+@PACKAGE_INIT@
+
+get_filename_component(${_PROJECT_NAME}_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+include(CMakeFindDependencyMacro)
+
+list(APPEND CMAKE_MODULE_PATH ${${_PROJECT_NAME}_CMAKE_DIR})
+
+# NOTE: to find FindRapidJSON.cmake
+#find_dependency(RapidJSON @MIN_RapidJSON_VERSION@)
+#list(REMOVE_AT CMAKE_MODULE_PATH -1)
+
+#find_dependency(boost_regex @MIN_BOOST_VERSION@)
+
+if(NOT TARGET ${_PROJECT_NAME}::${_PROJECT_NAME})
+    include("${${_PROJECT_NAME}_CMAKE_DIR}/${_PROJECT_NAME}Targets.cmake")
+endif()
+
+set(${_PROJECT_NAME}_LIBRARIES ${_PROJECT_NAME}::${_PROJECT_NAME})
