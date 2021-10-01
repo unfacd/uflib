@@ -21,8 +21,8 @@ Please refer to the XKCP for more details.
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "brg_endian.h"
-#include "KeccakP-1600-SnP.h"
+#include "K12/brg_endian.h"
+#include <uflib/K12/KeccakP-1600-SnP.h>
 
 #ifdef KeccakP1600_disableParallelism
 #undef KeccakP1600_enable_simd_options

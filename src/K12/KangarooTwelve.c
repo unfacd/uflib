@@ -17,7 +17,7 @@ http://creativecommons.org/publicdomain/zero/1.0/
 #include <assert.h>
 #include <string.h>
 #include "uflib/K12/KangarooTwelve.h"
-#include "Plain64/KeccakP-1600-SnP.h" //AA todo: this current set to plain. Set to optimised when desired. See CMakeLists.txt
+#include "uflib/K12/KeccakP-1600-SnP.h"
 
 /* ---------------------------------------------------------------- */
 

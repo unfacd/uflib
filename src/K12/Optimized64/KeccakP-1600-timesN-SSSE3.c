@@ -20,7 +20,7 @@ Please refer to the XKCP for more details.
 
 #include <stdint.h>
 #include <tmmintrin.h>
-#include "KeccakP-1600-SnP.h"
+#include "uflib/K12/KeccakP-1600-SnP.h"
 #include "align.h"
 
 #define KeccakP1600times2_SSSE3_unrolling 2

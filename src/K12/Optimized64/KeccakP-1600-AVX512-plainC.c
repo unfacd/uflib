@@ -26,7 +26,7 @@ We would like to thank Vladimir Sedach, we have used parts of his Keccak AVX-512
 #include <wmmintrin.h>
 #include <immintrin.h>
 #include <emmintrin.h>
-#include "align.h"
+#include "uflib/K12/align.h"
 
 typedef __m512i     V512;
 

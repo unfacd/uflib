@@ -49,6 +49,8 @@ set(INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
 include(cmake/CPM.cmake)#for managing package dependencies
 
 add_library(${_PROJECT_NAME} "")
+add_library(${_PROJECT_NAME}::${_PROJECT_NAME} ALIAS ${_PROJECT_NAME})
+
 add_subdirectory(src)
 add_subdirectory(src/adt)
 add_subdirectory(src/db)
@@ -56,6 +58,14 @@ add_subdirectory(src/K12)
 add_subdirectory(src/lzf)
 add_subdirectory(src/protobuf-c)
 add_subdirectory(src/scheduled_jobs)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_compile_options(${_PROJECT_NAME}  PUBLIC -O0 -ggdb3 -Wall -Wno-unused-label -Wno-unused-variable -Wno-comment -fuse-ld=gold)
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 11)
+        #...
+    endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+endif()
 
 #force generation of fresh build time
 add_custom_target (
@@ -65,6 +75,21 @@ add_custom_target (
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_dependencies(${_PROJECT_NAME} ${_PROJECT_NAME}_version)
 #end force
+
+include(CheckSymbolExists)
+if (NOT _GNU_SOURCE)
+    check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
+    if (NOT _GNU_SOURCE)
+        unset(_GNU_SOURCE CACHE)
+        check_symbol_exists(_GNU_SOURCE "features.h" _GNU_SOURCE)
+    endif ()
+endif ()
+
+if (_GNU_SOURCE)
+    target_compile_definitions(${_PROJECT_NAME} PUBLIC GNU_SOURCE=1)
+else()
+    message(FATAL_ERROR "${_PROJECT_NAME} requires _GNU_SOURCE")
+endif ()
 
 if(_PACKAGE_TESTS)
     CPMAddPackage(
@@ -96,23 +121,29 @@ target_include_directories(${_PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
 
-include(GNUInstallDirs)
-set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/${_PROJECT_NAME})
-
-#https://pabloariasal.github.io/2018/02/19/its-time-to-do-cmake-right/
-#Export uflib's configuration by adding targets to an export group:
-install(TARGETS ${_PROJECT_NAME}
-        EXPORT ${_PROJECT_NAME}-targets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        )
+#this allows users of in-source lib to to do target_include_directories (xxtarget PUBLIC ${UFLIB_INCLUDE_DIR})
+set(${_PROJECT_NAME_X}_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "")
 
 #In case a different name is desired for the export target (last arg)
 #set_target_properties(${_PROJECT_NAME} PROPERTIES EXPORT_NAME ${_PROJECT_NAME})
+set_target_properties(${_PROJECT_NAME}
+                        PROPERTIES
+                        POSITION_INDEPENDENT_CODE 1
+                        DEBUG_POSTFIX "_d"
+                    )
+include(GNUInstallDirs)
+set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/${_PROJECT_NAME})
+
+#install build targets (only lib for this package):
+install(TARGETS ${_PROJECT_NAME}
+        EXPORT ${_PROJECT_NAME}-targets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT lib
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT lib
+        )
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-#Export the targets to a script
+#specify install rules for the previously generated and exported targets file
 install(EXPORT ${_PROJECT_NAME}-targets
         FILE
         ${_PROJECT_NAME}Targets.cmake
@@ -122,24 +153,23 @@ install(EXPORT ${_PROJECT_NAME}-targets
         ${CMAKE_INSTALL_LIBDIR}/cmake/${_PROJECT_NAME}
         )
 
-#This package allows us to write config files that can be relocated (eg in-source); ie where paths are not hard-coded.
+#start generate proper CMake configuration files
 include(CMakePackageConfigHelpers)
 
-#configure our template
-configure_package_config_file(
-        ${CMAKE_CURRENT_LIST_DIR}/cmake/${_PROJECT_NAME}Config.cmake.in
-        ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}Config.cmake
-        INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
-        )
-
-#Create a ConfigVersion.cmake file
 write_basic_package_version_file(
         ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}ConfigVersion.cmake
         VERSION ${UFLIB_VERSION}
         COMPATIBILITY AnyNewerVersion
 )
 
-#Install the Config, Configversion and other custom modules
+#generate actual configuration file
+configure_package_config_file(
+        ${CMAKE_CURRENT_LIST_DIR}/cmake/${_PROJECT_NAME}Config.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}Config.cmake
+        INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
+        )
+
+#set install rules for the files generated above
 install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}Config.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}ConfigVersion.cmake

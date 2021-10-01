@@ -20,6 +20,6 @@
 
 #define UFLIB_MAJOR 1
 #define UFLIB_MINOR 0
-#define UFLIB_PATCH 1
+#define UFLIB_PATCH 2
 
 #endif

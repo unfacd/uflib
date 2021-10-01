@@ -19,10 +19,9 @@ Please refer to the XKCP for more details.
 */
 
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
-#include "brg_endian.h"
-#include <KeccakP-1600-SnP.h>
+#include "K12/brg_endian.h"
+#include "uflib/K12/KeccakP-1600-SnP.h"
 
 #define KeccakP1600_opt64_implementation_config "all rounds unrolled"
 #define KeccakP1600_opt64_fullUnrolling

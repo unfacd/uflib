@@ -21,8 +21,8 @@ Please refer to the XKCP for more details.
 #include <stdint.h>
 #include <emmintrin.h>
 #include <immintrin.h>
-#include "KeccakP-1600-SnP.h"
-#include "align.h"
+#include "uflib/K12/KeccakP-1600-SnP.h"
+#include "uflib/K12/align.h"
 
 #define AVX512alignment 64
 
