@@ -500,7 +500,7 @@ EncryptedMessage *enc_ptr = calloc(1, sizeof(EncryptedMessage));
 }
 
 /**
- * @params ciphertext: b64 encoded cipher text, with the iv embedded as IV_LENGTH bytes at the begining
+ * @params ciphertext:: b64 encoded cipher text, with the iv embedded as IV_LENGTH bytes at the begining
  */
 DecryptedMessage *
 DecryptWithSignallingKey(const unsigned char *ciphertext_b64, size_t ciphertext_len, unsigned char *key, bool flag_b64encoded_key)

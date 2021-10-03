@@ -1,9 +1,15 @@
 @PACKAGE_INIT@
 
-get_filename_component(${_PROJECT_NAME}_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(${_PROJECT_NAME}_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)#get directory without filename /full_pathname/...
+message("get_filename_component: ${_PROJECT_NAME}_CMAKE_DIR")
+
 include(CMakeFindDependencyMacro)
 
-list(APPEND CMAKE_MODULE_PATH ${${_PROJECT_NAME}_CMAKE_DIR})
+list(APPEND CMAKE_MODULE_PATH ${${_PROJECT_NAME}_CMAKE_DIR}) #allow to search dependencies in our package
+#find_dependency(RapidJSON @MIN_RapidJSON_VERSION@)
+#list(REMOVE_AT CMAKE_MODULE_PATH -1)#remove our package from dependencies search path
+
+set_and_check (${_PROJECT_NAME_X}_INCLUDE_DIRS "@PACKAGE_${_PROJECT_NAME_X}_INCLUDE_DIRS@")
 
 if(NOT TARGET ${_PROJECT_NAME}::${_PROJECT_NAME})
     include("${${_PROJECT_NAME}_CMAKE_DIR}/${_PROJECT_NAME}Targets.cmake")

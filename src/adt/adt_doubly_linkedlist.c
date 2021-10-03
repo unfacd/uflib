@@ -1,5 +1,4 @@
-/* adlist.c - A generic doubly linked list implementation
- *
+/*
  * Copyright (c) 2006-2010, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
@@ -28,6 +27,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/** @file
+ * @brief Classic doubly linked list implementation
+ *
+ * Classic doubly linked list implementation with no locking semantics.
+ */
+
 #include <stdlib.h>
 #include <uflib/adt/adt_doubly_linkedlist.h>
 
@@ -42,7 +47,8 @@
  * by the user before to call AlFreeList().
  *
  * On error, NULL is returned. Otherwise the pointer to the new list. */
-DoublyList *DoublyListCreate(DoublyList *dlist_ptr_in)
+DoublyList *
+DoublyListCreate(DoublyList *dlist_ptr_in)
 {
 	DoublyList *list;
 
@@ -61,7 +67,8 @@ DoublyList *DoublyListCreate(DoublyList *dlist_ptr_in)
 /* Free the whole list.
  *
  * This function can't fail. */
-void DoublyListRelease(DoublyList *list)
+void
+DoublyListRelease(DoublyList *list)
 {
     unsigned long len;
     DoublyListNode *current, *next;
@@ -84,7 +91,8 @@ void DoublyListRelease(DoublyList *list)
  * On error, NULL is returned and no operation is performed (i.e. the
  * list remains unaltered).
  * On success the 'list' pointer you pass to the function is returned. */
-DoublyList *DoublyListAddNodeHead(DoublyList *list, DoublyListNode	*list_node_in, void *value)
+DoublyList *
+DoublyListAddNodeHead(DoublyList *list, DoublyListNode	*list_node_in, void *value)
 {
     DoublyListNode *node;
 
@@ -116,7 +124,8 @@ DoublyList *DoublyListAddNodeHead(DoublyList *list, DoublyListNode	*list_node_in
  * On error, NULL is returned and no operation is performed (i.e. the
  * list remains unaltered).
  * On success the 'list' pointer you pass to the function is returned. */
-DoublyList *DoublyListAddNodeTail(DoublyList *list, DoublyListNode	*list_node_in, void *value)
+DoublyList *
+DoublyListAddNodeTail(DoublyList *list, DoublyListNode	*list_node_in, void *value)
 {
     DoublyListNode *node;
 
@@ -142,7 +151,8 @@ DoublyList *DoublyListAddNodeTail(DoublyList *list, DoublyListNode	*list_node_in
     return list;
 }
 
-DoublyList *DoublyListInsertNode(DoublyList *list, DoublyListNode	*list_node_in, DoublyListNode *old_node, void *value, int after)
+DoublyList *
+DoublyListInsertNode(DoublyList *list, DoublyListNode	*list_node_in, DoublyListNode *old_node, void *value, int after)
 {
     DoublyListNode *node;
 
@@ -182,7 +192,8 @@ DoublyList *DoublyListInsertNode(DoublyList *list, DoublyListNode	*list_node_in,
  * It's up to the caller to free the private value of the node.
  *
  * This function can't fail. */
-void DoublyListDelNode(DoublyList *list, DoublyListNode *node, bool flag_self_destruct)
+void
+DoublyListDelNode(DoublyList *list, DoublyListNode *node, bool flag_self_destruct)
 {
     if (node->prev)
         node->prev->next = node->next;
@@ -201,7 +212,8 @@ void DoublyListDelNode(DoublyList *list, DoublyListNode *node, bool flag_self_de
  * call to listNext() will return the next element of the list.
  *
  * This function can't fail. */
-DoublyListIterator *DoublyListGetIterator(DoublyList *list, DoublyListIterator *iter_in, int direction)
+DoublyListIterator *
+DoublyListGetIterator(DoublyList *list, DoublyListIterator *iter_in, int direction)
 {
     DoublyListIterator *iter;
 
@@ -218,17 +230,20 @@ DoublyListIterator *DoublyListGetIterator(DoublyList *list, DoublyListIterator *
 }
 
 /* Release the iterator memory */
-void DoublyListReleaseIterator(DoublyListIterator *iter) {
+void
+DoublyListReleaseIterator(DoublyListIterator *iter) {
     free(iter);
 }
 
 /* Create an iterator in the list private iterator structure */
-void DoublyListRewind(DoublyList *list, DoublyListIterator *li) {
+void
+DoublyListRewind(DoublyList *list, DoublyListIterator *li) {
     li->next = list->head;
     li->direction = AL_START_HEAD;
 }
 
-void DoublyListRewindTail(DoublyList *list, DoublyListIterator *li) {
+void
+DoublyListRewindTail(DoublyList *list, DoublyListIterator *li) {
     li->next = list->tail;
     li->direction = AL_START_TAIL;
 }
@@ -247,7 +262,8 @@ void DoublyListRewindTail(DoublyList *list, DoublyListIterator *li) {
  * }
  *
  * */
-DoublyListNode *DoublyListNext(DoublyListIterator *iter)
+DoublyListNode *
+DoublyListNext(DoublyListIterator *iter)
 {
     DoublyListNode *current = iter->next;
 
@@ -268,7 +284,8 @@ DoublyListNode *DoublyListNext(DoublyListIterator *iter)
  * the original node is used as value of the copied node.
  *
  * The original list both on success or error is never modified. */
-DoublyList *DoublyListDup(DoublyList *orig)
+DoublyList *
+DoublyListDup(DoublyList *orig)
 {
     DoublyList *copy;
     DoublyListIterator *iter;
@@ -311,7 +328,8 @@ DoublyList *DoublyListDup(DoublyList *orig)
  * On success the first matching node pointer is returned
  * (search starts from head). If no matching node exists
  * NULL is returned. */
-DoublyListNode *DoublyListSearchKey(DoublyList *list, void *key)
+DoublyListNode *
+DoublyListSearchKey(DoublyList *list, void *key)
 {
     DoublyListIterator *iter;
     DoublyListNode *node;
@@ -339,7 +357,8 @@ DoublyListNode *DoublyListSearchKey(DoublyList *list, void *key)
  * and so on. Negative integers are used in order to count
  * from the tail, -1 is the last element, -2 the penultimante
  * and so on. If the index is out of range NULL is returned. */
-DoublyListNode *DoublyListIndex(DoublyList *list, long index) {
+DoublyListNode *
+DoublyListIndex(DoublyList *list, long index) {
     DoublyListNode *n;
 
     if (index < 0) {
@@ -354,7 +373,8 @@ DoublyListNode *DoublyListIndex(DoublyList *list, long index) {
 }
 
 /* Rotate the list removing the tail node and inserting it to the head. */
-void DoublyListRotate(DoublyList *list) {
+void DoublyListRotate
+(DoublyList *list) {
     DoublyListNode *tail = list->tail;
 
     if (DoublyListLength(list) <= 1) return;
