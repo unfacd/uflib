@@ -1,5 +1,8 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * @file utils_hex.c
+ * @brief Hexadecimal encode/decode primitives: bin2hex, hexchr2bin, hex2bin.
+ *
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -18,12 +21,18 @@
 #include <uflib/standard_defs.h>
 #include <uflib/utils_hex.h>
 
-//based on https://nachtimwald.com/2017/09/24/hex-encode-and-decode-in-c/
-
-char *bin2hex(const unsigned char * restrict bin, size_t len, char * restrict result_out)
+char *
+bin2hex(const unsigned char * restrict bin, size_t len, char * restrict result_out)
 {
-  char   *out;
-  size_t  i;
+  return bin2hex_case(bin, len, BIN2HEX_DEFAULT_LETTER_ENCODING, result_out);
+}
+
+char *
+bin2hex_case(const unsigned char * restrict bin, size_t len, bool is_small_letter_hex, char * restrict result_out)
+{
+  char        *out;
+  const char  *digits;
+  size_t       i;
 
   if (bin == NULL || len == 0) {
     return NULL;
@@ -32,20 +41,26 @@ char *bin2hex(const unsigned char * restrict bin, size_t len, char * restrict re
   if (IS_PRESENT(result_out)) {
     out = result_out;
   } else {
-    out = malloc(len*2+1);
+    out = malloc(len * 2 + 1);
+    if (out == NULL) {
+      return NULL;
+    }
   }
 
-  for (i=0; i < len; i++) {
-    out[i*2]   = "0123456789ABCDEF"[bin[i] >> 4];
-    out[i*2+1] = "0123456789ABCDEF"[bin[i] & 0x0F];
+  digits = is_small_letter_hex ? "0123456789abcdef" : "0123456789ABCDEF";
+
+  for (i = 0; i < len; i++) {
+    out[i * 2]   = digits[bin[i] >> 4];
+    out[i * 2 + 1] = digits[bin[i] & 0x0F];
   }
 
-  out[len*2] = '\0';
+  out[len * 2] = '\0';
 
   return out;
 }
 
-int hexchr2bin (const char hex, char *out)
+int
+hexchr2bin(const char hex, char *out)
 {
   if (out == NULL){
     return 0;
@@ -64,7 +79,8 @@ int hexchr2bin (const char hex, char *out)
   return 1;
 }
 
-size_t hex2bin(const char *hex, unsigned char **out)
+size_t
+hex2bin(const char *hex, unsigned char **out)
 {
   size_t len;
   char   b1;
@@ -82,12 +98,21 @@ size_t hex2bin(const char *hex, unsigned char **out)
 
   len /= 2;
 
-  *out = malloc(len);
-  memset(*out, 'A', len);
-  for (i=0; i<len; i++) {
-    if (!hexchr2bin(hex[i*2], &b1) || !hexchr2bin(hex[i*2+1], &b2)) {
+  // Validate every digit up front so an invalid input never allocates —
+  // and therefore can never leak or leave *out dangling on failure.
+  for (i = 0; i < len; i++) {
+    if (!hexchr2bin(hex[i * 2], &b1) || !hexchr2bin(hex[i * 2 + 1], &b2)) {
       return 0;
     }
+  }
+
+  *out = malloc(len);
+  if (*out == NULL) {
+    return 0;
+  }
+  for (i=0; i<len; i++) {
+    hexchr2bin(hex[i * 2], &b1);
+    hexchr2bin(hex[i * 2 + 1], &b2);
     (*out)[i] = (b1 << 4) | b2;
   }
   return len;

@@ -1,5 +1,6 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2024 unfacd works
+ *  Numerous interface mods.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,8 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SRC_INCLUDE_ADT_HOPSCOTCH_HASHTABLE_H_
-#define SRC_INCLUDE_ADT_HOPSCOTCH_HASHTABLE_H_
+#ifndef UFLIB_ADT_ADT_HOPSCOTCH_HASHTABLE_H
+#define UFLIB_ADT_ADT_HOPSCOTCH_HASHTABLE_H
+
+#include <uflib/uflib_defs.h>
 
 
 /*_
@@ -61,26 +64,43 @@ typedef UFSRVResult *(*CallbackExecutor)(ClientContextData *, ClientContextData 
 
 typedef void(*CallbackFinaliser)(ClientContextData *);
 
-struct HopscotchHashtable *
-hopscotch_init(HopscotchHashtable *, size_t);
-void hopscotch_release(HopscotchHashtable *);
-void *hopscotch_lookup(HopscotchHashtable *, ItemExtractor extractor_ptr, uint8_t *, size_t);
-void *hopscotch_lookup_configurable (HopscotchHashtableConfigurable *htc, uint8_t *key);
-int hopscotch_insert(HopscotchHashtable *, ItemExtractor extractor_ptr, void *, size_t);
-int hopscotch_insert_configurable (HopscotchHashtableConfigurable *htc, uint8_t *data);
-void *hopscotch_remove(HopscotchHashtable *, ItemExtractor extractor_ptr, uint8_t *, size_t);
-void *hopscotch_remove_configurable (HopscotchHashtableConfigurable *htc, uint8_t *key);
+PUBLIC_API struct HopscotchHashtable *hopscotch_init_with_offset(HopscotchHashtable *ht, size_t pfactor);
+PUBLIC_API void hopscotch_release(HopscotchHashtable *);
+PUBLIC_API void *hopscotch_lookup_with_offset(HopscotchHashtable *ht, ItemExtractor extractor_ptr, uint8_t *key, size_t key_offset);
+PUBLIC_API void *hopscotch_lookup_configurable(HopscotchHashtableConfigurable *htc, uint8_t *key);
+PUBLIC_API int hopscotch_insert_with_offset(HopscotchHashtable *ht, ItemExtractor extractor_ptr, void *data, size_t key_offset);
+PUBLIC_API int hopscotch_insert_configurable(HopscotchHashtableConfigurable *htc, uint8_t *data);
+PUBLIC_API void *hopscotch_remove_with_offset(HopscotchHashtable *ht, ItemExtractor extractor_ptr, uint8_t *key, size_t key_offset);
+PUBLIC_API void *hopscotch_remove_configurable(HopscotchHashtableConfigurable *htc, uint8_t *key);
 
-void *hopscotch_iterator_executor_configurable(HopscotchHashtableConfigurable *htc, CallbackExecutor executor_ptr, ClientContextData *ctx_ptr);
-void *hopscotch_iterator_executor (HopscotchHashtable *ht, CallbackExecutor executor_ptr, ClientContextData *ctx_ptr);
-void *hopscotch_iterator_finaliser (HopscotchHashtable *ht, CallbackFinaliser executor_ptr);
+PUBLIC_API struct HopscotchHashtable *hopscotch_init(HopscotchHashtable *ht, size_t pfactor);
+PUBLIC_API void *hopscotch_lookup(HopscotchHashtable *ht, intptr_t key);
+PUBLIC_API int hopscotch_insert(HopscotchHashtable *ht, uintptr_t key, void *data);
+PUBLIC_API void *hopscotch_remove(HopscotchHashtable *ht, uintptr_t key);
+PUBLIC_API void *hopscotch_iterator_executor(HopscotchHashtable *ht, CallbackExecutor executor_ptr, ClientContextData *ctx_ptr);
 
-static inline bool IsHopscotchHashtableAllocated (HopscotchHashtable *ht_ptr) {
+PUBLIC_API void *hopscotch_iterator_executor_configurable(HopscotchHashtableConfigurable *htc, CallbackExecutor executor_ptr, ClientContextData *ctx_ptr);
+PUBLIC_API size_t hopscotch_iterator_executor_with_offset(HopscotchHashtable *ht, CallbackExecutor executor_ptr, ClientContextData *ctx_ptr);
+PUBLIC_API void *hopscotch_iterator_finaliser(HopscotchHashtable *ht, CallbackFinaliser executor_ptr);
+
+/*
+ * WARNING: Released-table reuse hazard.
+ *
+ * A zero-initialized HopscotchHashtable (buckets==NULL, pfactor==0) is
+ * indistinguishable from a table after hopscotch_release().  Calling insert on
+ * a released table will compute hash & ((1<<0)-1) == 0 and dereference
+ * buckets[0] (NULL) -> segfault with no diagnostic.
+ *
+ * Consumers must set their HopscotchHashtable to a known-invalid state after
+ * release, or use the V2 opaque handle (HopscotchHashTable *) which eliminates
+ * the zero-init path entirely.
+ */
+static inline bool IsHopscotchHashtableAllocated(HopscotchHashtable *ht_ptr) {
 	return (IS_PRESENT(ht_ptr->buckets));
 }
 
-static inline size_t GetHopscotchHashtableAllocatedSize (HopscotchHashtable *ht_ptr) {
+static inline size_t GetHopscotchHashtableAllocatedSize(HopscotchHashtable *ht_ptr) {
 	return 1UL << ht_ptr->pfactor;
 }
 
-#endif /* SRC_INCLUDE_ADT_HOPSCOTCH_HASHTABLE_H_ */
+#endif /* UFLIB_ADT_ADT_HOPSCOTCH_HASHTABLE_H */

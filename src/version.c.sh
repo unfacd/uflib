@@ -30,7 +30,13 @@ cat >version.c <<!END!
 #include <version.h>
 #include <main_types.h>
 
-const char *t_compiled="$WHEN";
-const char *u_compiled="$HIM";
+static const char *t_compiled="$WHEN";
+static const char *u_compiled="$HIM";
 const char *uflib_version=STRINGISE(UFLIB_MAJOR)"."STRINGISE(UFLIB_MINOR)"."STRINGISE(UFLIB_PATCH);
+
+const char *UfsrvUfLibVersion()      { return uflib_version; }
+const char *UfsrvUfLibVersionMajor() { return STRINGISE(UFLIB_MAJOR_MAJOR); }
+const char *UfsrvUfLibVersionMinor() { return STRINGISE(UFLIB_MAJOR_MINOR); }
+const char *UfsrvUfLibVersionPatch() { return STRINGISE(UFLIB_MAJOR_PATCH); }
+
 !END!

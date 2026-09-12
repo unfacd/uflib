@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2025 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,12 +15,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_DP_OPS_H
-#define UFSRV_DP_OPS_H
+#ifndef UFLIB_DB_DP_OPS_H
+#define UFLIB_DB_DP_OPS_H
 
-#include "db_op_descriptor_type.h"
+#include <uflib/uflib_defs.h>
 
-void GetDbResultForQuery(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor);
-void GetDbResultForUpdate(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor);
+#include <uflib/db/db_op_descriptor_type.h>
+
+PUBLIC_API void GetDbResultForQuery(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor);
+PUBLIC_API void GetDbResultForUpdate(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor);
+PUBLIC_API void GetDbResultForInsert(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor);
+PUBLIC_API void GetDbResultForDelete(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor);
 
 #endif //UFSRV_DP_OPS_H

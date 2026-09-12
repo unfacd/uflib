@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2025 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_ADT_DOUBLY_LINKEDLIST_TYPE_H
-#define UFSRV_ADT_DOUBLY_LINKEDLIST_TYPE_H
+#ifndef UFLIB_ADT_ADT_DOUBLY_LINKEDLIST_TYPE_H
+#define UFLIB_ADT_ADT_DOUBLY_LINKEDLIST_TYPE_H
 
 /* Node, List, and Iterator are the only data structures used currently. */
 

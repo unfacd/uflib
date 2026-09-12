@@ -20,7 +20,7 @@ http://creativecommons.org/publicdomain/zero/1.0/
 #include <stddef.h>
 #include <stdint.h>
 #include "align.h"
-#include "K12/Plain64/KeccakP-1600-SnP.h"
+#include "KeccakP-1600-SnP.h"
 
 typedef struct KangarooTwelve_FStruct {
     uint8_t state[KeccakP1600_stateSizeInBytes];

@@ -16,18 +16,20 @@
  */
 
 
-#ifndef UFSRV_UTILS_FILE_H
-#define UFSRV_UTILS_FILE_H
+#ifndef UFLIB_UTILS_FILE_H
+#define UFLIB_UTILS_FILE_H
+
+#include <uflib/uflib_defs.h>
 
 #include <sys/types.h>
 #include "file_info_type.h"
 #include "open_file_type.h"
 
-int MakePidFile(const char *path, pid_t serverpid);
-int RemovePidFile	(const char *path);
-int GetFileInfo (const char *path, FileInfo *f_info, int mode);
+PUBLIC_API int MakePidFile(const char *path, pid_t serverpid);
+PUBLIC_API int RemovePidFile	(const char *path);
+PUBLIC_API int GetFileInfo (const char *path, FileInfo *f_info, int mode);
 char *LoadFileToMemory (const char *path);
-int FileUtilsRenameFile	(const char *orig, const char *dest);
-int OpenThisFile (OpenFile *);
+PUBLIC_API int FileUtilsRenameFile	(const char *orig, const char *dest);
+PUBLIC_API int OpenThisFile (OpenFile *);
 
 #endif //UFSRV_UTILS_FILE_H

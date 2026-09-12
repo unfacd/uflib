@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_UUID_TYPE_H
-#define UFSRV_UUID_TYPE_H
+#ifndef UFLIB_UUID_TYPE_H
+#define UFLIB_UUID_TYPE_H
 
 #include <uuid/uuid.h>
 

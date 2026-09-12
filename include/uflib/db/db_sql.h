@@ -1,11 +1,16 @@
 /**
  */
 
-#ifndef INCLUDE_DB_SQL_H_
-#define INCLUDE_DB_SQL_H_
+#ifndef UFLIB_DB_DB_SQL_H
+#define UFLIB_DB_DB_SQL_H
+
+#include <uflib/uflib_defs.h>
 
 #include <time.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <uflib/exponential_backoff/exponential_backoff_type.h>
+#include <mariadb/mysql.h>
 
 #ifdef _HOEL_SQLITE
 #define HOEL_DB_TYPE_SQLITE  0
@@ -36,12 +41,14 @@
 #define H_OPTION_EXEC   0x0010 // Execute an INSERT, UPDATE or DELETE statement
 
 #define MYSQL_HANDLE(x)	(((struct _h_mariadb *)x->connection)->db_handle)
+
 /**
  * handle container
  */
 struct _h_connection {
   int type;
   void * connection;
+  ExponentialBackoffDescriptor backoff_descriptor;
 };
 
 typedef struct _h_connection DbBackend;
@@ -100,22 +107,32 @@ struct _h_result {
   struct _h_data ** data;
 };
 
-void InitMysql (void);
+/**
+ * AA+
+ * Abstraction around statement object
+ */
+struct _h_statement {
+    void * t_data;
+};
+
+#define AS_MARIADB_STATEMENT(x) ((MYSQL_STMT *)(x))
+
+PUBLIC_API void InitMysql (void);
 struct _h_connection *InitialiseDbBackend (void);
-void SqlServerDisplayConnectedUsers (struct _h_connection *db_ptr);
+PUBLIC_API void SqlServerDisplayConnectedUsers (struct _h_connection *db_ptr);
 
 /**
  * Close a database connection
  * return H_OK on success
  */
-__attribute_used__ int h_close_db(struct _h_connection * conn);
+PUBLIC_API __attribute_used__ int h_close_db(struct _h_connection * conn);
 
 /**
  * h_escape_string
  * Escapes a string
  * returned value must be free'd after use
  */
-__attribute_used__ char * h_escape_string(const struct _h_connection * conn, const char * unsafe);
+PUBLIC_API __attribute_used__ char * h_escape_string(const struct _h_connection * conn, const char * unsafe);
 
 /**
  * h_execute_query
@@ -127,42 +144,42 @@ __attribute_used__ char * h_escape_string(const struct _h_connection * conn, con
  * H_OPTION_EXEC: Execute an exec statement (sqlite only)
  * return H_OK on success
  */
-int h_execute_query(const struct _h_connection * conn, const char * query, struct _h_result * result, int options);
+PUBLIC_API int h_execute_query(struct _h_connection * conn, const char * query, struct _h_result * result, int options);
 
 /**
  * h_query_insert
  * Execute an insert query
  * return H_OK on success
  */
-int h_query_insert(const struct _h_connection * conn, const char * query);
+PUBLIC_API int h_query_insert(struct _h_connection * conn, const char * query);
 
 /**
  * h_query_last_insert_id
  * return the id of the last inserted value
  * return a pointer to `struct _h_data *` on success, NULL otherwise.
  */
-struct _h_data * h_query_last_insert_id(const struct _h_connection * conn);
+struct _h_data * h_query_last_insert_id(struct _h_connection * conn);
 
 /**
  * h_query_update
  * Execute an update query
  * return H_OK on success
  */
-int h_query_update(const struct _h_connection * conn, const char * query);
+PUBLIC_API int h_query_update(struct _h_connection * conn, const char * query);
 
 /**
  * h_query_delete
  * Execute an delete query
  * return H_OK on success
  */
-int h_query_delete(const struct _h_connection * conn, const char * query);
+PUBLIC_API int h_query_delete(struct _h_connection * conn, const char * query);
 
 /**
  * h_query_select
  * Execute a select query, set the result structure with the returned values
  * return H_OK on success
  */
-int h_query_select(const struct _h_connection * conn, const char * query, struct _h_result * result);
+PUBLIC_API int h_query_select(struct _h_connection * conn, const char * query, struct _h_result * result);
 
 #if 0
 /**
@@ -170,14 +187,14 @@ int h_query_select(const struct _h_connection * conn, const char * query, struct
  * Execute a query, set the returned values in the json result
  * return H_OK on success
  */
-int h_execute_query_json(const struct _h_connection * conn, const char * query, json_t ** j_result);
+PUBLIC_API int h_execute_query_json(const struct _h_connection * conn, const char * query, json_t ** j_result);
 
 /**
  * h_query_select_json
  * Execute a select query, set the returned values in the json results
  * return H_OK on success
  */
-int h_query_select_json(const struct _h_connection * conn, const char * query, json_t ** j_result);
+PUBLIC_API int h_query_select_json(const struct _h_connection * conn, const char * query, json_t ** j_result);
 
 /**
  * json queries
@@ -234,7 +251,7 @@ int h_query_select_json(const struct _h_connection * conn, const char * query, j
  * Duplicate the generated query in generated_query if specified, must be free'd after use
  * return H_OK on success
  */
-int h_select(const struct _h_connection * conn, const json_t * j_query, json_t ** j_result, char ** generated_query);
+PUBLIC_API int h_select(const struct _h_connection * conn, const json_t * j_query, json_t ** j_result, char ** generated_query);
 
 /**
  * h_insert
@@ -243,7 +260,7 @@ int h_select(const struct _h_connection * conn, const json_t * j_query, json_t *
  * Duplicate the generated query in generated_query if specified, must be free'd after use
  * return H_OK on success
  */
-int h_insert(const struct _h_connection * conn, const json_t * j_query, char ** generated_query);
+PUBLIC_API int h_insert(const struct _h_connection * conn, const json_t * j_query, char ** generated_query);
 
 /**
  * h_last_insert_id
@@ -251,7 +268,7 @@ int h_insert(const struct _h_connection * conn, const json_t * j_query, char ** 
  * return a pointer to `json_t *` on success, NULL otherwise.
  * The returned value is of type JSON_INTEGER
  */
-json_t * h_last_insert_id(const struct _h_connection * conn);
+PUBLIC_API json_t * h_last_insert_id(const struct _h_connection * conn);
 #endif
 
 #if 0
@@ -262,7 +279,7 @@ json_t * h_last_insert_id(const struct _h_connection * conn);
  * Duplicate the generated query in generated_query if specified, must be free'd after use
  * return H_OK on success
  */
-int h_update(const struct _h_connection * conn, const json_t * j_query, char ** generated_query);
+PUBLIC_API int h_update(const struct _h_connection * conn, const json_t * j_query, char ** generated_query);
 
 /**
  * h_delete
@@ -271,20 +288,20 @@ int h_update(const struct _h_connection * conn, const json_t * j_query, char ** 
  * Duplicate the generated query in generated_query if specified, must be free'd after use
  * return H_OK on success
  */
-int h_delete(const struct _h_connection * conn, const json_t * j_query, char ** generated_query);
+PUBLIC_API int h_delete(const struct _h_connection * conn, const json_t * j_query, char ** generated_query);
 #endif
 
 /**
  * Add a new struct _h_data * to an array of struct _h_data *, which already has cols columns
  * return H_OK on success
  */
-int h_row_add_data(struct _h_data ** result, struct _h_data * data, int cols);
+PUBLIC_API int h_row_add_data(struct _h_data ** result, struct _h_data * data, int cols);
 
 /**
  * Add a new row of struct _h_data * in a struct _h_result *
  * return H_OK on success
  */
-int h_result_add_row(struct _h_result * result, struct _h_data * row, int rows);
+PUBLIC_API int h_result_add_row(struct _h_result * result, struct _h_data * row, int rows);
 
 /**
  * Allocate memory for a new struct _h_data * containing an int
@@ -333,41 +350,43 @@ struct _h_data * h_new_data_null();
  * Free all the memory allocated by the struct _h_result
  * return H_OK on success
  */
-int h_clean_result(struct _h_result * result);
+PUBLIC_API int h_clean_result(struct _h_result * result);
+
+struct _h_statement *h_statement_prepare(struct _h_connection *conn, const char *sql_statement, size_t sql_statement_sz);
 
 typedef int (*default_finaliser)(struct _h_result *);
 typedef void (*default_query_provider_finaliser)(char *);
 
-default_finaliser GetDefaultDbOpResultFinaliser();
+PUBLIC_API default_finaliser GetDefaultDbOpResultFinaliser();
 
-default_query_provider_finaliser GetDefaultQueryProviderFinalser();
+PUBLIC_API default_query_provider_finaliser GetDefaultQueryStatementProviderFinalser();
 
 /**
  * h_clean_data
  * Free memory allocated by the struct _h_data
  * return H_OK on success
  */
-int h_clean_data(struct _h_data * data);
+PUBLIC_API int h_clean_data(struct _h_data * data);
 
 /**
  * h_clean_data_full
  * Free memory allocated by the struct _h_data and the struct _h_data pointer
  * return H_OK on success
  */
-int h_clean_data_full(struct _h_data * data);
+PUBLIC_API int h_clean_data_full(struct _h_data * data);
 
 /**
  * h_clean_connection
  * free memory allocated by the struct _h_connection
  * return H_OK on success
  */
-__attribute_used__ int h_clean_connection(struct _h_connection * conn);
+PUBLIC_API __attribute_used__ int h_clean_connection(struct _h_connection * conn);
 
 /**
  * trim_whitespace_and_double_quotes
  * Return the string without its beginning and ending whitespaces or double quotes
  */
-char * trim_whitespace_and_double_quotes(char *str);
+PUBLIC_API char * trim_whitespace_and_double_quotes(char *str);
 
 #ifdef _HOEL_SQLITE
 /**
@@ -380,18 +399,18 @@ struct _h_connection * h_connect_sqlite(const char * db_path);
 /**
  * close a sqlite3 connection
  */
-void h_close_sqlite(struct _h_connection * conn);
+PUBLIC_API void h_close_sqlite(struct _h_connection * conn);
 
 /**
  * escape a string
  * returned value must be free'd after use
  */
-char * h_escape_string_sqlite(const struct _h_connection * conn, const char * unsafe);
+PUBLIC_API char * h_escape_string_sqlite(const struct _h_connection * conn, const char * unsafe);
 
 /**
  * Return the id of the last inserted value
  */
-int h_last_insert_id_sqlite(const struct _h_connection * conn);
+PUBLIC_API int h_last_insert_id_sqlite(const struct _h_connection * conn);
 
 /**
  * h_select_query_sqlite
@@ -401,7 +420,7 @@ int h_last_insert_id_sqlite(const struct _h_connection * conn);
  * Useful for SELECT statements
  * return H_OK on success
  */
-int h_select_query_sqlite(const struct _h_connection * conn, const char * query, struct _h_result * result);
+PUBLIC_API int h_select_query_sqlite(const struct _h_connection * conn, const char * query, struct _h_result * result);
 
 /**
  * h_exec_query_sqlite
@@ -410,7 +429,7 @@ int h_select_query_sqlite(const struct _h_connection * conn, const char * query,
  * No result is returned, useful for single INSERT, UPDATE or DELETE statements
  * return H_OK on success
  */
-int h_exec_query_sqlite(const struct _h_connection * conn, const char * query);
+PUBLIC_API int h_exec_query_sqlite(const struct _h_connection * conn, const char * query);
 
 /**
  * h_execute_query_json_sqlite
@@ -418,7 +437,7 @@ int h_exec_query_sqlite(const struct _h_connection * conn, const char * query);
  * Should not be executed by the user because all parameters are supposed to be correct
  * return H_OK on success
  */
-int h_execute_query_json_sqlite(const struct _h_connection * conn, const char * query, json_t ** j_result);
+PUBLIC_API int h_execute_query_json_sqlite(const struct _h_connection * conn, const char * query, json_t ** j_result);
 #endif
 
 
@@ -429,21 +448,25 @@ int h_execute_query_json_sqlite(const struct _h_connection * conn, const char * 
  */
 struct _h_connection * h_connect_mariadb(const char * host, const char * user, const char * passwd, const char * db, const unsigned int port, const char * unix_socket);
 
+//AA+
+struct _h_connection *h_reconnect_mariadb_initialisable(struct _h_connection *conn_db, bool is_reinitialise);
+PUBLIC_API unsigned int h_reconnect_mariadb(struct _h_connection *conn_db);
+
 /**
  * close connection to database
  */
-void h_close_mariadb(struct _h_connection * conn);
+PUBLIC_API void h_close_mariadb(struct _h_connection * conn);
 
 /**
  * escape a string
  * returned value must be free'd after use
  */
-char * h_escape_string_mariadb(const struct _h_connection * conn, const char * unsafe);
-char * h_escape_binary_string_mariadb(const struct _h_connection * conn, const char * unsafe, size_t unsafe_sz);
+PUBLIC_API char * h_escape_string_mariadb(const struct _h_connection * conn, const char * unsafe);
+PUBLIC_API char * h_escape_binary_string_mariadb(const struct _h_connection * conn, const char * unsafe, size_t unsafe_sz);
 /**
  * Return the id of the last inserted value
  */
-int h_last_insert_id_mariadb(const struct _h_connection * conn);
+PUBLIC_API int h_last_insert_id_mariadb(const struct _h_connection * conn);
 /**
  * h_execute_query_mariadb
  * Execute a query on a mariadb connection, set the result structure with the returned values
@@ -451,7 +474,7 @@ int h_last_insert_id_mariadb(const struct _h_connection * conn);
  * if result is NULL, the query is executed but no value will be returned
  * return H_OK on success
  */
-int h_execute_query_mariadb(const struct _h_connection * conn, const char * query, struct _h_result * result);
+PUBLIC_API int h_execute_query_mariadb(struct _h_connection * conn, const char * query, struct _h_result * result);
 
 #if 0
 /**
@@ -460,7 +483,7 @@ int h_execute_query_mariadb(const struct _h_connection * conn, const char * quer
  * Should not be executed by the user because all parameters are supposed to be correct
  * return H_OK on success
  */
-int h_execute_query_json_mariadb(const struct _h_connection * conn, const char * query, json_t ** j_result);
+PUBLIC_API int h_execute_query_json_mariadb(const struct _h_connection * conn, const char * query, json_t ** j_result);
 #endif
 
 /**
@@ -470,6 +493,7 @@ int h_execute_query_json_mariadb(const struct _h_connection * conn, const char *
  */
 struct _h_data * h_get_mariadb_value(const char * value, const unsigned long length, const int m_type);
 
+MYSQL_STMT *h_statement_prepare_mariadb(struct _h_connection *conn, const char *sql_statement, size_t sql_statement_sz);
 
 #ifdef _HOEL_PGSQL
 /**
@@ -486,7 +510,7 @@ struct _h_connection * h_connect_pgsql(char * conninfo);
  * if result is NULL, the query is executed but no value will be returned
  * return H_OK on success
  */
-int h_execute_query_pgsql(const struct _h_connection * conn, const char * query, struct _h_result * result);
+PUBLIC_API int h_execute_query_pgsql(const struct _h_connection * conn, const char * query, struct _h_result * result);
 
 /**
  * h_execute_query_json_pgsql
@@ -494,18 +518,18 @@ int h_execute_query_pgsql(const struct _h_connection * conn, const char * query,
  * Should not be executed by the user because all parameters are supposed to be correct
  * return H_OK on success
  */
-int h_execute_query_json_pgsql(const struct _h_connection * conn, const char * query, json_t ** j_result);
+PUBLIC_API int h_execute_query_json_pgsql(const struct _h_connection * conn, const char * query, json_t ** j_result);
 
 /**
  * close a pgsql connection
  */
-void h_close_pgsql(struct _h_connection * conn);
+PUBLIC_API void h_close_pgsql(struct _h_connection * conn);
 
 /**
  * escape a string
  * returned value must be free'd after use
  */
-char * h_escape_string_pgsql(const struct _h_connection * conn, const char * unsafe);
+PUBLIC_API char * h_escape_string_pgsql(const struct _h_connection * conn, const char * unsafe);
 #endif
 
 #endif

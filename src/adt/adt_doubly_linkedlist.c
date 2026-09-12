@@ -156,9 +156,9 @@ DoublyListInsertNode(DoublyList *list, DoublyListNode	*list_node_in, DoublyListN
 {
     DoublyListNode *node;
 
-    if (IS_PRESENT(list_node_in))	node=list_node_in;
-		else
-		{
+    if (IS_PRESENT(list_node_in)) {
+      node = list_node_in;
+    } else {
 			//original semantics
 			if ((node = malloc(sizeof(*node))) == NULL)	return NULL;
 
@@ -185,6 +185,7 @@ DoublyListInsertNode(DoublyList *list, DoublyListNode	*list_node_in, DoublyListN
         node->next->prev = node;
     }
     list->len++;
+
     return list;
 }
 
@@ -195,38 +196,55 @@ DoublyListInsertNode(DoublyList *list, DoublyListNode	*list_node_in, DoublyListN
 void
 DoublyListDelNode(DoublyList *list, DoublyListNode *node, bool flag_self_destruct)
 {
-    if (node->prev)
-        node->prev->next = node->next;
-    else
-        list->head = node->next;
-    if (node->next)
-        node->next->prev = node->prev;
-    else
-        list->tail = node->prev;
-    if (list->free) list->free(node->value);
-    if (flag_self_destruct)	free(node);
-    list->len--;
+  if (IS_PRESENT(node->prev)) {
+    node->prev->next = node->next;
+  } else {
+    list->head = node->next;
+  }
+
+  if (node->next) {
+    node->next->prev = node->prev;
+  } else {
+    list->tail = node->prev;
+  }
+
+  if (IS_PRESENT(list->free)) {
+    list->free(node->value);
+  }
+
+  if (flag_self_destruct) {
+    free(node);
+  }
+
+  list->len--;
 }
 
-/* Returns a list iterator 'iter'. After the initialization every
+/**
+ * @brief Returns a list iterator 'iter'. After the initialization every
  * call to listNext() will return the next element of the list.
  *
- * This function can't fail. */
+ * This function can't fail.
+ */
 DoublyListIterator *
 DoublyListGetIterator(DoublyList *list, DoublyListIterator *iter_in, int direction)
 {
-    DoublyListIterator *iter;
+  DoublyListIterator *iter;
 
-    if (IS_PRESENT(iter_in))	iter=iter_in;
-    else
-    if ((iter = malloc(sizeof(*iter))) == NULL) return NULL;
+  if (IS_PRESENT(iter_in))	{
+    iter = iter_in;
+  } else if ((iter = malloc(sizeof(*iter))) == NULL) {
+    return NULL;
+  }
 
-    if (direction == AL_START_HEAD)
-        iter->next = list->head;
-    else
-        iter->next = list->tail;
-    iter->direction = direction;
-    return iter;
+  if (direction == AL_START_HEAD) {
+    iter->next = list->head;
+  } else {
+    iter->next = list->tail;
+  }
+
+  iter->direction = direction;
+
+  return iter;
 }
 
 /* Release the iterator memory */

@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_ADT_HOPSCOTCH_HASHTABLE_TYPE_H
-#define UFSRV_ADT_HOPSCOTCH_HASHTABLE_TYPE_H
+#ifndef UFLIB_ADT_ADT_HOPSCOTCH_HASHTABLE_TYPE_H
+#define UFLIB_ADT_ADT_HOPSCOTCH_HASHTABLE_TYPE_H
 
 #include <stdlib.h>
 
@@ -24,10 +24,17 @@
 struct hopscotch_bucket {
   void *data;
   uint32_t hopinfo;
-};
+} __attribute__ ((aligned (8)));
+
+struct hopscotch_bucket_keyed {
+  void *data;
+  uintptr_t key;
+  uint32_t hopinfo;
+} __attribute__ ((aligned (8)));
+
 struct HopscotchHashtable {
   size_t pfactor;//changes per resize
-  struct hopscotch_bucket *buckets;//changes per resize
+  void *buckets;//changes per resize
 };
 typedef struct HopscotchHashtable HopscotchHashtable;
 
@@ -36,6 +43,7 @@ typedef struct  HopscotchHashtableConfigurable {
   size_t keylen;
   size_t key_offset;
   uint64_t (*hash_func)(uint8_t *, size_t);
+  void * (*buckets_allocator_func)(size_t, size_t); //unit size * multiples (a la cmalloc)
 } HopscotchHashtableConfigurable;
 
 #endif //UFSRV_ADT_HOPSCOTCH_HASHTABLE_TYPE_H

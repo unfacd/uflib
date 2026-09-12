@@ -1,0 +1,15 @@
+# Point clangd at the CMake-generated compile database so it applies the same
+# per-file flags as the build (including -include stdatomic.h → Clang's built-in
+# <stdatomic.h> with __c11_atomic_*).
+CompileFlags:
+  CompilationDatabase: build/dev
+
+# Old clangd versions bundle a <stdatomic.h> whose atomic_*_explicit macros use
+# __auto_type, which strips the _Atomic qualifier and emits a spurious
+# "incompatible pointer types" on every atomic_*_explicit() call. The code is
+# correct under Clang 18 (the real build is clean). Suppress that false positive;
+# remove this block once clangd is updated to 18+.
+Diagnostics:
+  Suppress:
+    - incompatible-pointer-types
+    - incompatible-pointer-types-discards-qualifiers

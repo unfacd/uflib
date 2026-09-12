@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,12 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//
-// Created by devops on 10/18/20.
-//
-
-#ifndef UFSRV_FILE_INFO_TYPE_H
-#define UFSRV_FILE_INFO_TYPE_H
+#ifndef UFLIB_FILE_INFO_TYPE_H
+#define UFLIB_FILE_INFO_TYPE_H
 
 #include <stdlib.h>
 #include <stdbool.h>

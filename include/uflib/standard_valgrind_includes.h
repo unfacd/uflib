@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_STANDARD_VALGRIND_INCLUDES_H
-#define UFSRV_STANDARD_VALGRIND_INCLUDES_H
+#ifndef UFLIB_STANDARD_VALGRIND_INCLUDES_H
+#define UFLIB_STANDARD_VALGRIND_INCLUDES_H
 
 //http://valgrind.org/docs/manual/mc-manual.html#mc-manual.mempools
 #define __VALGRIND_DRD 1

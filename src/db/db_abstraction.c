@@ -23,9 +23,10 @@
 
 #include <uflib/standard_c_includes.h>
 #include <uflib/db/db_sql.h>
+#include <mysql.h>
 
 // Get rid of noisy warning
-char * strcasestr (const char *haystack, const char *needle);
+char * strcasestr(const char *haystack, const char *needle);
 
 /**
  * Close a database connection
@@ -99,7 +100,7 @@ char * h_escape_string(const struct _h_connection * conn, const char * unsafe) {
  * H_OPTION_EXEC: Execute an exec statement (sqlite only)
  * return H_OK on success
  */
-int h_execute_query(const struct _h_connection * conn, const char * query, struct _h_result * result, int options) {
+int h_execute_query(struct _h_connection * conn, const char * query, struct _h_result * result, int options) {
   if (conn != NULL && conn->connection != NULL && query != NULL) {
     if (0) {
       // Not happening
@@ -112,7 +113,35 @@ int h_execute_query(const struct _h_connection * conn, const char * query, struc
       }
 #endif
     } else if (conn->type == HOEL_DB_TYPE_MARIADB) {
-      return h_execute_query_mariadb(conn, query, result);
+      int return_value = H_OK;
+      BackoffAlgorithmStatus_t  retry_status = BackoffAlgorithmSuccess;
+      uint16_t                  next_retry_backoff = 0;
+
+      return_value = h_execute_query_mariadb(conn, query, result);
+      if (return_value == H_ERROR_CONNECTION) {
+        if ( h_reconnect_mariadb(conn) == 0) {
+          return_value = h_execute_query_mariadb(conn, query, result);
+        }
+      }
+
+      BackoffAlgorithm_ResetAttempts(&conn->backoff_descriptor.retry_params);
+      while (return_value == H_ERROR_CONNECTION) {
+        retry_status = BackoffAlgorithm_GetNextBackoff(&conn->backoff_descriptor.retry_params, 0, &next_retry_backoff);
+        if (retry_status == BackoffAlgorithmRetriesExhausted) {
+          break;
+        }
+        syslog(LOG_WARNING, "%s (current_attempt: %d'): ERROR: CONNECTION TO DB LOST: RETRYING DB CONNECTION IN %u milliseconds....", __func__, conn->backoff_descriptor.retry_params.attemptsDone, next_retry_backoff);
+        conn->backoff_descriptor.on_sleep(next_retry_backoff);
+        if (h_reconnect_mariadb(conn) == 0) {
+          return_value = h_execute_query_mariadb(conn, query, result);
+        } else {
+          syslog(LOG_WARNING, "%s (current_attempt: %d'): ERROR: RECONNECT TO DB FAILED....", __func__, conn->backoff_descriptor.retry_params.attemptsDone);
+          return_value = H_ERROR_CONNECTION;//force the loop again
+        }
+      }
+
+      return return_value;
+
 #ifdef _HOEL_PGSQL
     } else if (conn->type == HOEL_DB_TYPE_PGSQL) {
       return h_execute_query_pgsql(conn, query, result);
@@ -157,6 +186,18 @@ int h_execute_query_json(const struct _h_connection * conn, const char * query, 
   }
 }
 #endif
+
+struct _h_statement *
+h_statement_prepare(struct _h_connection *conn, const char *sql_statement, size_t sql_statement_sz)
+{
+  if (conn->type == HOEL_DB_TYPE_MARIADB) {
+    //value will be marshalled into struct's first and only member
+    return (struct _h_statement *) h_statement_prepare_mariadb(conn, sql_statement, sql_statement_sz);
+  } else {
+    return NULL;
+  }
+}
+//
 
 /**
  * Add a new struct _h_data * to an array of struct _h_data *, which already has cols columns
@@ -277,7 +318,7 @@ int h_result_add_row(struct _h_result * result, struct _h_data * row, int rows) 
  * Execute an insert query
  * return H_OK on success
  */
-int h_query_insert(const struct _h_connection * conn, const char * query) {
+int h_query_insert(struct _h_connection * conn, const char * query) {
   if (conn != NULL && conn->connection != NULL && query != NULL && strcasestr(query, "insert") != NULL) {
     return h_execute_query(conn, query, NULL, H_OPTION_EXEC);
   } else {
@@ -290,7 +331,7 @@ int h_query_insert(const struct _h_connection * conn, const char * query) {
  * return the id of the last inserted value
  * return H_OK on success
  */
-struct _h_data * h_query_last_insert_id(const struct _h_connection * conn) {
+struct _h_data * h_query_last_insert_id(struct _h_connection * conn) {
   struct _h_data * data = NULL;
   if (conn != NULL && conn->connection != NULL) {
     if (0) {
@@ -330,7 +371,7 @@ struct _h_data * h_query_last_insert_id(const struct _h_connection * conn) {
  * Execute an update query
  * return H_OK on success
  */
-int h_query_update(const struct _h_connection * conn, const char * query) {
+int h_query_update(struct _h_connection * conn, const char * query) {
   if (conn != NULL && conn->connection != NULL && query != NULL && strcasestr(query, "update") != NULL) {
     return h_execute_query(conn, query, NULL, H_OPTION_EXEC);
   } else {
@@ -343,7 +384,7 @@ int h_query_update(const struct _h_connection * conn, const char * query) {
  * Execute an delete query
  * return H_OK on success
  */
-int h_query_delete(const struct _h_connection * conn, const char * query) {
+int h_query_delete(struct _h_connection * conn, const char * query) {
   if (conn != NULL && conn->connection != NULL && query != NULL && strcasestr(query, "delete") != NULL) {
     return h_execute_query(conn, query, NULL, H_OPTION_EXEC);
   } else {
@@ -356,7 +397,7 @@ int h_query_delete(const struct _h_connection * conn, const char * query) {
  * Execute a select query, set the result structure with the returned values
  * return H_OK on success
  */
-int h_query_select(const struct _h_connection * conn, const char * query, struct _h_result * result) {
+int h_query_select(struct _h_connection * conn, const char * query, struct _h_result * result) {
   if (conn != NULL && conn->connection != NULL && query != NULL && strcasestr(query, "select") != NULL) {
     return h_execute_query(conn, query, result, H_OPTION_SELECT);
   } else {
@@ -431,7 +472,7 @@ GetDefaultDbOpResultFinaliser()
 }
 
 default_query_provider_finaliser
-GetDefaultQueryProviderFinalser()
+GetDefaultQueryStatementProviderFinalser()
 {
   return (default_query_provider_finaliser)free;
 }

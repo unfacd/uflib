@@ -18,8 +18,10 @@
  *
 */
 
-#ifndef UFSRV_TOKENISER_H
-#define UFSRV_TOKENISER_H
+#ifndef UFLIB_TOKENISER_H
+#define UFLIB_TOKENISER_H
+
+#include <uflib/uflib_defs.h>
 
 #include <stdarg.h>
 #include <string.h>
@@ -134,6 +136,6 @@ see examples/Tokenizer.c for examples
 const char *GetToken(const char *SearchStr, const char *Delim, char **Token, int Flags);
 const char *GetNameValuePair(const char *Input, const char *PairDelim, const char *NameValueDelim, char **Name, char **Value);
 
-int GetTokenParseConfig(const char *Config);
+PUBLIC_API int GetTokenParseConfig(const char *Config);
 
 #endif //UFSRV_TOKENISER_H

@@ -7,8 +7,10 @@ MODULEID("$Id: list.h,v 1.1 1999/07/26 01:46:59 ayman Exp $")
 **
 */
 
-#ifndef LIST_H
-# define LIST_H
+#ifndef UFLIB_ADT_ADT_LINKEDLIST_H
+#define UFLIB_ADT_ADT_LINKEDLIST_H
+
+#include <uflib/uflib_defs.h>
 
  struct ListEntry {
          void  *whatever;
@@ -44,17 +46,17 @@ MODULEID("$Id: list.h,v 1.1 1999/07/26 01:46:59 ayman Exp $")
 
  ListEntry *AddtoList (List *);
  ListEntry *AddThisToList (List *, void *);
- int RemovefromList (List *, ListEntry *);
- int RemovefromListDeep (List *, ListEntry *, size_t);
- int RemoveThisFromList (List *, void *);
+ PUBLIC_API int RemovefromList (List *, ListEntry *);
+ PUBLIC_API int RemovefromListDeep (List *, ListEntry *, size_t);
+ PUBLIC_API int RemoveThisFromList (List *, void *);
  int RemoveListHead (List *, int, void (*)(ListEntry *));
  List *ListfromArray (void *, size_t, size_t);
- void CleanupListfromArray (List *);
+ PUBLIC_API void CleanupListfromArray (List *);
  ListEntry *LocateEntry (List *, ListEntry *);
- bool ListEmpty (const List *);
+ PUBLIC_API bool ListEmpty (const List *);
  dListEntry *AddtodList (dList *);
  dListEntry *AddThisTodList (dList *, void *);
  dListEntry *RemovefromdList (dList *, dListEntry *);
- bool dListEmpty (const dList *);
+ PUBLIC_API bool dListEmpty (const dList *);
 
 #endif

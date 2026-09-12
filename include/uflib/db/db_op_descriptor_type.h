@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,10 +15,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_DB_OP_TYPE_H
-#define UFSRV_DB_OP_TYPE_H
+/**
+* @file db_op_descriptor_type.h
+* @brief Generalised interface for describing DB sql operations.
+*/
 
-#include <stdint.h>
+#ifndef UFLIB_DB_DB_OP_DESCRIPTOR_TYPE_H
+#define UFLIB_DB_DB_OP_DESCRIPTOR_TYPE_H
+
+#include <uflib/main_types.h>
 #include <uflib/db/db_sql.h>
 
 typedef struct _h_result DbOpResult ;
@@ -36,41 +41,51 @@ typedef void ClientContextData;
 #define DBOP_DESCRIPTOR_INVOKE_RESULT_FINALISER(x) ((x)->finaliser.finalise(&((x)->result)))
 #define DBOP_DESCRIPTOR_INVOKE_RESULT_FINALISER_IF_PRESENT(x) if DBOP_DESCRIPTOR_RESULT_FINALISER_IS_PRESENT((x)) DBOP_DESCRIPTOR_INVOKE_RESULT_FINALISER((x))
 
-#define DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER(x) ((x)->query_provider.provide((x)->query_provider.values))
-#define DBOP_DESCRIPTOR_QUERY_PROVIDER_FINALISER_IS_PRESENT(x) ((x)->query_provider.finalise != NULL)
-#define DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER_FINALISER(x, y) if DBOP_DESCRIPTOR_QUERY_PROVIDER_FINALISER_IS_PRESENT((x)) (x)->query_provider.finalise((y))
+#define DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER(x) ((x)->query_statement_provider.provide((x)->query_statement_provider.values))
+#define DBOP_DESCRIPTOR_QUERY_STATEMENT_PROVIDER_FINALISER_IS_PRESENT(x) ((x)->query_statement_provider.finalise != NULL)
+#define DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(x, y) if DBOP_DESCRIPTOR_QUERY_STATEMENT_PROVIDER_FINALISER_IS_PRESENT((x)) (x)->query_statement_provider.finalise((y))
 
 #define DBOP_DESCRIPTOR_INVOKE_TRANSFORMER(x) ((x)->transformer.transform((x)))
 #define DBOP_DESCRIPTOR_INVOKE_TRANSFORMER_IF_PRESENT(x) if (DBOP_DESCRIPTOR_TRANSFORMER_IS_PRESENT(x)) DBOP_DESCRIPTOR_INVOKE_TRANSFORMER((x))
+
+
 
 typedef enum DBOPStatus {
   SUCCESS,
   TRANSFORMER_ERROR,
   DB_ERROR,
+  UPDATE_ERROR, ///>Error from sql update statement
+  INSERT_ERROR,
+  DELETE_ERROR,
   EMPTY_SET
 } DBOPStatus;
 
-typedef struct DbOpDescriptor {
-  DbOpResult result;
-  ClientContextData *ctx_data;
+typedef struct DbOpDescriptor DbOpDescriptor;
+typedef int (^TransformerBlock)(DbOpDescriptor *);
+
+struct DbOpDescriptor {
+  int insert_id; ///< last insert id if available
+  DbOpResult result; ///< Object holding result-set after a query. Useful for deferred finalisation by user.
+  ClientContextData *ctx_data; ///< user-provided data object
 
  struct {
-   int (*transform)(struct DbOpDescriptor *);
+   int (*transform)(struct DbOpDescriptor *); ///< user-supplied call back that handles the transfer of query result-set to user domain (mostly into ctx_data)
+   TransformerBlock on_transform;
  } transformer;
 
  struct {
-   int (*finalise)(DbOpResult *);
+   int (*finalise)(DbOpResult *); ///< final state finaliser
  } finaliser;
 
  struct {
-   char *(*provide)(intptr_t *);
-   void (*finalise)(char *);
-   intptr_t *values;
- } query_provider;
+   char *(*provide)(intptr_t *); ///< user-supplied callback to provide a finalised query string. Tobe deallocated with query_statement_provider.finalise()
+   void (*finalise)(char *); ///< query-string specif finaliser
+   intptr_t *values; ///< array of values to substitute into parameterised query string
+ } query_statement_provider;
 
  struct {
-   DBOPStatus status;
+   DBOPStatus status; ///< db ops state transitions outcomes
  } dbop_status;
-} DbOpDescriptor;
+} ;
 
 #endif //UFSRV_DB_OP_TYPE_H

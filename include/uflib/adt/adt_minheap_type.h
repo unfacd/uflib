@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,26 +15,33 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SRC_INCLUDE_ADT_MINHEAP_TYPE_H_
-#define SRC_INCLUDE_ADT_MINHEAP_TYPE_H_
+#ifndef UFLIB_ADT_ADT_MINHEAP_TYPE_H
+#define UFLIB_ADT_ADT_MINHEAP_TYPE_H
 
+/**
+ * @brief Opaque handle to a binary min-heap (priority queue).
+ *
+ * The complete layout is private to `src/adt/adt_minheap.c`.  Obtain a
+ * handle with MinHeapCreate() / MinHeapCreateI64() and release it with
+ * MinHeapDestroy().  A heap is not a value type: never allocate `MinHeap` on the
+ * stack, never embed it by value in another structure, and never reach into
+ * its fields.  This is a breaking change from the pre-2026 page-mapped heap,
+ * whose `struct MinHeap` was fully visible.
+ */
+typedef struct MinHeap MinHeap;
 
-// Structure for a single heap entry
-typedef struct heap_entry {
-    void *key;   // Key for this entry
-    void *value; // Value for this entry
-} heap_entry;
+/**
+ * @brief Key comparison function.
+ *
+ * Compares two keys and returns a negative value when `key1 < key2`, zero
+ * when they are equal, and a positive value when `key1 > key2`.  Any
+ * magnitude of negative/positive is honoured (the sift-down path treats
+ * `> 0` as "greater", never `== 1`).
+ *
+ * The keys passed to a comparator are the raw `key` pointers stored with
+ * MinHeapInsert() — the comparator must know how to read them (e.g. cast to
+ * `const int *` and dereference).
+ */
+typedef int (*MinHeapCmpFn)(const void *key1, const void *key2);
 
-
-// Main struct for representing the heap
-typedef struct heap {
-    int (*compare_func)(void*, void*); // The key comparison function to use
-    int active_entries;  // The number of entries in the heap
-    int minimum_pages;   // The minimum number of pages to maintain, based on the initial cap.
-    int allocated_pages; // The number of pages in memory that are allocated
-    int map_pages;       // The number of pages used for the map table
-    void **mapping_table; // Pointer to the table, which maps to the pages
-} heap;
-
-
-#endif /* SRC_INCLUDE_ADT_MINHEAP_TYPE_H_ */
+#endif /* UFLIB_ADT_ADT_MINHEAP_TYPE_H */

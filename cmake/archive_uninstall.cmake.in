@@ -1,0 +1,59 @@
+# archive_uninstall.cmake — generated, do not edit
+# Archives the currently installed uflib files to /tmp before uninstalling.
+# Run via: sudo cmake -P cmake-build-debug/archive_uninstall.cmake
+
+set(_archive_root "/tmp/archived_@_PROJECT_NAME@_@UFLIB_VERSION@")
+
+if(NOT EXISTS "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt")
+    message(FATAL_ERROR "No install_manifest.txt found. Run cmake --install first to generate it, then re-build to create a new manifest for this version.")
+endif()
+
+file(READ "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt" _manifest)
+string(REGEX REPLACE "\n" ";" _files "${_manifest}")
+
+# Count how many files we're archiving
+list(LENGTH _files _count)
+if(_count EQUAL 0)
+    message(STATUS "Nothing to archive — install manifest is empty.")
+    return()
+endif()
+
+message(STATUS "Archiving ${_count} installed files to ${_archive_root}")
+
+foreach(_file ${_files})
+    if(EXISTS "${_file}")
+        # Compute destination under archive root, preserving absolute path structure
+        file(RELATIVE_PATH _rel "/" "${_file}")
+        set(_dest "${_archive_root}${_file}")
+
+        # Create parent directory
+        get_filename_component(_dest_dir "${_dest}" DIRECTORY)
+        file(MAKE_DIRECTORY "${_dest_dir}")
+
+        message(STATUS "  ${_file} -> ${_dest}")
+        file(RENAME "${_file}" "${_dest}")
+    else()
+        message(STATUS "  Skipping (not found): ${_file}")
+    endif()
+endforeach()
+
+# Remove empty directories left behind
+set(_dirs)
+foreach(_file ${_files})
+    get_filename_component(_dir "${_file}" DIRECTORY)
+    list(APPEND _dirs "${_dir}")
+endforeach()
+list(REMOVE_DUPLICATES _dirs)
+list(SORT _dirs)
+list(REVERSE _dirs)
+foreach(_dir ${_dirs})
+    file(GLOB _contents "${_dir}/*")
+    list(LENGTH _contents _count2)
+    if(_count2 EQUAL 0 AND EXISTS "${_dir}")
+        message(STATUS "Removing empty directory ${_dir}")
+        file(REMOVE_RECURSE "${_dir}")
+    endif()
+endforeach()
+
+message(STATUS "Archive complete. Files moved to ${_archive_root}")
+message(STATUS "Ready for: cmake --install <build-dir>")

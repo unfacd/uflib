@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2024 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,24 +15,29 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_UTILS_TIME_H
-#define UFSRV_UTILS_TIME_H
+#ifndef UFLIB_UTILS_TIME_H
+#define UFLIB_UTILS_TIME_H
 
-#include "standard_c_includes.h"
+#include <uflib/uflib_defs.h>
+
+#include <uflib/standard_c_includes.h>
 #include "simple_timer_type.h"
 #include <time.h>
 
-#define SECONDS_TO_NANO_SECONDS(x) (x *1000000000)
-#define SECONDS_TO_MICRO_SECONDS(x) (x * 1000000)
-#define SECONDS_TO_MILLI_SECONDS(x) (x * 1000)
+#define SECONDS_TO_NANO_SECONDS(x) ((x) *1000000000)
+#define SECONDS_TO_MICRO_SECONDS(x) ((x) * 1000000)
+#define SECONDS_TO_MILLI_SECONDS(x) ((x) * 1000)
+#define MILLI_SECONDS_TO_SECONDS(x) ((x) / 1000) /** @brief param must be in millis */
 
-void GetTimeNow (long *, long *);
-long long GetTimeNowInMillis (void);
-long long GetTimeNowInMicros (void);
-void AddMillisecondsToNow (long long, long *, long *);
-void set_time(struct timeval *);
+#define DAY_TO_MILLI_SECONDS(x) ((x) * 24 * 60 * 60 * 1000)
 
-bool  SimpleTimerIsExpired(SimpleTimer *t);
-void SimpleTimerSet(SimpleTimer *t, size_t usecs);
+PUBLIC_API void GetTimeNow(long *, long *);
+PUBLIC_API long long GetTimeNowInMillis(void);
+PUBLIC_API long long GetTimeNowInMicros(void);
+PUBLIC_API void AddMillisecondsToNow(long long, long *, long *);
+PUBLIC_API void set_time(struct timeval *);
+
+PUBLIC_API bool  SimpleTimerIsExpired(SimpleTimer *t);
+PUBLIC_API void SimpleTimerSet(SimpleTimer *t, size_t usecs);
 
 #endif //UFSRV_UTILS_TIME_H

@@ -3,21 +3,25 @@
  * 
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
+#ifdef HAVE_CONFIG_UFLIB_H
+#include <config_uflib.h>
 #endif
 
-#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <errno.h>
+
 #ifndef __USE_XOPEN
 # define __USE_XOPEN //for strptime()
 #endif
 
 #include <time.h>
 #include <syslog.h>
-#include <my_global.h>//this redefine "likley/unlikely macros, so define above standard_defs to eliminate warning of redefs
+//#include <mariadb/my_global.h>//this redefine "likley/unlikely macros, so define above standard_defs to eliminate warning of redefs
 #include <uflib/standard_defs.h>
 
-#include <mysql.h>
+#include <mariadb/mysql.h>
 #include <uflib/db/db_sql.h>
 
 /**
@@ -35,15 +39,15 @@ struct _h_mariadb {
   //pthread_mutex_t lock;
 };
 
-void InitMysql (void)
+void InitMysql(void)
 {
 	if (mysql_library_init(0, NULL, NULL)) {
-		syslog(LOG_ERR, "%s: ERROR: COULDNOT INIT MYSQL SUBSYSTEM: ABORTING", __func__);
+		syslog(LOG_ERR, "%s: ERROR: COULD NOT INIT MYSQL SUBSYSTEM: ABORTING", __func__);
 		exit(-1);
 	}
 
 	if (!mysql_thread_safe()) {
-		syslog(LOG_ERR, "%s: ERROR: COULDNOT INIT MYSQL SUBSYSTEM: NOT THREAD SAFE: ABORTING", __func__);
+		syslog(LOG_ERR, "%s: ERROR: COULD NOT INIT MYSQL SUBSYSTEM: NOT THREAD SAFE: ABORTING", __func__);
 		exit(-1);
 	}
 
@@ -72,7 +76,11 @@ struct _h_connection *InitialiseDbBackend (void)
 
 }*/
 
-void SqlServerDisplayConnectedUsers (struct _h_connection *db_ptr)
+ /**
+  * @brief Diagnostic display of currently connected db clients.
+  * @param db_ptr Preallocated db connection object
+  */
+void SqlServerDisplayConnectedUsers(struct _h_connection *db_ptr)
 {
 	struct _h_result result;
 	struct _h_data * data;
@@ -82,25 +90,21 @@ void SqlServerDisplayConnectedUsers (struct _h_connection *db_ptr)
 							"GROUP  BY host_short ORDER  BY COUNT(*), host_short;";
 
 
-	if (h_query_select(db_ptr, query_str, &result) == H_OK)
-	{
+	if (h_query_select(db_ptr, query_str, &result) == H_OK) {
 		 int col, row;
 		  char buf[64];
 		  char blob[MBUF];
 		  int i;
-		  syslog(LOG_DEBUG, "%s: mysql thread_id: '%lu'. SQL SERVER QUERY RESULT: rows: %d, col: %d", __func__,
-				  mysql_thread_id(MYSQL_HANDLE(db_ptr)), result.nb_rows, result.nb_columns);
+		  syslog(LOG_DEBUG, "%s: mysql thread_id: '%lu'. SQL SERVER QUERY RESULT: rows: %d, col: %d", __func__, mysql_thread_id(MYSQL_HANDLE(db_ptr)), result.nb_rows, result.nb_columns);
 
-		  for (row = 0; row<result.nb_rows; row++)
-		  {
-			  for (i=0; i<((struct _h_type_blob *)result.data[row][1].t_data)->length; i++)
-			  {
+		  for (row = 0; row<result.nb_rows; row++) {
+			  for (i=0; i<((struct _h_type_blob *)result.data[row][1].t_data)->length; i++) {
 				  blob[i]=*((char*)(((struct _h_type_blob *)result.data[row][1].t_data)->value+i));
 //				 printf("%c", *((char*)(((struct _h_type_blob *)result.data[row][col].t_data)->value+i)));
 			   }
-			  blob[i]='\0';
+			  blob[i] = '\0';
 
-		    	syslog(LOG_DEBUG, "%s: 'host->%s', 'user_name->%s', 'instances->%li'", __func__, ((struct _h_type_text *)result.data[row][0].t_data)->value, blob, ((struct _h_type_int *)result.data[row][2].t_data)->value);
+        syslog(LOG_DEBUG, "%s: 'host->%s', 'user_name->%s', 'instances->%li'", __func__, ((struct _h_type_text *)result.data[row][0].t_data)->value, blob, ((struct _h_type_int *)result.data[row][2].t_data)->value);
 		  }
 
 		h_clean_result(&result);
@@ -109,15 +113,35 @@ void SqlServerDisplayConnectedUsers (struct _h_connection *db_ptr)
 }
 
 /**
+ * @brief Default on_sleep provider: sleep `delay_ms` milliseconds.
+ *
+ * The backoff algorithm yields delays in milliseconds (see the EXPOBACKOFF_*_MS
+ * defaults), so this sleeps in milliseconds via nanosleep(2), retrying on EINTR.
+ * Bound as the default in h_connect_mariadb; consumers may override
+ * conn->backoff_descriptor.on_sleep.
+ */
+static int
+sDbBackoffSleepMs(long delay_ms)
+{
+  struct timespec ts = { delay_ms / 1000L, (delay_ms % 1000L) * 1000000L };
+
+  while (nanosleep(&ts, &ts) != 0) {
+    if (errno != EINTR) {
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+/**
  * h_connect_mariadb
  * Opens a database connection to a mariadb server
  * return pointer to a struct _h_connection * on sucess, NULL on error
  */
-struct _h_connection * h_connect_mariadb(const char * host, const char * user, const char * passwd, const char * db, const unsigned int port, const char * unix_socket)
+struct _h_connection *h_connect_mariadb(const char * host, const char * user, const char * passwd, const char * db, const unsigned int port, const char * unix_socket)
 {
   struct _h_connection *conn = NULL;
-  //pthread_mutexattr_t mutexattr;
-  my_bool reconnect = 1;
 
   if (host != NULL && db != NULL) {
     conn = malloc(sizeof(struct _h_connection));
@@ -130,9 +154,7 @@ struct _h_connection * h_connect_mariadb(const char * host, const char * user, c
     conn->connection = malloc(sizeof(struct _h_mariadb));
     if (conn->connection == NULL) {
       syslog(LOG_ERR, "%s: Error allocating memory for conn->connection", __func__);
-
     	free(conn);
-
     	return NULL;
     }
 
@@ -147,33 +169,118 @@ struct _h_connection * h_connect_mariadb(const char * host, const char * user, c
     //AA+ added thread
     if (mysql_thread_init() != 0) {//zero for success
     	syslog(LOG_ERR, "%s: ERROR: COULD NOT THREAD-INIT MYSQL..", __func__);
-
+      free(conn);
     	return NULL;
     }
 
     ((struct _h_mariadb *)conn->connection)->db_handle = mysql_init(NULL);
     if (((struct _h_mariadb *)conn->connection)->db_handle == NULL) {
       syslog(LOG_ERR, "%s: ERROR: COULD NOT INIT MYSQL HANDLE OBJECT...", __func__);
-
+      free(conn);
+      mysql_thread_end();
       return NULL;
     }
 
-    if (mysql_real_connect(((struct _h_mariadb *)conn->connection)->db_handle,
-                           host, user, passwd, db, port, unix_socket, CLIENT_COMPRESS) == NULL) {
+    if (mysql_real_connect(((struct _h_mariadb *)conn->connection)->db_handle, host, user, passwd, db, port, unix_socket, CLIENT_COMPRESS) == NULL) {
       syslog (LOG_ERR, "%s: ERROR: COULD NOT CONNECT TO DB BACKEND: '%s'. ERROR: '%s'",  __func__, db, mysql_error(((struct _h_mariadb *)conn->connection)->db_handle));
 
       mysql_close(((struct _h_mariadb *)conn->connection)->db_handle);
-
+      free(conn);
       mysql_thread_end(); //AA+
 
       return NULL;
-    } else {
-      // Set MYSQL_OPT_RECONNECT to true to reconnect automatically when connection is closed by the server (to avoid CR_SERVER_GONE_ERROR)
-      mysql_options(((struct _h_mariadb *)conn->connection)->db_handle, MYSQL_OPT_RECONNECT, &reconnect);
+    }
+
+    // Set MYSQL_OPT_RECONNECT to true to reconnect automatically when connection is closed by the server (to avoid CR_SERVER_GONE_ERROR)
+    //Also, check option 'wait_timeout' (using 'show variables;' SQL command): The number of seconds the server waits for activity on a noninteractive connection before closing it.
+    int result = mysql_optionsv(((struct _h_mariadb *)conn->connection)->db_handle, MYSQL_OPT_RECONNECT, (void *)"1");
+
+    if (result == 0 ) {
+      /* Initialise the retry/backoff descriptor used by h_execute_query's
+       * connection-loss retry loop.  Without this, retry_params.backoff_provider
+       * and on_sleep are uninitialised and the loop would call a garbage pointer. */
+      BackoffAlgorithm_InitializeParamsExponential(
+          &conn->backoff_descriptor.retry_params,
+          EXPOBACKOFF_RETRY_BACKOFF_BASE_MS,
+          EXPOBACKOFF_RETRY_MAX_BACKOFF_DELAY_MS,
+          EXPOBACKOFF_RETRY_MAX_ATTEMPTS);
+      conn->backoff_descriptor.on_sleep = sDbBackoffSleepMs;
+
       return conn;
     }
+
+    syslog(LOG_ERR, "%s: ERROR: COULD NOT SET MYSQL_OPT_RECONNECT OPTION for db: '%s'", __func__, db);
+    mysql_close(((struct _h_mariadb *)conn->connection)->db_handle);
+    free(conn);
+    mysql_thread_end();
   }
-  return conn;
+
+  return NULL;
+}
+
+//AA+
+/**
+ * @brief Reconnect a previously connected mysql client. The semantics are different from initial connection establishment
+ * at server startup time.
+ * @param conn_db Previously allocated db holder with allocation for mysql. All descriptors must be provided, such as host name, port etc...
+ * @param is_reinitialise if set, reset and reinitialise mysql context variables, including connection handle.
+ * @return
+ */
+struct _h_connection *h_reconnect_mariadb_initialisable(struct _h_connection *conn_db, bool is_reinitialise)
+{
+  struct _h_mariadb *conn = (struct _h_mariadb *)conn_db->connection;
+
+  if (is_reinitialise) {
+    mysql_thread_end();
+    mysql_close(conn->db_handle);
+  }
+
+  if (mysql_thread_init() != 0) {
+    syslog(LOG_ERR, "%s: ERROR: COULD NOT THREAD-INIT MYSQL..", __func__);
+    return NULL;
+  }
+
+  conn->db_handle = mysql_init(NULL);
+  if (conn->db_handle == NULL) {
+    syslog(LOG_ERR, "%s: ERROR: COULD NOT INIT MYSQL HANDLE OBJECT...", __func__);
+    mysql_thread_end();
+    return NULL;
+  }
+
+  if (mysql_real_connect(conn->db_handle, conn->host, conn->user, conn->passwd, conn->db, conn->port, conn->unix_socket, CLIENT_COMPRESS) == NULL) {
+    syslog (LOG_ERR, "%s: ERROR: COULD NOT CONNECT TO DB BACKEND: '%s'. ERROR: '%s'",  __func__, conn->db, mysql_error(conn->db_handle));
+
+    mysql_close(conn->db_handle);
+    mysql_thread_end();
+
+    return NULL;
+  }
+
+  // Set MYSQL_OPT_RECONNECT to true to reconnect automatically when connection is closed by the server (to avoid CR_SERVER_GONE_ERROR)
+  //Also, check option 'wait_timeout' (using 'show variables like 'wait_timeout';' 'SET wait_timeout = xxx_in_seconds;" SQL command): The number of seconds the server waits for activity on a noninteractive connection before closing it.
+  int result = mysql_optionsv(conn->db_handle, MYSQL_OPT_RECONNECT, (void *)"1");
+
+  if (result == 0 ) {
+    syslog(LOG_ERR, "%s: SUCCESS: RECONNECTED WITH DB BACKEND: '%s'", __func__, conn->db);
+    return conn_db;
+  }
+
+  syslog(LOG_ERR, "%s: ERROR: COULD NOT SET MYSQL_OPT_RECONNECT OPTION for db: '%s'", __func__, conn->db);
+  mysql_close(conn->db_handle);
+  mysql_thread_end();
+
+  return NULL;
+}
+
+/**
+ * @brief Reconnect an existing connection without reinitialising context
+ * @param conn_db[inout] Preinitialised connection context
+ * @return 0 on sucess
+ */
+unsigned int h_reconnect_mariadb(struct _h_connection *conn_db)
+{
+  struct _h_mariadb *conn = (struct _h_mariadb *)conn_db->connection;
+  return mariadb_reconnect(conn->db_handle);
 }
 
 /**
@@ -230,13 +337,28 @@ int h_last_insert_id_mariadb(const struct _h_connection * conn) {
 }
 
 /**
+ * @brief True if `errorno` denotes a lost database connection during a query.
+ *
+ * Each of these should surface as H_ERROR_CONNECTION so that h_execute_query's
+ * retry/backoff loop engages:
+ *   2013 CR_SERVER_LOST           — lost *during* a query (plaintext)
+ *   2026 CR_SSL_CONNECTION_ERROR  — TLS connection loss (FIN or RST)
+ *   2006 CR_SERVER_GONE_ERROR     — server gone away (auto-reconnect failed)
+ */
+static bool
+sIsConnectionLossErrno(unsigned int errorno)
+{
+  return errorno == 2013 || errorno == 2026 || errorno == 2006;
+}
+
+/**
  * h_execute_query_mariadb
  * Execute a query on a mariadb connection, set the result structure with the returned values
  * Should not be executed by the user because all parameters are supposed to be correct
  * if result is NULL, the query is executed but no value will be returned
  * return H_OK on success
  */
-int h_execute_query_mariadb(const struct _h_connection * conn, const char * query, struct _h_result * h_result) {
+int h_execute_query_mariadb(struct _h_connection * conn, const char * query, struct _h_result * h_result) {
   MYSQL_RES * result;
   unsigned int num_fields, col, row;
   MYSQL_ROW m_row;
@@ -248,22 +370,20 @@ int h_execute_query_mariadb(const struct _h_connection * conn, const char * quer
 //  if (pthread_mutex_lock(&(((struct _h_mariadb *)conn->connection)->lock))) {
   //  return H_ERROR_QUERY;
  // }
-  if (mysql_query(((struct _h_mariadb *)conn->connection)->db_handle, query))
-  {
-    syslog(LOG_DEBUG, "%s {pid:''}: DB BACKEND QUERY ERROR: '%s\'", __func__, mysql_error(((struct _h_mariadb *)conn->connection)->db_handle));
-   // pthread_mutex_unlock(&(((struct _h_mariadb *)conn->connection)->lock));
-    return H_ERROR_QUERY;
+  if (mysql_query(((struct _h_mariadb *)conn->connection)->db_handle, query)) {
+    unsigned int query_errorno = mysql_errno(((struct _h_mariadb *)conn->connection)->db_handle);
+    syslog(LOG_DEBUG, "%s {errno: '%u'}: DB BACKEND QUERY ERROR: '%s'", __func__, query_errorno, mysql_error(((struct _h_mariadb *)conn->connection)->db_handle));
+    return sIsConnectionLossErrno(query_errorno) ? H_ERROR_CONNECTION : H_ERROR_QUERY;
   }
   
-  if (h_result != NULL)
-  {
+  if (h_result != NULL) {
     result = mysql_store_result(((struct _h_mariadb *)conn->connection)->db_handle);
     
-    if (result == NULL)
-    {
+    if (result == NULL) {
+      unsigned int query_errorno = mysql_errno(((struct _h_mariadb *)conn->connection)->db_handle);
       syslog(LOG_DEBUG, "%s {pid:''}: DB BACKEND STORE RESULT ERROR: '%s'", __func__, mysql_error(((struct _h_mariadb *)conn->connection)->db_handle));
      // pthread_mutex_unlock(&(((struct _h_mariadb *)conn->connection)->lock));
-      return H_ERROR_QUERY;
+      return sIsConnectionLossErrno(query_errorno) ? H_ERROR_CONNECTION : H_ERROR_QUERY;
     }
     
     num_fields = mysql_num_fields(result);
@@ -493,3 +613,23 @@ struct _h_data * h_get_mariadb_value(const char * value, const unsigned long len
   }
   return data;
 }
+
+//AA+
+MYSQL_STMT *
+h_statement_prepare_mariadb(struct _h_connection *conn, const char *sql_statement, size_t sql_statement_sz)
+{
+  MYSQL_STMT *stmt = mysql_stmt_init(((struct _h_mariadb *)conn->connection)->db_handle);
+  if (!stmt) {
+    syslog(LOG_ERR, "%s: mysql_stmt_init() failed: %s", __func__, mysql_error(((struct _h_mariadb *)conn->connection)->db_handle));
+    return NULL;
+  }
+
+  if (mysql_stmt_prepare(stmt, sql_statement, sql_statement_sz)) {
+    syslog(LOG_ERR, "%s: mysql_stmt_prepare() failed: %s", __func__, mysql_stmt_error(stmt));
+    mysql_stmt_close(stmt);
+    return NULL;
+  }
+
+  return stmt;
+}
+//

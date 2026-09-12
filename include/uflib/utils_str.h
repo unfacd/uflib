@@ -15,10 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SRC_INCLUDE_UTILS_STR_H_
-#define SRC_INCLUDE_UTILS_STR_H_
+#ifndef UFLIB_UTILS_STR_H
+#define UFLIB_UTILS_STR_H
+
+#include <uflib/uflib_defs.h>
 
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 typedef struct {
   uint64_t tab[4];
@@ -26,14 +30,24 @@ typedef struct {
   const char *p; // end of the current token
 } TokenAux;
 
-int ftoa(char *outbuf, float f);
+PUBLIC_API bool is_unsigned_long_format(const char *unsigned_long_str);
+PUBLIC_API int ftoa(char *outbuf, float f);
 char *ultoa(unsigned long value, char *ptr, int base);
-int itoa(char *ptr, uint32_t number);
-unsigned digits_count (uint64_t number, unsigned base);
+PUBLIC_API int itoa(char *ptr, uint32_t number);
+PUBLIC_API unsigned digits_count (uint64_t number, unsigned base);
 const char *traverse_quoted(const char *ptr);
 char *TokeniseString(const char *str, const char *sep_in, TokenAux *aux);
 
-size_t mstrlcpy(char *, const char *, size_t);
+PUBLIC_API size_t mstrlcpy(char *, const char *, size_t);
+
+#define IGNORE_BYTES_READ_PARAM NULL
+#define IGNORE_IS_VALID_PARAM   NULL
+
+PUBLIC_API size_t DefensiveStrlenUtf8(const char *str, size_t max_bytes, size_t *bytes_read, bool *is_valid);
+PUBLIC_API size_t DefensiveStrlenUtf8Binary(const uint8_t *buf, size_t buf_size, size_t max_chars);
+PUBLIC_API bool IsUtf8Valid(const char *str, size_t max_bytes);
+PUBLIC_API bool DefensiveStrlen(const char * _Nonnull str, size_t max_sz, size_t * _Nullable out_len);
+PUBLIC_API bool DefensiveStrlenWithMinMax(const char * _Nonnull str, size_t min_sz, size_t max_sz, size_t * _Nullable out_len);
 
 #if defined(__GNUC__)
 //call vardic function without using classic c style va variables INVOKE_FUNCTION(MyFunctionaName, {(intptr)0, (intptr)1, (intptr_t)"hello"})
@@ -60,8 +74,10 @@ size_t mstrlcpy(char *, const char *, size_t);
 #define get_buffer_size(...) (snprintf(NULL, 0, __VA_ARGS__) + 1)
 #define STRINGIFY_PARAMETER(...) sprintf_provided_buffer(alloca(get_buffer_size(__VA_ARGS__)), __VA_ARGS__)
 
+char *strbufdup(const char *s, size_t n);
+char *strbufdup_nullable(const char *s, size_t n, char *(^on_null)(void));
 char *sprintf_provided_buffer (char *user_allocated_buffer, char *format, ...);
 
-char * mystrdup(const char *);
+PUBLIC_API char * mystrdup(const char *);
 
-#endif /* SRC_INCLUDE_UTILS_STR_H_ */
+#endif /* UFLIB_UTILS_STR_H */

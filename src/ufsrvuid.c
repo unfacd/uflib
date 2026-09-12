@@ -1,5 +1,10 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * @file ufsrvuid.c
+ * @brief Implementation of the UfsrvUid codec (Crockford Base32 ULID).
+ */
+
+/**
+ * Copyright (C) 2015-2025 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,8 +20,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
+#ifdef HAVE_CONFIG_UFLIB_H
+#include <config_uflib.h>
 #endif
 
 #include <uflib/utils_bits.h>
@@ -24,85 +29,157 @@
 
 #define CUSTOM_EPOCH_IN_MILLIS  1401277473000UL//Wed, 28 May 2014 11:44:33 GMT
 
-inline static void _UlidEncodeIdPreamble (long long timestamp, unsigned int instance_id, UfsrvUid *uid_ptr);
-inline static void _UlidEncodeIdSequence (unsigned long id_sequence, UfsrvUid *uid_ptr);
+_Static_assert(sizeof(unsigned long) == 8, "ufsrvuid requires 64-bit unsigned long (LP64)");
 
-inline static void _UlidEncodeIdPreamble (long long timestamp, unsigned int instance_id, UfsrvUid *uid_ptr)
+inline static void _UlidEncodeIdPreamble(long long timestamp, unsigned int instance_id, UfsrvUid *uid_ptr);
+inline static void _UlidEncodeIdSequence(unsigned long id_sequence, UfsrvUid *uid_ptr);
+
+inline static void _UlidEncodeIdPreamble(long long timestamp, unsigned int instance_id, UfsrvUid *uid_ptr)
 {
-  *(unsigned long *)&(uid_ptr->data[0]) = ((timestamp-CUSTOM_EPOCH_IN_MILLIS) << UFSRVUID_TIMESTAMP_SHIFT)| instance_id;
+  // 41-bit timestamp (ms since custom epoch) in bits 23..63, 23-bit instance_id in bits 0..22.
+  long long delta = timestamp - (long long)CUSTOM_EPOCH_IN_MILLIS;
+  if (delta < 0) {
+    delta = 0;
+  }
+  if ((unsigned long long)delta > 0x1FFFFFFFFFFULL) { // 2^41 - 1
+    delta = 0x1FFFFFFFFFFLL;
+  }
 
+  uint64_t preamble = ((uint64_t)delta << UFSRVUID_TIMESTAMP_SHIFT) | ((uint64_t)instance_id & 0x7FFFFFu);
+  memcpy(&uid_ptr->data[0], &preamble, sizeof(preamble));
 }
 
-inline static void _UlidEncodeIdSequence (unsigned long id_sequence, UfsrvUid *uid_ptr)
+inline static void _UlidEncodeIdSequence(unsigned long id_sequence, UfsrvUid *uid_ptr)
 {
-  *(unsigned long *)&(uid_ptr->data[8]) = id_sequence;
-
-}
-__attribute__ ((const, nonnull(1), access(read_only, 1))) unsigned long UfsrvUidGetSequenceId (const UfsrvUid *uid_ptr)
-{
-  return *(unsigned long *)&(uid_ptr->data[8]);
+  uint64_t seq = (uint64_t)id_sequence;
+  memcpy(&uid_ptr->data[8], &seq, sizeof(seq));
 }
 
-unsigned long UfsrvUidGetSequenceIdFromEncoded (const char *ufsrvuid_encoded)
+__attribute__ ((access(read_only, 1))) unsigned long
+UfsrvUidGetSequenceId(const UfsrvUid *uid_ptr)
 {
-  size_t ufsrvuid_encoded_sz = strlen(ufsrvuid_encoded);
-  if (ufsrvuid_encoded_sz != CONFIG_MAX_UFSRV_ID_ENCODED_SZ) {
+  if (!uid_ptr) {
     return 0;
+  }
+  unsigned long seq;
+  memcpy(&seq, &uid_ptr->data[8], sizeof(seq));
+  return seq;
+}
+
+unsigned long UfsrvUidGetSequenceIdFromEncoded(const char *ufsrvuid_encoded)
+{
+  if (!ufsrvuid_encoded) {
+    return ULONG_MAX;
+  }
+
+  if (strnlen(ufsrvuid_encoded, CONFIG_MAX_UFSRV_ID_ENCODED_SZ + 1) != CONFIG_MAX_UFSRV_ID_ENCODED_SZ) {
+    return ULONG_MAX;
   }
 
   UfsrvUid uid = {0};
-  UfsrvUidCreateFromEncodedText(ufsrvuid_encoded, &uid);
+  if (!UfsrvUidCreateFromEncodedText(ufsrvuid_encoded, &uid)) {
+    return ULONG_MAX;
+  }
 
   return UfsrvUidGetSequenceId(&uid);
-
 }
 
-__attribute__ ((const)) unsigned int UfsrvUidGetInstanceId (const UfsrvUid *uid_ptr)
+unsigned int UfsrvUidGetInstanceId(const UfsrvUid *uid_ptr)
 {
-  return GET_N_BITS_FROM_REAR(*(unsigned int *)&(uid_ptr->data[0]), 23);
+  if (!uid_ptr) {
+    return 0;
+  }
+  unsigned int instance;
+  memcpy(&instance, &uid_ptr->data[0], sizeof(instance));
+  return GET_N_BITS_FROM_REAR(instance, 23);
 }
 
-__attribute__ ((const)) unsigned long UfsrvUidGetTimestamp (const UfsrvUid *uid_ptr)
+unsigned long UfsrvUidGetTimestamp(const UfsrvUid *uid_ptr)
 {
-  return GET_BITS_IN_BETWEEN(*(unsigned long *)&(uid_ptr->data[0]), 23, 64);
+  if (!uid_ptr) {
+    return 0;
+  }
+  unsigned long preamble;
+  memcpy(&preamble, &uid_ptr->data[0], sizeof(preamble));
+  return GET_BITS_IN_BETWEEN(preamble, 23, 64);
 }
 
-__attribute__ ((const)) bool UfsrvUidIsEqual (const UfsrvUid *uid_ptr1, const UfsrvUid *uid_ptr2)
+bool
+UfsrvUidIsEqual(const UfsrvUid *uid_ptr1, const UfsrvUid *uid_ptr2)
 {
-  return  (memcmp(uid_ptr1->data, uid_ptr2->data, CONFIG_MAX_UFSRV_ID_SZ)==0);
+  if (!uid_ptr1 || !uid_ptr2) {
+    return (uid_ptr1 == uid_ptr2);
+  }
+  return  (memcmp(uid_ptr1->data, uid_ptr2->data, (size_t)CONFIG_MAX_UFSRV_ID_SZ) == 0);
 }
 
-void UfsrvUidCopy (const UfsrvUid *uid_ptr_src, UfsrvUid *uid_ptr_dest)
+void UfsrvUidCopy(const UfsrvUid *uid_ptr_src, UfsrvUid *uid_ptr_dest)
 {
-  memcpy(uid_ptr_dest->data, uid_ptr_src->data, CONFIG_MAX_UFSRV_ID_SZ);
+  if (!uid_ptr_src || !uid_ptr_dest) {
+    return;
+  }
+  memcpy(uid_ptr_dest->data, uid_ptr_src->data, (size_t)CONFIG_MAX_UFSRV_ID_SZ);
 }
 
-__attribute__ ((const)) bool UfsrvUidIsSystemUser (const UfsrvUid *uid_ptr)
+/**
+ * @brief Provide system UfsrvUid object (being of sequence id '0') and encoded value of "01000000000000000000000000"
+ * @return pointer to the shared, read-only system user
+ */
+const UfsrvUid *
+UfsrvUidRawSystemUser()
 {
-  return  (memcmp(uid_ptr->data, (uint8_t []) {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, CONFIG_MAX_UFSRV_ID_SZ)==0);
+  static UfsrvUid ufsrvuid_system = {
+          .data = {0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}
+  };
+
+  return &ufsrvuid_system;
 }
 
-UfsrvUid *UfsrvUidGenerate (const UfsrvUidGeneratorDescriptor *descriptor_ptr, UfsrvUid *uid_ptr_out)
+const uint8_t *
+UfsrvUidRawDataSystemUser()
+{
+  static uint8_t ufsrvuid_raw_system[] = {0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+  return  ufsrvuid_raw_system;
+}
+
+bool
+UfsrvUidIsSystemUser(const UfsrvUid *uid_ptr)
+{
+  if (!uid_ptr) {
+    return false;
+  }
+  return (memcmp(uid_ptr->data, (uint8_t []) {0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, (size_t)CONFIG_MAX_UFSRV_ID_SZ) == 0);
+}
+
+UfsrvUid *
+UfsrvUidGenerate(const UfsrvUidGeneratorDescriptor *descriptor_ptr, UfsrvUid *uid_ptr_out)
 {
   UfsrvUid *uid_ptr;
+
+  if (!descriptor_ptr) {
+    return NULL;
+  }
 
   if (IS_EMPTY(uid_ptr_out)) {
     uid_ptr = calloc(1, sizeof(UfsrvUid));
   } else {
     uid_ptr = uid_ptr_out;
   }
+  if (!uid_ptr) {
+    return NULL;
+  }
 
   _UlidEncodeIdPreamble(descriptor_ptr->timestamp, descriptor_ptr->instance_id, uid_ptr);
   _UlidEncodeIdSequence(descriptor_ptr->uid, uid_ptr);
 
-#ifdef __UF_TESTING
-#include <utils_hex.h>
-"standard_c_includes.h"
+#if UF_DEBUG_BUILD
+#include <uflib/utils_hex.h>
+#include <uflib/standard_c_includes.h>
 
   char uid_hexified[16+16+1] = {0};
   bin2hex(uid_ptr->data, 16, uid_hexified);
   syslog(LOG_DEBUG, "%s (pid:'%lu'): hex:'%s', timestamp: '%lu', instance_id:'%lu', id_sequence:'%lu'\n", __func__, pthread_self(), uid_hexified,
-         GET_BITS_IN_BETWEEN(*(unsigned long *)&(uid_ptr->data[0]), 23, 64), GET_N_BITS_FROM_REAR(*(unsigned int *)&(uid_ptr->data[0]), 23), *(unsigned long *)&(uid_ptr->data[8]));
+         (unsigned long)UfsrvUidGetTimestamp(uid_ptr), (unsigned long)UfsrvUidGetInstanceId(uid_ptr), (unsigned long)UfsrvUidGetSequenceId(uid_ptr));
 #endif
 
   return uid_ptr;
@@ -111,7 +188,7 @@ UfsrvUid *UfsrvUidGenerate (const UfsrvUidGeneratorDescriptor *descriptor_ptr, U
 /**
  * Crockford's Base32
  * */
-const char Encoding[33] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+static const char Encoding[33] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 /**
  * Marshal a UfsrvUid to the passed character array.
@@ -122,10 +199,17 @@ UfsrvUidConvertSerialise(const UfsrvUid *uid_ptr, char *dst_out)
 {
   char *dst;
 
+  if (!uid_ptr) {
+    return NULL;
+  }
+
   if (IS_EMPTY(dst_out)) {
-    dst = calloc(27, sizeof(char));
+    dst = calloc(CONFIG_MAX_UFSRV_ID_ENCODED_SZ + 1, sizeof(char));
   } else {
     dst = dst_out;
+  }
+  if (!dst) {
+    return NULL;
   }
 
   dst[0] = Encoding[(uid_ptr->data[0] & 224) >> 5];
@@ -157,6 +241,7 @@ UfsrvUidConvertSerialise(const UfsrvUid *uid_ptr, char *dst_out)
 
   dst[24] = Encoding[((uid_ptr->data[14] & 3) << 3) | ((uid_ptr->data[15] & 224) >> 5)];
   dst[25] = Encoding[uid_ptr->data[15] & 31];
+  dst[CONFIG_MAX_UFSRV_ID_ENCODED_SZ] = '\0';
 
   return dst;
 }
@@ -218,29 +303,182 @@ static const uint8_t dec[256] = {
 UfsrvUid *UfsrvUidCreateFromEncodedText(const char *str, UfsrvUid *uid_ptr_out)
 {
   UfsrvUid *uid_ptr;
+  const unsigned char *s = (const unsigned char *)str;
+
+  if (!str) {
+    return NULL;
+  }
+
+  if (strnlen(str, CONFIG_MAX_UFSRV_ID_ENCODED_SZ + 1) != CONFIG_MAX_UFSRV_ID_ENCODED_SZ) {
+    return NULL;
+  }
+
+  // Reject out-of-alphabet symbols and a non-canonical leading character
+  // (the leading char carries only 3 bits, so only 0..7 is valid).
+  for (int i = 0; i < CONFIG_MAX_UFSRV_ID_ENCODED_SZ; ++i) {
+    if (dec[s[i]] == 0xFF) {
+      return NULL;
+    }
+  }
+  if (dec[s[0]] > 7) {
+    return NULL;
+  }
 
   if (IS_PRESENT(uid_ptr_out)) {
     uid_ptr = uid_ptr_out;
   } else {
     uid_ptr = calloc(1, sizeof(UfsrvUid));
   }
+  if (!uid_ptr) {
+    return NULL;
+  }
 
-  uid_ptr->data[0] = (dec[((int)str[0])] << 5) | dec[(int)(str[1])];
-  uid_ptr->data[1] = (dec[(int)(str[2])] << 3) | (dec[(int)(str[3])] >> 2);
-  uid_ptr->data[2] = (dec[(int)(str[3])] << 6) | (dec[(int)(str[4])] << 1) | (dec[(int)(str[5])] >> 4);
-  uid_ptr->data[3] = (dec[(int)(str[5])] << 4) | (dec[(int)(str[6])] >> 1);
-  uid_ptr->data[4] = (dec[(int)(str[6])] << 7) | (dec[(int)(str[7])] << 2) | (dec[(int)(str[8])] >> 3);
-  uid_ptr->data[5] = (dec[(int)(str[8])] << 5) | dec[(int)(str[9])];
-  uid_ptr->data[6] = (dec[(int)(str[10])] << 3) | (dec[(int)(str[11])] >> 2);
-  uid_ptr->data[7] = (dec[(int)(str[11])] << 6) | (dec[(int)(str[12])] << 1) | (dec[(int)(str[13])] >> 4);
-  uid_ptr->data[8] = (dec[(int)(str[13])] << 4) | (dec[(int)(str[14])] >> 1);
-  uid_ptr->data[9] = (dec[(int)(str[14])] << 7) | (dec[(int)(str[15])] << 2) | (dec[(int)(str[16])] >> 3);
-  uid_ptr->data[10] = (dec[(int)(str[16])] << 5) | dec[(int)(str[17])];
-  uid_ptr->data[11] = (dec[(int)(str[18])] << 3) | (dec[(int)(str[19])] >> 2);
-  uid_ptr->data[12] = (dec[(int)(str[19])] << 6) | (dec[(int)(str[20])] << 1) | (dec[(int)(str[21])] >> 4);
-  uid_ptr->data[13] = (dec[(int)(str[21])] << 4) | (dec[(int)(str[22])] >> 1);
-  uid_ptr->data[14] = (dec[(int)(str[22])] << 7) | (dec[(int)(str[23])] << 2) | (dec[(int)(str[24])] >> 3);
-  uid_ptr->data[15] = (dec[(int)(str[24])] << 5) | dec[(int)(str[25])];
+  uid_ptr->data[0] = (dec[s[0]] << 5) | dec[s[1]];
+  uid_ptr->data[1] = (dec[s[2]] << 3) | (dec[s[3]] >> 2);
+  uid_ptr->data[2] = (dec[s[3]] << 6) | (dec[s[4]] << 1) | (dec[s[5]] >> 4);
+  uid_ptr->data[3] = (dec[s[5]] << 4) | (dec[s[6]] >> 1);
+  uid_ptr->data[4] = (dec[s[6]] << 7) | (dec[s[7]] << 2) | (dec[s[8]] >> 3);
+  uid_ptr->data[5] = (dec[s[8]] << 5) | dec[s[9]];
+  uid_ptr->data[6] = (dec[s[10]] << 3) | (dec[s[11]] >> 2);
+  uid_ptr->data[7] = (dec[s[11]] << 6) | (dec[s[12]] << 1) | (dec[s[13]] >> 4);
+  uid_ptr->data[8] = (dec[s[13]] << 4) | (dec[s[14]] >> 1);
+  uid_ptr->data[9] = (dec[s[14]] << 7) | (dec[s[15]] << 2) | (dec[s[16]] >> 3);
+  uid_ptr->data[10] = (dec[s[16]] << 5) | dec[s[17]];
+  uid_ptr->data[11] = (dec[s[18]] << 3) | (dec[s[19]] >> 2);
+  uid_ptr->data[12] = (dec[s[19]] << 6) | (dec[s[20]] << 1) | (dec[s[21]] >> 4);
+  uid_ptr->data[13] = (dec[s[21]] << 4) | (dec[s[22]] >> 1);
+  uid_ptr->data[14] = (dec[s[22]] << 7) | (dec[s[23]] << 2) | (dec[s[24]] >> 3);
+  uid_ptr->data[15] = (dec[s[24]] << 5) | dec[s[25]];
 
   return uid_ptr;
 }
+
+UfsrvUid *
+UfsrvUidCreateFromBinary(const uint8_t b[16], UfsrvUid *uid_ptr_out)
+{
+  UfsrvUid *uid_ptr;
+
+  if (!b) {
+    return NULL;
+  }
+
+  if (IS_PRESENT(uid_ptr_out)) {
+    uid_ptr = uid_ptr_out;
+  } else {
+    uid_ptr = calloc(1, sizeof(UfsrvUid));
+  }
+  if (!uid_ptr) {
+    return NULL;
+  }
+
+  memcpy(uid_ptr->data, b, CONFIG_MAX_UFSRV_ID_SZ);
+  return uid_ptr;
+}
+
+uint8_t *
+UfsrvUidConvertToBinary(const UfsrvUid *uid_ptr, uint8_t dst[16])
+{
+  if (!uid_ptr || !dst) {
+    return NULL;
+  }
+
+  memcpy(dst, uid_ptr->data, CONFIG_MAX_UFSRV_ID_SZ);
+  return dst;
+}
+
+/*
+ * BUG-08 reference fix — endian-agnostic field access (kept #if 0 for reference).
+ *
+ * The active code reads/writes the 41-bit timestamp, 23-bit instance id and
+ * 64-bit sequence id with memcpy of a *native* integer, which assumes a
+ * little-endian host.  On a big-endian host the canonical Crockford strings and
+ * the system-user identity ({0x01,0x00,...,0x00}) no longer match.
+ *
+ * The helpers below compose/decompose the fields byte-by-byte in the canonical
+ * little-endian order, making the byte layout host-independent.  To adopt,
+ * remove the #if 0 / #endif and delete the active (memcpy) versions of the five
+ * functions _UlidEncodeIdPreamble, _UlidEncodeIdSequence, UfsrvUidGetSequenceId,
+ * UfsrvUidGetInstanceId and UfsrvUidGetTimestamp.
+ */
+#if 0
+
+static uint64_t
+sLe64(const uint8_t *p)
+{
+  return (uint64_t)p[0]
+       | ((uint64_t)p[1] << 8)
+       | ((uint64_t)p[2] << 16)
+       | ((uint64_t)p[3] << 24)
+       | ((uint64_t)p[4] << 32)
+       | ((uint64_t)p[5] << 40)
+       | ((uint64_t)p[6] << 48)
+       | ((uint64_t)p[7] << 56);
+}
+
+static uint32_t
+sLe32(const uint8_t *p)
+{
+  return (uint32_t)p[0]
+       | ((uint32_t)p[1] << 8)
+       | ((uint32_t)p[2] << 16)
+       | ((uint32_t)p[3] << 24);
+}
+
+static void
+sStoreLe64(uint8_t *p, uint64_t v)
+{
+  p[0] = (uint8_t)(v & 0xFF);
+  p[1] = (uint8_t)((v >> 8)  & 0xFF);
+  p[2] = (uint8_t)((v >> 16) & 0xFF);
+  p[3] = (uint8_t)((v >> 24) & 0xFF);
+  p[4] = (uint8_t)((v >> 32) & 0xFF);
+  p[5] = (uint8_t)((v >> 40) & 0xFF);
+  p[6] = (uint8_t)((v >> 48) & 0xFF);
+  p[7] = (uint8_t)((v >> 56) & 0xFF);
+}
+
+inline static void _UlidEncodeIdPreamble(long long timestamp, unsigned int instance_id, UfsrvUid *uid_ptr)
+{
+  long long delta = timestamp - (long long)CUSTOM_EPOCH_IN_MILLIS;
+  if (delta < 0) {
+    delta = 0;
+  }
+  if ((unsigned long long)delta > 0x1FFFFFFFFFFULL) { // 2^41 - 1
+    delta = 0x1FFFFFFFFFFLL;
+  }
+
+  uint64_t preamble = ((uint64_t)delta << UFSRVUID_TIMESTAMP_SHIFT) | ((uint64_t)instance_id & 0x7FFFFFu);
+  sStoreLe64(&uid_ptr->data[0], preamble);
+}
+
+inline static void _UlidEncodeIdSequence(unsigned long id_sequence, UfsrvUid *uid_ptr)
+{
+  sStoreLe64(&uid_ptr->data[8], (uint64_t)id_sequence);
+}
+
+__attribute__ ((access(read_only, 1))) unsigned long
+UfsrvUidGetSequenceId(const UfsrvUid *uid_ptr)
+{
+  if (!uid_ptr) {
+    return 0;
+  }
+  return (unsigned long)sLe64(&uid_ptr->data[8]);
+}
+
+unsigned int UfsrvUidGetInstanceId(const UfsrvUid *uid_ptr)
+{
+  if (!uid_ptr) {
+    return 0;
+  }
+  return GET_N_BITS_FROM_REAR(sLe32(&uid_ptr->data[0]), 23);
+}
+
+unsigned long UfsrvUidGetTimestamp(const UfsrvUid *uid_ptr)
+{
+  if (!uid_ptr) {
+    return 0;
+  }
+  return GET_BITS_IN_BETWEEN(sLe64(&uid_ptr->data[0]), 23, 64);
+}
+
+#endif /* 0 — BUG-08 endian-agnostic reference fix */

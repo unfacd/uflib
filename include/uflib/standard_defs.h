@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_STANDARD_DEFS_H
-#define UFSRV_STANDARD_DEFS_H
+#ifndef UFLIB_STANDARD_DEFS_H
+#define UFLIB_STANDARD_DEFS_H
 
 //we require this
 #ifndef _GNU_SOURCE
@@ -29,7 +29,8 @@
 #define XLARGBUF    1024
 #define XXLARGBUF   2048
 
-
+#define TINYTINYBUF	16
+#define TINYMINIBUF	32
 #define MINIBUF	64
 #define SBUF    128
 #define	SMBUF		192
@@ -84,10 +85,12 @@
 extern __typeof(old) new __attribute__((weak, alias(#old)))
 
 #define IS_STR_LOADED(x)		(((x) != NULL) && ((*(x)) != '\0'))
+#define IS_STR_DEFAULT_LOADED(x)		(((x) != NULL) && ((*(x)) == '*'))
 #define IS_STR_EMPTY(x)		((*(x)) == '\0')
 #define IS_EMPTY(x)		(x == NULL)
 #define IS_PRESENT(x)	(x != NULL)
 #define LOAD_NULL(x)  (x = NULL)
+#define IS_CONTENT_LOADED(x)		(((x) != NULL) && ((*(x)) != '\0'))
 
 #define IS_OK(x)		(x)
 #define NOT_OK(x)		(!(x))

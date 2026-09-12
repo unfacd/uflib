@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2025 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -30,11 +30,11 @@
  * @param dbop_descriptor
  * @return None
  */
-void __attribute__ ((nonnull(1, 2)))
+void __attribute__ ((nonnull()))
 GetDbResultForQuery(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor)
 {
   struct _h_result *result = &dbop_descriptor->result;
-  char *sql_query_str  = DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER(dbop_descriptor);
+  char *sql_query_str  = DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER(dbop_descriptor);
 
 #ifdef __UF_FULLDEBUG
   syslog(LOG_DEBUG, "%s (th_ctx:'%p'): GENERATED SQL QUERY: '%s'", __func__, THREAD_CONTEXT_PTR, sql_query_str);
@@ -45,13 +45,13 @@ GetDbResultForQuery(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor)
   if (sql_result != H_OK) {
     syslog(LOG_DEBUG, "%s (th_ctx:''): ERROR: COULD NOT EXECUTE QUERY: '%s'", __func__, sql_query_str);
 
-    DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+    DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
 
     dbop_descriptor->dbop_status.status = DB_ERROR;
     return;
   }
 
-  DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+  DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
 
   if (result->nb_rows == 0) {
 #ifdef __UF_FULLDEBUG
@@ -70,11 +70,10 @@ GetDbResultForQuery(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor)
 
 }
 
-void __attribute__((nonnull(1)))
+void __attribute__((nonnull()))
 GetDbResultForUpdate(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor)
 {
-  struct _h_result *result = &dbop_descriptor->result;
-  char *sql_query_str  = DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER(dbop_descriptor);
+  char *sql_query_str  = DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER(dbop_descriptor);
 
 #ifdef __UF_FULLDEBUG
   syslog(LOG_DEBUG, "%s (th_ctx:'%p'): GENERATED SQL QUERY: '%s'", __func__, THREAD_CONTEXT_PTR, sql_query_str);
@@ -85,14 +84,72 @@ GetDbResultForUpdate(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor)
   if (sql_result != H_OK) {
     syslog(LOG_DEBUG, "%s (th_ctx:''): ERROR: COULD NOT EXECUTE QUERY: '%s'", __func__, sql_query_str);
 
-    DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+    DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
 
-    dbop_descriptor->dbop_status.status = DB_ERROR;
+    dbop_descriptor->dbop_status.status = UPDATE_ERROR;
     return;
   }
 
-  DBOP_DESCRIPTOR_INVOKE_QUERY_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+  DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
 
-  DBOP_DESCRIPTOR_INVOKE_RESULT_FINALISER_IF_PRESENT(dbop_descriptor);
+  //  DBOP_DESCRIPTOR_INVOKE_RESULT_FINALISER_IF_PRESENT(dbop_descriptor); //this has no effect, as result object is not used
+
+}
+
+void  __attribute__((nonnull()))
+GetDbResultForInsert(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor)
+{
+  char *sql_query_str  = DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER(dbop_descriptor);
+
+#ifdef __UF_FULLDEBUG
+  syslog(LOG_DEBUG, "%s (th_ctx:'%p'): GENERATED SQL QUERY: '%s'", __func__, THREAD_CONTEXT_PTR, sql_query_str);
+#endif
+
+  int sql_result = h_query_insert(db_backend, sql_query_str);
+
+  if (sql_result != H_OK) {
+    syslog(LOG_DEBUG, "%s (th_ctx:''): ERROR: COULD NOT EXECUTE QUERY: '%s'", __func__, sql_query_str);
+
+    DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+
+    dbop_descriptor->dbop_status.status = INSERT_ERROR;
+    return;
+  }
+
+  struct _h_data *db_data = h_query_last_insert_id(db_backend);
+  if (db_data->type == HOEL_COL_TYPE_INT) {
+    dbop_descriptor->insert_id = ((struct _h_type_int *)db_data->t_data)->value;
+    h_clean_data_full(db_data);
+  }
+
+  DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+
+//  DBOP_DESCRIPTOR_INVOKE_RESULT_FINALISER_IF_PRESENT(dbop_descriptor); //this has no effect, as result object is not used
+
+}
+
+void  __attribute__((nonnull()))
+GetDbResultForDelete(DbBackend *db_backend, DbOpDescriptor *dbop_descriptor)
+{
+  char *sql_query_str  = DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER(dbop_descriptor);
+
+#ifdef __UF_FULLDEBUG
+  syslog(LOG_DEBUG, "%s (th_ctx:'%p'): GENERATED SQL QUERY: '%s'", __func__, THREAD_CONTEXT_PTR, sql_query_str);
+#endif
+
+  int sql_result = h_query_delete(db_backend, sql_query_str);
+
+  if (sql_result != H_OK) {
+    syslog(LOG_DEBUG, "%s (th_ctx:''): ERROR: COULD NOT EXECUTE QUERY: '%s'", __func__, sql_query_str);
+
+    DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+
+    dbop_descriptor->dbop_status.status = DELETE_ERROR;
+    return;
+  }
+
+  DBOP_DESCRIPTOR_INVOKE_QUERY_STATEMENT_PROVIDER_FINALISER(dbop_descriptor, sql_query_str);
+
+//  DBOP_DESCRIPTOR_INVOKE_RESULT_FINALISER_IF_PRESENT(dbop_descriptor); //this has no effect, as result object is not used
 
 }

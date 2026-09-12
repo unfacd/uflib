@@ -19,8 +19,8 @@
 // Created by devops on 10/18/20.
 //
 
-#ifndef UFSRV_OPEN_FILE_TYPE_H
-#define UFSRV_OPEN_FILE_TYPE_H
+#ifndef UFLIB_OPEN_FILE_TYPE_H
+#define UFLIB_OPEN_FILE_TYPE_H
 
 #include <stdlib.h>
 #include <stdio.h>

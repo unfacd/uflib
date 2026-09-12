@@ -1,0 +1,228 @@
+.TH UFLIB 7 "September 2026" "uflib 3.10.5" "UFSRV Programmer's Manual"
+.\" ---------------------------------------------------------------------------
+.SH NAME
+uflib \- foundational C library for the ufsrv messaging-server platform
+.\" ---------------------------------------------------------------------------
+.SH SYNOPSIS
+.nf
+.B #include <uflib/utils.h>
+.B #include <uflib/utils_crypto.h>
+.B #include <uflib/adt/adt_hashtable.h>
+.B #include <uflib/cdt/cdt_mpsc_queue.h>
+.B #include <uflib/cdt/lockless_ringbuffer/cdt_lockless_ringbuffer.h>
+.B #include <uflib/recycler_v2/recycler_v2.h>
+.B #include <uflib/buffer_descriptor/buffer_descriptor.h>
+.fi
+.sp
+Link with
+.BR \-luflib .
+.\" ---------------------------------------------------------------------------
+.SH DESCRIPTION
+.B uflib
+is the bottom layer of the ufsrv development stack.  It provides the
+general-purpose software primitives every higher layer builds on: abstract
+data types, lock-free concurrent data structures, an object recycler,
+crypto and DB abstractions, networking helpers, coroutines, compression,
+JSON, protobuf, UUID generation, and utility routines.  Dependencies flow
+strictly downward \(em uflib has no visibility of ufsrvcorelib, ufnetcorelib,
+or any application server.
+.PP
+uflib builds
+.B libuflib_static.a
+(and, when
+.BR BUILD_SHARED_LIBS=ON ,
+.BR libuflib.so )
+from a single OBJECT library.  It is consumed by the higher layers via
+.BR "find_package(uflib REQUIRED)" " + " uflib::uflib .
+The library is written in C17 with GNU extensions, requires Clang, and is
+licensed under the GNU Affero General Public License, version 3 or later.
+.\" ---------------------------------------------------------------------------
+.SH MODULES
+.\" ===================================================
+.SS Abstract data types \&(adt) \(em \fBadt/\fP
+Classical single-threaded containers.
+.PP
+.TP
+.B hashtable_v2
+Open-addressing hash table.
+.TP
+.B hopscotch_hashtable_v2
+Hopscotch hash table (bounded probe sequences).
+.TP
+.B distinct_array
+Array of unique elements.
+.TP
+.B linkedlist / doubly_linkedlist
+Intrusive singly- and doubly-linked lists.
+.TP
+.B queue
+FIFO queue.
+.TP
+.B minheap
+Single-threaded binary min-heap (priority queue).  Opaque handle; pointer-key
+and inline-int64 key modes; any-magnitude comparator; geometric growth.
+.BR MinHeapDescribe (MinHeap, bd)
+emits state as JSON (size, capacity, mode, load factor, entries).
+.TP
+.B locking_lru
+Mutex-protected least-recently-used cache.
+.\" ===================================================
+.SS Concurrent data types \&(cdt) \(em \fBcdt/\fP
+Lock-free and lock-based structures for multi-threaded hot paths.  Each is
+documented in its own design document under
+.IR dev/technical_designs/ .
+.PP
+.TP
+.B LamportQueue
+Lock-free SPSC FIFO (two-index, one reserved slot).
+.TP
+.B LocklessMpscQueue
+Intrusive lock-free MPSC (Vyukov).
+.TP
+.B LocklessFixedWidthHashMap
+Lock-free fixed-width hash map (seq-lock + open addressing).
+.TP
+.B LocklessRingBuffer
+Bounded copy-in/copy-out ring buffer with three concurrency modes \(em
+SPSC, MPSC, and MPMC (Vyukov per-slot sequence numbers).
+.TP
+.B LocklessLRU
+Lock-free approximate least-recently-used cache (CLOCK second-chance
+eviction, per-slot seqlocks, upsert
+.BR Set / SetEx ).
+.TP
+.B ChaseLevStealingQueue
+Chase-Lev work-stealing deque.
+.TP
+.B AndersonSpinlock / MCSLock / spinlock
+Lock-based synchronization primitives.
+.TP
+.B TreiberStack
+Shared ABA-protected intrusive LIFO free-list (used by the recycler and
+hash map).
+.\" ===================================================
+.SS Recycler \&(recycler, recycler_v2)
+Object pooling with optional persistence.  A recycler allocates objects in
+slab-like groups, hands them out through a lock-free free stack, and \(em in
+V2 \(em can CLOCK-evict idle objects to disk and re-materialise them on
+demand.
+.PP
+.TP
+.B RecyclerV2InitTypePool(config)
+Register a type pool.
+.TP
+.B RecyclerV2Get(handle, ctx, flags)
+Lease an object (returns an
+.BR InstanceHolderV2 ).
+.TP
+.B RecyclerV2Put(ih, ctx, flags)
+Return an object to the pool.
+.TP
+.B RecyclerV2Referenced(ih, n) / RecyclerV2UnReferenced(ih, n)
+External reference counting (multi-reference).
+.TP
+.B RecyclerV2GetNewInstance(ih) / RecyclerV2DestroyInstance(ih)
+Multi-holder aliases for sharing one object.
+.TP
+.B RecyclerV2GetCapacity(handle) / RecyclerV2GetLeasedCount(handle)
+Capacity and occupancy queries.
+.TP
+.B DescribeRecycler(type_pool_name, provided)
+Describe pool state as a JSON string (all pools, or one by exact name).
+.TP
+.B ListRecyclerTypes()
+List every registered type name in one contiguous allocation (free once).
+.TP
+.B RecyclerV2DumpState(stream) / RecyclerV2DumpStateToBuffer()
+Full debug/introspection snapshot as JSON.
+.\" ===================================================
+.SS Buffer descriptor \&(buffer_descriptor)
+A growable string builder used for console/JSON output.
+.PP
+.TP
+.B BufferDescriptorInit(bd, cap)
+Allocate the backing buffer (clamped to [64, 1 MiB]).
+.TP
+.B BufferDescriptorAppendFormatted(bd, fmt, ...)
+Append printf-style output, growing as needed.
+.TP
+.B BufferDescriptorRelease(bd)
+Free the backing buffer.
+.\" ===================================================
+.SS Utilities \&(utils*.h)
+String, file, crypto, time, thread, and encoding helpers:
+.BR utils_str ,
+.BR utils_file ,
+.BR utils_crypto ,
+.BR utils_time ,
+.BR utils_threads ,
+.BR utils_base64 ,
+.BR utils_base64url ,
+.BR utils_hex ,
+.BR utils_iec_quantity ,
+.BR utils_urls ,
+.BR utils_bits ,
+.BR utils_sys ,
+and
+.BR tokeniser .
+.\" ===================================================
+.SS Persistence and networking \&(db, net)
+.B db/
+is a MariaDB/MySQL abstraction;
+.B net/
+provides networking helpers.  Both resolve OpenSSL through
+.BR find_package(OpenSSL) .
+.\" ===================================================
+.SS Scheduled jobs \&(scheduled_jobs)
+Scheduled task execution.
+.\" ===================================================
+.SS Embedded third-party libraries
+.BR lzf " (compression), " mjson " (JSON), "
+.BR protobuf-c ", " K12 " (KangarooTwelve), " uuid4 ", and " exponential_backoff
+are vendored under
+.IR src/ .
+.\" ---------------------------------------------------------------------------
+.SH CONVENTIONS
+Public functions are
+.B PascalCase
+with a module prefix, are annotated
+.BR PUBLIC_API ,
+and are declared in installed headers under
+.IR include/uflib/ .
+Opaque handles hide implementation layout; private headers under
+.I src/
+are never installed.  Lock-free CDTs additionally follow the design
+correctness criteria in
+.IR UF_LIBRARY_CONVENTIONS.md
+(ABA, memory ordering, false sharing, reclamation, testing).
+.\" ---------------------------------------------------------------------------
+.SH EXAMPLE
+.nf
+/* Lock-free SPSC ring buffer */
+LocklessRingBuffer *ring =
+    LocklessRingBufferCreate(1024, sizeof(int), LOCKLESS_RINGBUF_MODE_SPSC);
+
+int in = 42, out;
+while (!LocklessRingBufferTryPush(ring, &in)) { /* full: back off */ }
+while (!LocklessRingBufferTryPop(ring, &out))  { /* empty: poll  */ }
+
+LocklessRingBufferDestroy(ring);
+.fi
+.sp
+See the runnable programs and gtest suites under
+.IR tests/ .
+.\" ---------------------------------------------------------------------------
+.SH SEE ALSO
+.BR uflib (3)
+(future per-function pages),
+.IR include/uflib/ " \(em the authoritative header declarations."
+.sp
+The design documents under
+.IR dev/technical_designs/ .
+.\" ---------------------------------------------------------------------------
+.SH AUTHOR
+unfacd works.
+.\" ---------------------------------------------------------------------------
+.SH COPYRIGHT
+Copyright \(co 2015\-2026 unfacd works.  Distributed under the GNU Affero
+General Public License, version 3 or later.
