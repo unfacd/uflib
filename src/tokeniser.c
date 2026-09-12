@@ -193,8 +193,12 @@ __unused static void **ArrayAdd(void **Array, void *Item)
 {
   void *ptr;
   int count=0;
+  void **Array_allocated = NULL;
 
-  if (! Array) Array=calloc(10, sizeof(void *));
+  if (! Array) {
+    Array_allocated=calloc(10, sizeof(void *));
+    Array = Array_allocated;
+  }
   else
   {
     for (ptr=*Array; ptr !=NULL; ptr++)
@@ -203,7 +207,13 @@ __unused static void **ArrayAdd(void **Array, void *Item)
     }
   }
 
-  Array=realloc(Array, (count+10) * sizeof(void *));
+  void **Array_reallocated = realloc(Array, (count+10) * sizeof(void *));
+  if (Array_reallocated == NULL) {
+    if (Array_allocated != NULL) free(Array_allocated);
+    return NULL;
+  }
+
+  Array=Array_reallocated;
   Array[count]=Item;
   Array[count+1]=NULL;
   return(Array);
@@ -490,6 +500,7 @@ const char *GetTokenSeparators(const char *SearchStr, char **Separators, char **
   return(GetTokenPostProcess(SearchStr, SepStart, SepEnd, Token, Flags));
 }
 
+//AA main interface function
 const char *GetToken(const char *SearchStr, const char *Separator, char **Token, int Flags)
 {
   const char *SepStart=NULL, *SepEnd=NULL;

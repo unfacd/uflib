@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2025 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,24 +15,27 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SRC_INCLUDE_MAIN_TYPES_H_
-#define SRC_INCLUDE_MAIN_TYPES_H_
+#ifndef UFLIB_MAIN_TYPES_H
+#define UFLIB_MAIN_TYPES_H
 
 #include <stddef.h>
 
-typedef void  ClientContextData;
-typedef	void 	CommandContextData;
+typedef void ClientContextData;
+typedef	void CommandContextData;
 typedef void MessageContextData;
 typedef void ItemContainer;
 
-#include "standard_defs.h"
-#include "utils_str.h"
+#include <uflib/standard_defs.h>
+#include <uflib/utils_str.h>
+#include "uflib/collection_descriptor_type.h"
+#include <uflib/buffer_descriptor/buffer_descriptor_type.h> //don't remove, as this acts as a shim for consumers who expected this type to be defined in this file
 
 #define CLIENT_CTX_DATA(x)	((ClientContextData *)(x))
 #define AS_CLIENT_CONTEXT_DATA(x)	((ClientContextData *)(x))
 #define COMMAND_CTX_DATA(x)	((CommandContextData *)(x))
 
 #define CALLFLAGS_EMPTY 0
+#define _EMPTY_STR (char *)NULL
 
 #define RETURN_BUFFER_UNALLOCATED NULL
 
@@ -43,35 +46,23 @@ typedef void ItemContainer;
 #define FLAG_SELF_DESTRUCT_FALSE  false
 
 #define AS_COLLECTION_TYPE(x)  ((collection_t	**)(x))
+#define AS_COLLECTION_DESCRIPTOR(x) ((CollectionDescriptor *)(x))
+#define AS_COLLECTION_DESCRIPTOR_PAIR(x) ((CollectionDescriptorPair *)(x))
 #define AS_CONST_CHAR_TYPE(x) ((const char *)(x))
+#define AS_CHAR_TYPE(x) ((char *)(x))
 
 typedef struct ContextDataPair {
-	ClientContextData *first;
-	ClientContextData	*second;
+	ClientContextData   *first;
+	ClientContextData   *second;
 } ContextDataPair;
 
-//simple mechanism to describe dynamic arrays of objects
-typedef void collection_t;
-typedef struct CollectionDescriptor {
-	collection_t	**collection;
-	size_t			collection_sz;
-	size_t      collection_base_offset; //size offset to use where collection elements are referenced by value. keep '0' for pointer refs. Allows collection to be chunked up on arbitrary boundaries, not just base  pointer size
-
-	//void (*free_collection)(void *);
-}	CollectionDescriptor;
-
 typedef struct CollectionDescriptorPair {
-	CollectionDescriptor 	first,
-												second;
-}	CollectionDescriptorPair;
-
-typedef struct BufferDescriptor {
-	char 		*data;
-	size_t	size,
-					size_max;
-} BufferDescriptor;
+	CollectionDescriptor 	    first,
+                            second;
+    CollectionDescriptor    source;
+} CollectionDescriptorPair;
 
 #define INIT_FLAG_TRUE    true
 #define INIT_FLAG_FALSE   false
 
-#endif /* SRC_INCLUDE_MAIN_TYPES_H_ */
+#endif /* UFLIB_MAIN_TYPES_H */

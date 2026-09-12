@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,32 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef HAVE_CONFIG_UFLIB_H
+#include <config_uflib.h>
+#endif
+
 #include <uflib/standard_defs.h>
 #include <uflib/standard_c_includes.h>
-//#include <uflib/standard_ssl_includes.h>
 #include <sys/stat.h>
-#include <linux/prctl.h>
-#include <sys/prctl.h>
 #include <uflib/utils.h>
-
-/**
- * @brief Set the thread name for the current calling thread. This gives the thread a descriptive name when looked up
- * in system listing and gdb. There is currently max size lime of 15-bytes.
- * @param thread_name desired name of thread
- * @return 0 on success as per prctl() system call.
- */
-int  __attribute__((nonnull(1), access(read_only, 1)))
-SetThreadName(const char *thread_name)
-{
-#define MAX_NAME_LEN 15
-  char proc_name [MAX_NAME_LEN + 1] = {0};	/* Name must be <= 15 characters + a null */
-
-  strncpy(proc_name, thread_name, MAX_NAME_LEN);
-  int result = prctl(PR_SET_NAME, (unsigned long)&proc_name);
-
-  return result;
-#undef MAX_NAME_LEN
-}
 
 //http://www.shieldadvanced.com/Blog/uncategorized/validate-email-address-in-c/
 //https://stackoverflow.com/questions/42939688/phone-number-validation-in-c
@@ -51,7 +33,7 @@ IsEmailAddressValid(const char *EM_Addr, size_t max_sz)
   int i = 0;
 //  char conv_buf[MAX_EMAIL_NAME];
   char *conv_buf = strndupa(EM_Addr, max_sz);
-  char *c, *domain;
+  char *c, *domain = NULL;
   char *special_chars = "()<>@,;:\"[]";
 
 /* The input is in EBCDIC so convert to ASCII first */
@@ -103,8 +85,8 @@ IsEmailAddressValid(const char *EM_Addr, size_t max_sz)
     return 0;
 /* next we validate the domain portion */
 /* if the next character is NULL */
-/* need domain ! */
-  if (!*(domain = ++c))
+/* need domain ! */ //AA+ first check to quieten valgrind's "uinitialized warning"
+  if (*c == '\0' || !*(domain = ++c))
     return 0;
   do {
     /* if '.' */
@@ -125,10 +107,71 @@ IsEmailAddressValid(const char *EM_Addr, size_t max_sz)
 }
 
 /**
+ * Validates the length of an email address according to RFC 5321.
+ *
+ * Maximum allowed length: 320 characters (local-part@domain)
+ * The local part (before the "@") = max 64 characters. The domain part (after the "@") = max 255 characters
+ * Therefore, maximum length is 64 + @ + 255 = 320 characters.
+ *
+ * @param email The email address string to check
+ * @param max_sz baseline max size to use for max length calculation. Consider using CONFIG_EMAIL_ADDRESS_CONSERVATIVE_SZ_MAX or CONFIG_EMAIL_ADDRESS_SZ_MAX
+ * @param is_basic_validate stretch it with some basic validation on teh email string
+ * @return true if length is valid, false otherwise
+ */
+bool
+IsEmailLengthValid(const char * _Nonnull email, size_t max_sz, bool is_basic_validate)
+{
+  if (max_sz == 0) {
+    return false;
+  }
+
+  size_t len = 0;
+
+  while (email[len] != '\0') {
+    len++;
+    if (len > max_sz) {
+      return false;           // Early exit - already too long
+    }
+  }
+
+  if (len == 0) {
+    return false;
+  }
+
+  if (len < CONFIG_EMAIL_ADDRESS_SZ_MIN) {
+    return false;
+  }
+
+  if (is_basic_validate) {
+    // Must contain exactly one '@' (basic check)
+    const char *at = NULL;
+    for (size_t i = 0; i < len; i++) {
+      if (email[i] == '@') {
+        if (at != NULL) return false;   // Multiple @ symbols
+        at = email + i;
+      }
+    }
+
+    if (at == NULL) {
+      return false;
+    }
+
+    size_t local_len = at - email;
+    size_t domain_len = len - local_len - 1;
+
+    if (local_len == 0 || domain_len == 0 || local_len > 64 || domain_len > 255) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  *	similar to asprintf. Also check sprintf_provided_buffer()
  *	@dynamic_memory: EXPORTS char * which the user must deallocate
  */
-char * mdsprintf(const char * message, ...)
+char *mdsprintf(const char * message, ...)
 {
   va_list argp, argp_cpy;
   size_t out_len = 0;
@@ -150,19 +193,12 @@ char * mdsprintf(const char * message, ...)
   return out;
 }
 
-inline void *mymalloc(size_t size)
-{
-	void *ret = calloc(1, size);
-	if(ret == NULL) _exit(-1);
-	return (ret);
-}
-
 /*
  * 	@brief: for 32-bit numbers
  */
 __attribute__((noinline, unused)) unsigned next_pow2(unsigned x)
 {
-	if (x==0) return 1;
+	if (x == 0) return 1;
 	x -= 1;
 	x |= (x >> 1);
 	x |= (x >> 2);
@@ -174,7 +210,7 @@ __attribute__((noinline, unused)) unsigned next_pow2(unsigned x)
 }
 
  /* see the definition of macro splitw */
- char *tokenize (char **str, const char c)
+ char *tokenize(char **str, const char c)
 
  {
   register char *s,
@@ -205,9 +241,8 @@ IsPrimeNumber(size_t x)
     size_t o=4;
     size_t i=5;
 
-    for (i=5; ;i+=o)
-    {
-        size_t q=x/i;
+    for (i=5; ;i+=o) {
+        size_t q = x/i;
 
         if (q < i)	return true;
 
@@ -222,8 +257,7 @@ IsPrimeNumber(size_t x)
 inline size_t
 GetNextPrimeNumber(size_t x)
 {
-    switch (x)
-    {
+    switch (x) {
     case 0:
     case 1:
     case 2:
@@ -241,7 +275,7 @@ GetNextPrimeNumber(size_t x)
 
     x = 6 * k + o;
 
-    for (i=(3+o)/2; !IsPrimeNumber(x); x+=i)
+    for (i=(3 + o)/2; !IsPrimeNumber(x); x+=i)
         i ^= 6;
 
     return x;
@@ -257,8 +291,7 @@ GetNextPrimeNumber(size_t x)
  */
 int GeneratePasswordHash(UserCredentials *creds_ptr)
 {
-	if (!creds_ptr || !creds_ptr->password || *(creds_ptr->password)==0)
-	{
+	if (!creds_ptr || !creds_ptr->password || *(creds_ptr->password) == 0) {
 		syslog (LOG_DEBUG, "%s: ERROR: undefined parameters...", __func__);
 
 		return -1;
@@ -267,9 +300,9 @@ int GeneratePasswordHash(UserCredentials *creds_ptr)
 	unsigned char *salt = GenerateSalt(32, 1);
 
 	if (salt) {
-		char *password_salted=NULL;
+		char *password_salted = NULL;
 
-		creds_ptr->salt=salt;
+		creds_ptr->salt = salt;
 
 		asprintf(&password_salted, "%s%s", salt, creds_ptr->password);
 		if (password_salted) {
@@ -280,12 +313,12 @@ int GeneratePasswordHash(UserCredentials *creds_ptr)
 
 			syslog(LOG_DEBUG, "%s: GENERATED INPUT SALTED PASSWORD: '%s' FINAL HASHED PASSWORD: '%s", __func__, password_salted, password_hashed);
 
-			creds_ptr->hashed_password=(unsigned char *)strndup((char *)password_hashed, sizeof(password_hashed));
+			creds_ptr->hashed_password = (unsigned char *)strndup((char *)password_hashed, sizeof(password_hashed));
 
 #if __UF_FULLDEBUG
 			syslog(LOG_DEBUG, "%s: GENERATED '%s'", salted_password);
 #endif
-			free (password_salted);
+			free(password_salted);
 		}
 
 		return 0;//no error
@@ -302,7 +335,7 @@ int GeneratePasswordHash(UserCredentials *creds_ptr)
 bool
 IsPasswordCorrect(const char *password, const char *token, const char *salt)
 {
-	char *password_salted=NULL;
+	char *password_salted = NULL;
 	unsigned char password_hashed[SHA_DIGEST_LENGTH*2+1];
 
 	memset (password_hashed, 0, sizeof(password_hashed));
@@ -317,9 +350,7 @@ IsPasswordCorrect(const char *password, const char *token, const char *salt)
 		free(password_salted);
 
 		return true;
-	}
-	else
-	{
+	} else {
 		free(password_salted);
 
 		return false;
@@ -352,9 +383,9 @@ GenerateCookie(size_t max_sz)
 int
 GenerateVerificationCode(VerificationCode *code)
 {
-	char *verification_code_str=NULL;
+	char *verification_code_str = NULL;
 
-  verification_code_str=code->code_formatted;
+  verification_code_str = code->code_formatted;
   code->code  = GenerateRandomNumberBounded(100000, 999999);
 //  code->code=99000 + GenerateRandomNumberWithUpper(900000);
   snprintf(verification_code_str, 8, "%lu", code->code); //8 xxx-xxx\0
@@ -917,7 +948,7 @@ do_hash(unsigned long m, size_t table_sz)
 
 //http://web.archive.org/web/20071223173210/http://www.concentric.net/~Ttwang/tech/inthash.htm
 __attribute__((const))  uint64_t
-inthash_u64 (uint64_t key, size_t key_len)
+inthash_u64(uint64_t key, size_t key_len)
 {
 	key = ~key + (key << 21);
 	key = key ^ (key >> 24);

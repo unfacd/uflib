@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_SIMPLE_TIMER_TYPE_H
-#define UFSRV_SIMPLE_TIMER_TYPE_H
+#ifndef UFLIB_SIMPLE_TIMER_TYPE_H
+#define UFLIB_SIMPLE_TIMER_TYPE_H
 
 typedef struct SimpleTimer {
   size_t start,

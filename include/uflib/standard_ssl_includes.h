@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_STANDARD_SSL_INCLUDES_H
-#define UFSRV_STANDARD_SSL_INCLUDES_H
+#ifndef UFLIB_STANDARD_SSL_INCLUDES_H
+#define UFLIB_STANDARD_SSL_INCLUDES_H
 
 #include <openssl/md5.h> /* md5 hash */
 #include <openssl/sha.h>

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_STANDARD_C_INCLUDES_H
-#define UFSRV_STANDARD_C_INCLUDES_H
+#ifndef UFLIB_STANDARD_C_INCLUDES_H
+#define UFLIB_STANDARD_C_INCLUDES_H
 
 #include <limits.h>
 #include <sys/types.h>
@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include <strings.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 #include <syslog.h>
 #include <pthread.h>

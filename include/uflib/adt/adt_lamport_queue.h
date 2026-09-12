@@ -1,5 +1,18 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * @file adt_lamport_queue.h
+ * @brief Deprecated forwarding header — use <uflib/cdt/cdt_lamport_queue.h>.
+ *
+ * The Lamport SPSC queue was relocated from adt/ to cdt/ as part of the
+ * concurrent-data-types reorganisation.  This header exists for backward
+ * compatibility and will be removed in a future major release.
+ *
+ * New code should include the cdt-qualified header directly:
+ *
+ * @code{.c}
+ * #include <uflib/cdt/cdt_lamport_queue.h>
+ * @endcode
+ *
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,30 +28,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SRC_INCLUDE_ADT_LAMPORT_QUEUE_H_
-#define SRC_INCLUDE_ADT_LAMPORT_QUEUE_H_
+#ifndef UFLIB_ADT_ADT_LAMPORT_QUEUE_H
+#define UFLIB_ADT_ADT_LAMPORT_QUEUE_H
 
-typedef void QueueClientData;
+#include <uflib/cdt/cdt_lamport_queue.h>
 
-#define AS_QUEUE_CLIENT_DATA(x) ((QueueClientData *)(x))
-
-typedef struct LamportQueue
-{
-    atomic_size_t front_;
-    atomic_size_t back_;
-    atomic_size_t	leased;
-    size_t	queue_sz;
-    size_t cached_front_;
-    size_t cached_back_;
-    QueueClientData **payload;
-} LamportQueue;
-
-typedef struct LamportQueue LocklessSpscQueue;
-
-void LamportQueueInit(LocklessSpscQueue *queue, QueueClientData **payload, size_t queue_sz);
-bool LamportQueuePush(LocklessSpscQueue *queue, QueueClientData *elem);
-bool LamportQueuePop(LocklessSpscQueue *queue, QueueClientData **elem);
-size_t LamportQueueLeasedSize (LocklessSpscQueue *queue);
-
-
-#endif /* SRC_INCLUDE_ADT_LAMPORT_QUEUE_H_ */
+#endif /* UFLIB_ADT_ADT_LAMPORT_QUEUE_H */

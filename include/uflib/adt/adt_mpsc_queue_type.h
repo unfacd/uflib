@@ -1,5 +1,18 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * @file adt_mpsc_queue_type.h
+ * @brief Deprecated forwarding header — use <uflib/cdt/cdt_mpsc_queue_type.h>.
+ *
+ * The intrusive MPSC queue was relocated from adt/ to cdt/ as part of the
+ * concurrent-data-types reorganisation.  This header exists for backward
+ * compatibility and will be removed in a future major release.
+ *
+ * New code should include the cdt-qualified header directly:
+ *
+ * @code{.c}
+ * #include <uflib/cdt/cdt_mpsc_queue_type.h>
+ * @endcode
+ *
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,35 +28,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_ADT_MPSC_QUEUE_TYPE_H
-#define UFSRV_ADT_MPSC_QUEUE_TYPE_H
+#ifndef UFLIB_ADT_ADT_MPSC_QUEUE_TYPE_H
+#define UFLIB_ADT_ADT_MPSC_QUEUE_TYPE_H
 
-#include <uflib/main_types.h>
-#include <uflib/standard_c_includes.h>
+#include <uflib/cdt/cdt_mpsc_queue_type.h>
 
-typedef void QueueContextData;
-
-#define AS_QUEUE_CONTEXT_DATA(x) ((QueueContextData *)(x))
-
-typedef struct mpsc_queue_node {
-  _Atomic(struct mpsc_queue_node *) next;
-  QueueContextData *context_data; //user payload per node
-  struct {
-    void (*callback)(ClientContextData *);
-    ClientContextData *context_data;
-  } finaliser;
-} mpsc_queue_node;
-
-typedef struct LocklessMpscQueue {
-  _Atomic(struct mpsc_queue_node *) head;
-  _Atomic(struct mpsc_queue_node *) tail;
-  struct mpsc_queue_node stub;
-} LocklessMpscQueue;
-
-enum mpsc_queue_poll_result {
-  MPSC_QUEUE_EMPTY,
-  MPSC_QUEUE_ITEM,
-  MPSC_QUEUE_RETRY,
-};
-
-#endif //UFSRV_ADT_MPSC_QUEUE_TYPE_H
+#endif /* UFLIB_ADT_ADT_MPSC_QUEUE_TYPE_H */

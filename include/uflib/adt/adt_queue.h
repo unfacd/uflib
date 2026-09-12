@@ -1,6 +1,8 @@
 
-#ifndef INCLUDE_QUEUE_H_
-#define INCLUDE_QUEUE_H_
+#ifndef UFLIB_ADT_ADT_QUEUE_H
+#define UFLIB_ADT_ADT_QUEUE_H
+
+#include <uflib/uflib_defs.h>
 
 /*
 ** IRCIT Copyright (c) 1998 Ayman Akt
@@ -36,8 +38,8 @@ typedef struct QueueEntry QueueEntry;
 
  QueueEntry *AddQueue(Queue *);
  QueueEntry *deQueue(Queue *);
- bool QueueEmpty(const Queue *);
- int AddToQueue(Queue *, void *);
+ PUBLIC_API bool QueueEmpty(const Queue *);
+ PUBLIC_API int AddToQueue(Queue *, void *);
  void *RemoveFromQueue(Queue *, int, queue_entry_reclaimer reclaim_memory);
 
 #define QUEUE_ENTRIES_COUNT(x)	x->nEntries
@@ -47,4 +49,4 @@ typedef struct QueueEntry QueueEntry;
 #define QUEUE_REAR(x)	x->rear
 #define QUEUE_ID(x)	x->queue_id
 
-#endif /* INCLUDE_QUEUE_H_ */
+#endif /* UFLIB_ADT_ADT_QUEUE_H */

@@ -16,15 +16,17 @@
  */
 
 
-#ifndef UFSRV_UTILS_BITS_H
-#define UFSRV_UTILS_BITS_H
+#ifndef UFLIB_UTILS_BITS_H
+#define UFLIB_UTILS_BITS_H
 
-#include "standard_c_includes.h"
+#include <uflib/uflib_defs.h>
 
-void	set_bit (unsigned char *buffer, int position);
-int	get_bit (char byte, int position);
-void	set_32bit (int value, unsigned char *buffer);
-int get_16bit (const unsigned char *buffer);
+#include <uflib/standard_c_includes.h>
+
+PUBLIC_API void	set_bit (unsigned char *buffer, int position);
+PUBLIC_API int	get_bit (char byte, int position);
+PUBLIC_API void	set_32bit (int value, unsigned char *buffer);
+PUBLIC_API int get_16bit (const unsigned char *buffer);
 
 #define GET_N_BITS_FROM_REAR(k,n) ((k) & ((1UL<<(n))-1))
 //cut out from m(inclusive)->n(exclusive) starting from LSB, starting (0, 1 ..63)

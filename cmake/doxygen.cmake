@@ -8,7 +8,7 @@ if (DOXYGEN_FOUND)
     message("Doxygen build started")
 
     add_custom_target( ${_PROJECT_NAME}_doxygen
-        ALL #make it part of 'make all'
+        #ALL (removed — docs are opt-in)
         COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating API documentation with Doxygen"

@@ -1,5 +1,25 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * @file adt_minheap.c
+ * @brief Single-threaded binary min-heap over a flat, geometrically-grown array.
+ *
+ * Replacement for the pre-2026 page-mapped (`mmap`/`munmap`) min-heap.  The
+ * working set is a single `realloc` buffer of `MinHeapEntry` records; there is
+ * no mapping-table indirection, no per-growth page zeroing, and no
+ * sub-`munmap` of a multi-page region.  Sift-up and sift-down move a single
+ * "hole" down/up a root-leaf path and write the displaced record once at the
+ * end, rather than swapping entry pairs.
+ *
+ * Two key modes are supported:
+ *   - HEAP_MODE_PTR: keys/values are opaque `void *`, ordered by a caller
+ *     comparator (`MinHeapCmpFn`).  The comparator may return any negative /
+ *     zero / positive magnitude; sift-down treats `> 0` as "greater", never
+ *     `== 1`.
+ *   - HEAP_MODE_I64: keys are inline `int64_t`, compared by direct integer
+ *     subtract-sign — no function pointer on the hot path.
+ *
+ * Not thread-safe: one owner thread per heap.
+ *
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,427 +35,461 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <inttypes.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <assert.h>
-#include <uflib/adt/adt_minheap.h>
 #include <unistd.h>
 
-// Helpful Macro's
-#define LEFT_CHILD(i)   ((i<<1) + 1)
-#define RIGHT_CHILD(i)  ((i<<1) + 2)
-#define PARENT_ENTRY(i) ((i-1) >> 1)
-#define SWAP_ENTRIES(parent, child)  { \
-                                      void* temp = parent->key; \
-                                      parent->key = child->key;          \
-                                      child->key = temp;                 \
-                                      temp = parent->value;              \
-                                      parent->value = child->value;      \
-                                      child->value = temp;               \
-                                    }
+#include <uflib/adt/adt_minheap.h>
 
-#define GET_ENTRY(index, map_table) (((heap_entry *) * (map_table + index/ ENTRIES_PER_PAGE)) + (index % ENTRIES_PER_PAGE))
+/* ── Internal key-mode tags ────────────────────────────────────────────── */
 
-/**
- * Stores the number of heap_entry structures
- * we can fit into a single page of memory.
- *
- * This is determined by the page size, so we
- * need to determine this at run time.
- */
-static int ENTRIES_PER_PAGE = 0;
+enum { HEAP_MODE_PTR = 0, HEAP_MODE_I64 = 1 };
 
-/**
- * Stores the number of bytes in a single
- * page of memory.
- */
-static int PAGE_SIZE = 0;
+/* ── Capacity policy ───────────────────────────────────────────────────── */
 
-// Helper function to map a number of pages into memory
-// Returns NULL on error, otherwise returns a pointer to the
-// first page.
-static void* map_in_pages(int page_count) {
-    // Check everything
-    assert(page_count > 0);
+enum {
+    HEAP_DEFAULT_CAPACITY = 16,
+    /* 2^30 entries (~16 GiB) is the ceiling.  sGrowTo refuses to double past
+     * this, so `cap *= 2` can never overflow a signed int. */
+    HEAP_MAX_CAPACITY = (1 << 30)
+};
 
-    // Call mmmap to get the pages
-    void* addr = mmap(NULL, page_count*PAGE_SIZE, PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, 0);
+/* ── Storage ───────────────────────────────────────────────────────────── */
 
-    if (addr == MAP_FAILED)
+typedef struct MinHeapEntry {
+    union {
+        void    *key;      /* HEAP_MODE_PTR key */
+        int64_t  key_i64;  /* HEAP_MODE_I64 key */
+    } k;
+    void *value;
+} MinHeapEntry;
+
+struct MinHeap {
+    MinHeapCmpFn  compare_func;  /* unused in HEAP_MODE_I64 */
+    MinHeapEntry  *entries;
+    int          size;          /* live entries */
+    int          cap;           /* allocated entries */
+    int          mode;          /* HEAP_MODE_PTR or HEAP_MODE_I64 */
+};
+
+/* ── Comparators (public) ──────────────────────────────────────────────── */
+
+int MinHeapCompareIntKeys(const void *key1, const void *key2)
+{
+    int a = *(const int *)key1;
+    int b = *(const int *)key2;
+    return (a > b) - (a < b);
+}
+
+int MinHeapCompareLongLongKeys(const void *key1, const void *key2)
+{
+    long long a = *(const long long *)key1;
+    long long b = *(const long long *)key2;
+    return (a > b) - (a < b);
+}
+
+int MinHeapComparePtrAsInteger(const void *key1, const void *key2)
+{
+    uintptr_t a = (uintptr_t)key1;
+    uintptr_t b = (uintptr_t)key2;
+    return (a > b) - (a < b);
+}
+
+/* ── Growth ────────────────────────────────────────────────────────────── */
+
+static int
+sGrowTo(MinHeap *h, int needed)
+{
+    int cap = h->cap > 0 ? h->cap : HEAP_DEFAULT_CAPACITY;
+
+    if (needed < 0)
+        return MINHEAP_ERR_INVAL;
+
+    while (cap < needed) {
+        if (cap >= HEAP_MAX_CAPACITY)
+            return MINHEAP_ERR_OOM;  /* next doubling would overflow int */
+        cap *= 2;
+    }
+
+    MinHeapEntry *p = (MinHeapEntry *)realloc(h->entries, (size_t)cap * sizeof(*p));
+    if (!p)
+        return MINHEAP_ERR_OOM;
+
+    h->entries = p;
+    h->cap = cap;
+    return MINHEAP_OK;
+}
+
+static MinHeap *
+sCreateCommon(int initial_capacity, MinHeapCmpFn cmp, int mode)
+{
+    if (initial_capacity < 0)
         return NULL;
-    else {
-        // Clear the memory
-        bzero(addr,page_count*PAGE_SIZE);
 
-        // Return the address
-        return addr;
+    MinHeap *h = (MinHeap *)calloc(1, sizeof(*h));
+    if (!h)
+        return NULL;
+
+    h->compare_func = cmp;
+    h->mode = mode;
+    h->size = 0;
+    h->cap = 0;
+    h->entries = NULL;
+
+    int want = initial_capacity > 0 ? initial_capacity : HEAP_DEFAULT_CAPACITY;
+    if (sGrowTo(h, want) != MINHEAP_OK) {
+        free(h);
+        return NULL;
     }
+    return h;
 }
 
-// Helper function to map a number of pages out of memory
-static void map_out_pages(void* addr, int page_count) {
-    // Check everything
-    assert(addr != NULL);
-    assert(page_count > 0);
+/* ── Page geometry (informational; flat buffer, not pages) ─────────────── */
 
-    // Call munmap to get rid of the pages
-    int result = munmap(addr, page_count*PAGE_SIZE);
-
-    // The result should be 0
-    assert(result == 0);
-}
-
-// This is a comparison function that treats keys as signed ints
-int compare_int_keys(register void* key1, register void* key2) {
-    // Cast them as int* and read them in
-    register int key1_v = *((int*)key1);
-    register int key2_v = *((int*)key2);
-
-    // Perform the comparison
-    if (key1_v < key2_v)
-        return -1;
-    else if (key1_v == key2_v)
-        return 0;
-    else
-        return 1;
-}
-
-// This is a comparison function that treats keys as signed ints
-int compare_long_long_keys(register void* key1, register void* key2) {
-    // Cast them as int* and read them in
-    long long key1_v = ((long long)key1);
-    long long key2_v = ((long long)key2);
-
-    // Perform the comparison
-    if (key1_v < key2_v)
-        return -1;
-    else if (key1_v == key2_v)
-        return 0;
-    else
-        return 1;
-}
-
-// Creates a new heap
-void heap_create(heap* h, int initial_size, int (*comp_func)(void*,void*)) {
-    // Check if we need to setup our globals
-    if (PAGE_SIZE == 0) {
-        // Get the page size
-        PAGE_SIZE = getpagesize();
-
-        // Calculate the max entries
-        ENTRIES_PER_PAGE = PAGE_SIZE / sizeof(heap_entry);
-    }
-
-    // Check that initial size is greater than 0, else set it to ENTRIES_PER_PAGE
-    if (initial_size <= 0)
-        initial_size = ENTRIES_PER_PAGE;
-
-    // If the comp_func is null, treat the keys as signed ints
-    if (comp_func == NULL)
-        comp_func = compare_int_keys;
-
-
-    // Store the compare function
-    h->compare_func = comp_func;
-
-    // Set active entries to 0
-    h->active_entries = 0;
-
-
-    // Determine how many pages of entries we need
-    h->minimum_pages = initial_size / ENTRIES_PER_PAGE + ((initial_size % ENTRIES_PER_PAGE > 0) ? 1 : 0);
-
-    // Determine how big the map table should be
-    h->map_pages = sizeof(void*) * h->minimum_pages / PAGE_SIZE + 1;
-
-    // Allocate the map table
-    h->mapping_table = (void**)map_in_pages(h->map_pages);
-    assert(h->mapping_table != NULL);
-
-
-    // Allocate the entry pages
-    void* addr = map_in_pages(h->minimum_pages);
-    assert(addr != NULL);
-
-    // Add these to the map table
-    for (int i=0;i<h->minimum_pages;i++) {
-        *(h->mapping_table+i) = addr+(i*PAGE_SIZE);
-    }
-
-    // Set the allocated pages
-    h->allocated_pages = h->minimum_pages;
-}
-
-// Cleanup a heap
-void heap_destroy(heap* h) {
-    // Check that h is not null
-    assert(h != NULL);
-
-    // Un-map all the entry pages
-    void** map_table = h->mapping_table;
-    assert(map_table != NULL);
-
-    for (int i=0; i < h->allocated_pages; i++) {
-        map_out_pages(*(map_table+i),1);
-    }
-
-    // Map out the map table
-    map_out_pages(map_table, h->map_pages);
-
-    // Clear everything
-    h->active_entries = 0;
-    h->allocated_pages = 0;
-    h->map_pages = 0;
-    h->mapping_table = NULL;
-}
-
-// Gets the size of the heap
-int heap_size(heap* h) {
-    // Return the active entries
-    return h->active_entries;
-}
-
-__attribute__((const)) int heap_page_size (void)
+static int
+sPageSize(void)
 {
-	return PAGE_SIZE;
+    long ps = sysconf(_SC_PAGESIZE);
+    return ps > 0 ? (int)ps : 4096;
 }
 
-__attribute__((const)) int heap_entries_per_page (void)
+/* ── Ordering helpers ──────────────────────────────────────────────────── */
+
+static int
+sKeyLessPtr(const MinHeap *h, void *ka, void *kb)
 {
-	return ENTRIES_PER_PAGE;
+    return h->compare_func(ka, kb) < 0;
 }
 
-// Gets the minimum element
-int heap_min (heap *h, void **key, void **value) {
-    // Check the number of elements, abort if 0
-    if (h->active_entries == 0) return 0;
+/* ── Sift (hole-moving; write-once at the end) ─────────────────────────── */
 
-    // Get the 0th element
-    heap_entry *root = GET_ENTRY(0, h->mapping_table);
-
-    // Set the key and value
-    *key = root->key;
-    *value = root->value;
-
-    // Success
-    return 1;
-}
-
-// Insert a new element
-void heap_insert(heap *h, void *key, void *value) {
-    // Check if this heap is not destoyed
-    assert(h->mapping_table != NULL);
-
-    // Check if we have room
-    int max_entries = h->allocated_pages * ENTRIES_PER_PAGE;
-    if (h->active_entries + 1 > max_entries) {
-        // Get the number of map pages
-        int map_pages = h->map_pages;
-
-        // We need a new page, do we have room?
-        int mapable_pages = map_pages * PAGE_SIZE / sizeof(void *);
-
-        // Check if we need to grow the map table
-        if (h->allocated_pages + 1 > mapable_pages) {
-            // Allocate a new table, slightly bigger
-            void *new_table = map_in_pages(map_pages + 1);
-
-            // Get the old table
-            void *old_table = (void *)h->mapping_table;
-
-            // Copy the old entries to the new table
-            memcpy(new_table, old_table, map_pages * PAGE_SIZE);
-
-            // Delete the old table
-            map_out_pages(old_table, map_pages);
-
-            // Swap to the new table
-            h->mapping_table = (void **)new_table;
-
-            // Update the number of map pages
-            h->map_pages = map_pages + 1;
-        }
-
-        // Allocate a new page
-        void* addr = map_in_pages(1);
-
-        // Add this to the map
-        *(h->mapping_table + h->allocated_pages) = addr;
-
-        // Update the number of allocated pages
-        h->allocated_pages++;
-    }
-
-    // Store the comparison function
-    int (*cmp_func)(void *, void *) = h->compare_func;
-
-    // Store the map table address
-    void **map_table = h->mapping_table;
-
-    // Get the current index
-    int current_index = h->active_entries;
-    heap_entry *current = GET_ENTRY(current_index, map_table);
-
-    // Loop variables
-    int parent_index;
-    heap_entry *parent;
-
-    // While we can, keep swapping with our parent
-    while (current_index > 0) {
-        // Get the parent index
-        parent_index = PARENT_ENTRY(current_index);
-
-        // Get the parent entry
-        parent = GET_ENTRY(parent_index, map_table);
-
-        // Compare the keys, and swap if we need to
-        if (cmp_func(key, parent->key) < 0) {
-            // Move the parent down
-            current->key = parent->key;
-            current->value = parent->value;
-
-            // Move our reference
-            current_index = parent_index;
-            current = parent;
-
-        // We are done swapping
-        }   else
+static void
+sSiftUpPtr(MinHeap *h, int hole, void *key, void *value)
+{
+    MinHeapEntry *e = h->entries;
+    while (hole > 0) {
+        int parent = (hole - 1) >> 1;
+        if (!sKeyLessPtr(h, key, e[parent].k.key))
             break;
+        e[hole] = e[parent];
+        hole = parent;
     }
-
-    // Insert at the current index
-    current->key = key;
-    current->value = value;
-
-    // Increase the number of active entries
-    h->active_entries++;
+    e[hole].k.key = key;
+    e[hole].value = value;
 }
 
-// Deletes the minimum entry in the heap
-int heap_delmin(heap *h, void **key, void **value) {
-    // Check there is a minimum
-    if (h->active_entries == 0)
+static void
+sSiftUpI64(MinHeap *h, int hole, int64_t key, void *value)
+{
+    MinHeapEntry *e = h->entries;
+    while (hole > 0) {
+        int parent = (hole - 1) >> 1;
+        if (key >= e[parent].k.key_i64)
+            break;
+        e[hole] = e[parent];
+        hole = parent;
+    }
+    e[hole].k.key_i64 = key;
+    e[hole].value = value;
+}
+
+static void
+sSiftDownPtr(MinHeap *h, int hole, MinHeapEntry last, int n)
+{
+    MinHeapEntry *e = h->entries;
+    MinHeapCmpFn cmp = h->compare_func;
+    for (;;) {
+        int left = (hole << 1) + 1;
+        if (left >= n)
+            break;
+        int child = left;
+        int right = left + 1;
+        if (right < n && cmp(e[right].k.key, e[left].k.key) < 0)
+            child = right;
+        if (cmp(e[child].k.key, last.k.key) >= 0)
+            break;
+        e[hole] = e[child];
+        hole = child;
+    }
+    e[hole] = last;
+}
+
+static void
+sSiftDownI64(MinHeap *h, int hole, MinHeapEntry last, int n)
+{
+    MinHeapEntry *e = h->entries;
+    for (;;) {
+        int left = (hole << 1) + 1;
+        if (left >= n)
+            break;
+        int child = left;
+        int right = left + 1;
+        if (right < n && e[right].k.key_i64 < e[left].k.key_i64)
+            child = right;
+        if (e[child].k.key_i64 >= last.k.key_i64)
+            break;
+        e[hole] = e[child];
+        hole = child;
+    }
+    e[hole] = last;
+}
+
+/* ── Lifecycle ─────────────────────────────────────────────────────────── */
+
+MinHeap *
+MinHeapCreate(int initial_capacity, MinHeapCmpFn comp_func)
+{
+    if (!comp_func)
+        comp_func = MinHeapCompareIntKeys;
+    return sCreateCommon(initial_capacity, comp_func, HEAP_MODE_PTR);
+}
+
+MinHeap *
+MinHeapCreateI64(int initial_capacity)
+{
+    return sCreateCommon(initial_capacity, NULL, HEAP_MODE_I64);
+}
+
+void
+MinHeapDestroy(MinHeap *h)
+{
+    if (!h)
+        return;
+    free(h->entries);
+    h->entries = NULL;  /* defensive: a stale handle can no longer reach the array */
+    h->size = 0;
+    h->cap = 0;
+    free(h);
+}
+
+/* ── Introspection ─────────────────────────────────────────────────────── */
+
+int
+MinHeapSize(const MinHeap *h)
+{
+    return h ? h->size : 0;
+}
+
+int
+MinHeapCapacity(const MinHeap *h)
+{
+    return h ? h->cap : 0;
+}
+
+int
+MinHeapPageSize(void)
+{
+    return sPageSize();
+}
+
+int
+MinHeapEntriesPerPage(void)
+{
+    int epp = sPageSize() / (int)sizeof(MinHeapEntry);
+    return epp > 0 ? epp : 1;
+}
+
+/* ── Capacity ──────────────────────────────────────────────────────────── */
+
+int
+MinHeapReserve(MinHeap *h, int n)
+{
+    if (!h || n < 0)
+        return MINHEAP_ERR_INVAL;
+    if (n <= h->cap)
+        return MINHEAP_OK;
+    return sGrowTo(h, n);
+}
+
+void
+MinHeapClear(MinHeap *h)
+{
+    if (!h)
+        return;
+    h->size = 0;
+}
+
+/* ── Insert ────────────────────────────────────────────────────────────── */
+
+int
+MinHeapInsert(MinHeap *h, void *key, void *value)
+{
+    if (!h || h->mode != HEAP_MODE_PTR)
+        return MINHEAP_ERR_INVAL;
+    if (h->size >= h->cap) {
+        int rc = sGrowTo(h, h->size + 1);
+        if (rc != MINHEAP_OK)
+            return rc;
+    }
+    sSiftUpPtr(h, h->size, key, value);
+    h->size++;
+    return MINHEAP_OK;
+}
+
+int
+MinHeapInsertI64(MinHeap *h, int64_t key, void *value)
+{
+    if (!h || h->mode != HEAP_MODE_I64)
+        return MINHEAP_ERR_INVAL;
+    if (h->size >= h->cap) {
+        int rc = sGrowTo(h, h->size + 1);
+        if (rc != MINHEAP_OK)
+            return rc;
+    }
+    sSiftUpI64(h, h->size, key, value);
+    h->size++;
+    return MINHEAP_OK;
+}
+
+/* ── Peek ──────────────────────────────────────────────────────────────── */
+
+int
+MinHeapMin(const MinHeap *h, void **key, void **value)
+{
+    if (!h || h->size <= 0 || h->mode != HEAP_MODE_PTR)
         return 0;
-
-    // Load in the map table
-    void **map_table = h->mapping_table;
-
-    // Get the root element
-    int current_index = 0;
-    heap_entry *current = GET_ENTRY(current_index, map_table);
-
-    // Store the outputs
-    *key = current->key;
-    *value = current->value;
-
-    // Reduce the number of active entries
-    h->active_entries--;
-
-    // Get the active entries
-    int entries = h->active_entries;
-
-    // If there are any other nodes, we may need to move them up
-    if (h->active_entries > 0) {
-        // Move the last element to the root
-        heap_entry *last = GET_ENTRY(entries,map_table);
-        current->key = last->key;
-        current->value = last->value;
-
-        // Loop variables
-        heap_entry *left_child;
-        heap_entry *right_child;
-
-        // Load the comparison function
-        int (*cmp_func)(void *, void *) = h->compare_func;
-
-        // Store the left index
-        int left_child_index;
-
-        while (left_child_index = LEFT_CHILD(current_index), left_child_index < entries) {
-            // Load the left child
-            left_child = GET_ENTRY(left_child_index, map_table);
-
-            // We have a left + right child
-            if (left_child_index+1 < entries) {
-                // Load the right child
-                right_child = GET_ENTRY((left_child_index+1), map_table);
-
-                // Find the smaller child
-                if (cmp_func(left_child->key, right_child->key) <= 0) {
-
-                    // Swap with the left if it is smaller
-                    if (cmp_func(current->key, left_child->key) == 1) {
-                        SWAP_ENTRIES(current,left_child);
-                        current_index = left_child_index;
-                        current = left_child;
-
-                    // Otherwise, the current is smaller
-                    } else
-                        break;
-
-                // Right child is smaller
-                } else {
-
-                    // Swap with the right if it is smaller
-                    if (cmp_func(current->key, right_child->key) == 1) {
-                        SWAP_ENTRIES(current,right_child);
-                        current_index = left_child_index+1;
-                        current = right_child;
-
-                    // Current is smaller
-                    } else
-                        break;
-
-                }
-
-
-            // We only have a left child, only do something if the left is smaller
-            } else if (cmp_func(current->key, left_child->key) == 1) {
-                SWAP_ENTRIES(current,left_child);
-                current_index = left_child_index;
-                current = left_child;
-
-            // Done otherwise
-            }  else
-                break;
-
-        }
-    }
-
-    // Check if we should release a page of memory
-    int used_pages = entries / ENTRIES_PER_PAGE + ((entries % ENTRIES_PER_PAGE > 0) ? 1 : 0);
-
-    // Allow one empty page, but not two
-    if (h->allocated_pages > used_pages + 1 && h->allocated_pages > h->minimum_pages) {
-        // Get the address of the page to delete
-        void *addr = *(map_table+h->allocated_pages-1);
-
-        // Map out
-        map_out_pages(addr, 1);
-
-        // Decrement the allocated count
-        h->allocated_pages--;
-    }
-
-    // Success
+    if (key)
+        *key = h->entries[0].k.key;
+    if (value)
+        *value = h->entries[0].value;
     return 1;
 }
 
-// Allows a user to iterate over all entries, e.g. to free() the memory
-void heap_foreach(heap* h, void (*func)(void *,void *)) {
-    // Store the current index and max index
-    int index = 0;
-    int entries = h->active_entries;
-
-    heap_entry* entry;
-    void** map_table = h->mapping_table;
-
-    for (;index<entries;index++) {
-        // Get the entry
-        entry = GET_ENTRY(index,map_table);
-
-        // Call the user function
-        func(entry->key, entry->value);
-    }
+int
+MinHeapPeek(const MinHeap *h, void **key, void **value)
+{
+    return MinHeapMin(h, key, value);
 }
 
+int
+MinHeapMinI64(const MinHeap *h, int64_t *key, void **value)
+{
+    if (!h || h->size <= 0 || h->mode != HEAP_MODE_I64)
+        return 0;
+    if (key)
+        *key = h->entries[0].k.key_i64;
+    if (value)
+        *value = h->entries[0].value;
+    return 1;
+}
+
+/* ── Remove ────────────────────────────────────────────────────────────── */
+
+int
+MinHeapDelmin(MinHeap *h, void **key, void **value)
+{
+    if (!h || h->size <= 0 || h->mode != HEAP_MODE_PTR)
+        return 0;
+    if (key)
+        *key = h->entries[0].k.key;
+    if (value)
+        *value = h->entries[0].value;
+    h->size--;
+    if (h->size > 0)
+        sSiftDownPtr(h, 0, h->entries[h->size], h->size);
+    return 1;
+}
+
+int
+MinHeapDelminI64(MinHeap *h, int64_t *key, void **value)
+{
+    if (!h || h->size <= 0 || h->mode != HEAP_MODE_I64)
+        return 0;
+    if (key)
+        *key = h->entries[0].k.key_i64;
+    if (value)
+        *value = h->entries[0].value;
+    h->size--;
+    if (h->size > 0)
+        sSiftDownI64(h, 0, h->entries[h->size], h->size);
+    return 1;
+}
+
+int
+MinHeapPop(MinHeap *h, void **value)
+{
+    if (!h || h->size <= 0)
+        return 0;
+    if (h->mode == HEAP_MODE_I64)
+        return MinHeapDelminI64(h, NULL, value);
+    return MinHeapDelmin(h, NULL, value);
+}
+
+/* ── Iterate ───────────────────────────────────────────────────────────── */
+
+size_t
+MinHeapForeach(const MinHeap *h,
+             void (*func)(void *key, void *value, void *ctx),
+             ClientContextData *ctx_data)
+{
+    if (!h || !func || h->size <= 0)
+        return 0;
+
+    int n = h->size;
+    for (int i = 0; i < n; i++) {
+        void *key = (h->mode == HEAP_MODE_I64)
+                        ? (void *)(intptr_t)h->entries[i].k.key_i64
+                        : h->entries[i].k.key;
+        func(key, h->entries[i].value, ctx_data);
+    }
+    return (size_t)n;
+}
+
+/* ── Introspection (JSON) ──────────────────────────────────────────────── */
+
+PUBLIC_API BufferDescriptor *
+MinHeapDescribe(const MinHeap *h, BufferDescriptor *provided)
+{
+    if (!provided) {
+        provided = calloc(1, sizeof(BufferDescriptor));
+        if (!provided)
+            return NULL;
+        BufferDescriptorInit(provided, 256);
+    }
+
+    if (!h) {
+        BufferDescriptorAppendFormatted(provided, "{\"error\":\"null handle\"}\n");
+        return provided;
+    }
+
+    double load_factor = (h->cap > 0) ? (double)h->size / (double)h->cap : 0.0;
+
+    BufferDescriptorAppendFormatted(provided,
+        "{\"size\":%d,\"capacity\":%d,\"mode\":\"%s\",\"load_factor\":%.4f,"
+        "\"has_comparator\":%s",
+        h->size, h->cap,
+        h->mode == HEAP_MODE_I64 ? "i64" : "ptr",
+        load_factor,
+        h->compare_func ? "true" : "false");
+
+    BufferDescriptorAppendFormatted(provided, ",\"entries\":[");
+    int emitted = 0;
+    for (int i = 0; i < h->size; i++) {
+        BufferDescriptorAppendFormatted(provided, "%s{\"index\":%d,",
+            emitted ? "," : "", i);
+        if (h->mode == HEAP_MODE_I64) {
+            BufferDescriptorAppendFormatted(provided, "\"key\":%" PRId64,
+                (int64_t)h->entries[i].k.key_i64);
+        } else {
+            void *key = h->entries[i].k.key;
+            if (key)
+                BufferDescriptorAppendFormatted(provided,
+                    "\"key\":\"0x%" PRIxPTR "\"", (uintptr_t)key);
+            else
+                BufferDescriptorAppendFormatted(provided, "\"key\":null");
+        }
+        void *value = h->entries[i].value;
+        if (value)
+            BufferDescriptorAppendFormatted(provided,
+                ",\"value\":\"0x%" PRIxPTR "\"", (uintptr_t)value);
+        else
+            BufferDescriptorAppendFormatted(provided, ",\"value\":null");
+        BufferDescriptorAppendFormatted(provided, "}");
+        emitted = 1;
+    }
+    BufferDescriptorAppendFormatted(provided, "]}\n");
+
+    return provided;
+}

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2026 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -20,10 +20,82 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <stdio.h>
-
+#include <regex.h>
 #include <uflib/standard_defs.h>
 #include <uflib/utils_str.h>
 
+/**
+ * @brief A simple unsigned long number literal string format verifier.
+ * @param unsigned_long_str Lateral string representing an unsigned long number
+ * @return true if literal is correctly formatted in conformance with unsigned long number
+ */
+bool
+is_unsigned_long_format(const char * _Nonnull unsigned_long_str)
+{
+#define UNSIGNED_LONG_REGEX_PATTERN "^[1-9][[:digit:]]{1,19}$"
+  regex_t regex;
+
+  if (regcomp(&regex, UNSIGNED_LONG_REGEX_PATTERN, REG_EXTENDED) != 0) {
+    return false;
+  }
+
+  int ret = regexec(&regex, unsigned_long_str, (size_t) 0, NULL, 0);
+  regfree(&regex);
+
+  if (ret == 0) {
+    return true;
+  }
+
+  return false;
+
+#undef UNSIGNED_LONG_REGEX_PATTERN
+}
+
+/**
+ * @brief An implementation of strndup that does not check source length. Always allocates space as per given
+ * size, plus extra 1 byte for null termination.
+ * @param[in] s Source string to be copied
+ * @param[in] n Size of buffer to allocate.
+ * @return pointer to newly allocated and copied string
+ */
+char *
+strbufdup(const char *s, size_t n)
+{
+  if (!IS_EMPTY(s)) {
+    char *copy = malloc(n + 1);
+    if (copy) {
+      memcpy(copy, s, n);
+      copy[n] = 0;
+    }
+    return copy;
+  }
+
+  return NULL;
+}
+
+/**
+ * @brief Dynamically copy a provided string, with extra semantics around source string being null, in which case a
+ * user supplied lambda is executed, instead.
+ * @param s source string to be copied
+ * @param n max chars to copy from source string. Will only be used if source str length exceeded this value. Buffer allocated is always
+ * extended by an additional char for null.
+ * @param on_null user lambda to execute, which must return a 'char *'
+ * @return
+ */
+char *
+strbufdup_nullable(const char *s, size_t n, char *(^on_null)(void))
+{
+  if (!IS_EMPTY(s)) {
+    size_t copy_sz = strlen(s) > n ? n : strlen(s);
+    char *copy = malloc(copy_sz + 1);
+    if (copy) {
+      memcpy(copy, s, copy_sz);
+      copy[copy_sz] = 0;
+    }
+    return copy;
+  } else return on_null();
+
+}
 
 /**
  * @brief A convenient front end that returns pointer to a user-allocated buffer upon string formatting.
@@ -302,4 +374,265 @@ char *mystrdup(const char *s)
   char *p = malloc(len);
 
   return p ? memcpy(p, s, len) : NULL;
+}
+
+#include <utf8proc.h>
+
+/**
+ * defensive UTF-8 string length counter
+ *
+ * This function safely counts the number of Unicode characters (codepoints)
+ * in a UTF-8 string with bounds checking and error handling.
+ *  English / Latin text (ASCII): Exactly 255 characters (since 1 character = 1 byte).
+ *  Special Alphabets (Cyrillic, Greek, Hebrew): Roughly 127 characters (since 1 character = 2 bytes).
+ *  Asian Alphabets (Chinese, Japanese, Korean): Roughly 85 characters (since 1 character = 3 bytes).
+ *  Emojis: Only 63 characters (since 1 character = 4 bytes).
+ *
+ *  If passed an empty string the function will return 0 and 'is_valid' will be true.
+ *
+ * @param str           Input UTF-8 string (must be NUL-terminated)
+ * @param max_bytes     Maximum bytes to read from the string
+ * @param bytes_read    Output: actual bytes consumed (can be NULL)
+ * @param is_valid      Output: true if string is valid UTF-8 up to the read point (can be NULL)
+ * @return              Number of characters counted. if 0 is returned, check the value of 'is_valid'
+ */
+size_t
+DefensiveStrlenUtf8(const char *_Nonnull str, size_t max_bytes, size_t *_Nullable bytes_read, bool *_Nullable is_valid)
+{
+  if (str == NULL || max_bytes == 0 ) {
+    if (bytes_read) *bytes_read = 0;
+    if (is_valid) *is_valid = false;
+
+    return 0;
+  }
+
+  const uint8_t *s = (const uint8_t *)str;
+  size_t char_count = 0;
+  size_t byte_pos = 0;
+  bool valid_so_far = true;
+
+  while (byte_pos < max_bytes) {
+    int32_t codepoint;
+    ssize_t seq_len;
+
+    seq_len = utf8proc_iterate(s + byte_pos, max_bytes - byte_pos, &codepoint);
+
+    if (seq_len > 0) {
+      if (codepoint == 0) break;
+
+      char_count++;
+      byte_pos += seq_len;
+    } else  { // seq_len < 0 Invalid UTF-8 sequence encountered
+      valid_so_far = false;
+
+      // Handle specific error codes for better diagnostics
+      if (seq_len == UTF8PROC_ERROR_INVALIDUTF8) {
+        // Invalid byte sequence - skip the invalid byte. Count as a replacement character (U+FFFD) per Unicode  practices
+        char_count++;
+        byte_pos++;
+        continue;
+      } else if (seq_len == UTF8PROC_ERROR_OVERFLOW) {
+        // Incomplete sequence at buffer boundary - stop here. This is a boundary condition, not a hard error
+        break;
+      } else {
+        // Other errors
+        if (bytes_read) *bytes_read = byte_pos;
+        if (is_valid) *is_valid = false;
+
+        return char_count;
+      }
+    }
+  }
+
+  if (bytes_read) {
+    *bytes_read = byte_pos;
+  }
+  if (is_valid) {
+    *is_valid = valid_so_far;
+  }
+
+  return char_count;
+}
+
+/**
+ * Zero-copy version that works directly on binary / byte buffers.
+ *
+ * @param buf           UTF-8 byte buffer
+ * @param buf_size      Size of the buffer in bytes
+ * @param max_chars     Maximum characters to count
+ * @return              Number of characters counted
+ */
+size_t
+DefensiveStrlenUtf8Binary(const uint8_t *buf, size_t buf_size, size_t max_chars)
+{
+  if (buf == NULL || buf_size == 0 || max_chars == 0) {
+    return 0;
+  }
+
+  const uint8_t *s = buf;
+  size_t char_count = 0;
+  size_t byte_pos = 0;
+
+  while (byte_pos < buf_size && char_count < max_chars) {
+    int32_t codepoint;
+    ssize_t seq_len = utf8proc_iterate(s + byte_pos, buf_size - byte_pos, &codepoint);
+
+    if (seq_len <= 0) {
+      break; // NUL, invalid sequence, or incomplete - stop
+    }
+
+    char_count++;
+    byte_pos += seq_len;
+  }
+
+  return char_count;
+}
+
+/**
+ * Validates a UTF-8 string without counting characters.
+ *
+ * @param str           Input UTF-8 string
+ * @param max_bytes     Maximum bytes to validate
+ * @return              true if the string is valid UTF-8
+ */
+bool
+IsUtf8Valid(const char *str, size_t max_bytes)
+{
+  if (str == NULL || max_bytes == 0) {
+    return false;
+  }
+
+  const uint8_t *s = (const uint8_t *)str;
+  size_t pos = 0;
+
+  while (pos < max_bytes) {
+    int32_t codepoint;
+    ssize_t seq_len = utf8proc_iterate(s + pos, max_bytes - pos, &codepoint);
+
+    if (seq_len == 0) {
+      // NUL terminator - valid end of string
+      return true;
+    }
+
+    if (seq_len < 0) {
+      // Invalid UTF-8 sequence
+      return false;
+    }
+
+    pos += seq_len;
+  }
+
+  return true;
+}
+
+/**
+ * Defensively measures ASCII string length with a hard maximum limit.
+ *
+ * @param str       Input string
+ * @param max_sz   Maximum length to allow/scan
+ * @param out_len   [out] Receives the actual length found:
+ *                  - If valid: real length (<='max_sz')
+ *                  - If too long: exactly 'max_sz' (string was truncated or unterminated)
+ * @return true if string is properly null-terminated within max_sz, false otherwise
+ */
+bool
+DefensiveStrlen(const char * _Nonnull str, size_t max_sz, size_t * _Nullable out_len)
+{
+  if (IS_PRESENT(out_len)) {
+    if (max_sz == 0)  {
+      *out_len = 0;
+      return false;
+    }
+
+    size_t len = 0;
+
+    while (len < max_sz) {
+      if (str[len] == '\0') {
+        *out_len = len;
+        return true;
+      }
+
+      len++;
+    }
+
+    // Reached max_sz without finding null terminator
+    *out_len = max_sz; // max we scanned
+    return false;   // String is too long or not null-terminated
+  } else {
+    size_t len = 0;
+
+    while (len < max_sz) {
+      if (str[len] == '\0') {
+        return true;
+      }
+
+      len++;
+    }
+
+    // Reached max_sz without finding null terminator
+    return false;   // String is too long or not null-terminated
+  }
+}
+
+/**
+ * Defensively measures ASCII string length with minimum and maximum limits.
+ *
+ * @param str       Input string
+ * @param min_sz   Minimum allowed length (inclusive)
+ * @param max_sz   Maximum allowed length (inclusive)
+ * @param out_len   [out] Receives the actual length found:
+ *                  - If valid: real length (between min_sz and max_sz)
+ *                  - If invalid: length up to max_sz or 0
+ * @return true if string meets all criteria (length between min_sz and max_sz, properly null-terminated, ASCII), false otherwise.
+ */
+bool
+DefensiveStrlenWithMinMax(const char * _Nonnull str, size_t min_sz, size_t max_sz, size_t * _Nullable out_len)
+{
+  if (IS_PRESENT(out_len)) {
+    if (max_sz == 0 || min_sz > max_sz) {
+      *out_len = 0;
+      return false;
+    }
+
+    size_t len = 0;
+
+    while (len < max_sz) {
+      if (str[len] == '\0') {
+        *out_len = len;
+
+        if (len >= min_sz) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+
+      len++;
+    }
+
+    // Reached max_sz without null terminator
+    *out_len = max_sz;
+    return false;
+  } else {
+    if (max_sz == 0 || min_sz > max_sz) {
+      return false;
+    }
+
+    size_t len = 0;
+
+    while (len < max_sz) {
+      if (str[len] == '\0') {
+        if (len >= min_sz) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+
+      len++;
+    }
+
+    // Reached max_sz without null terminator
+    return false;
+  }
 }

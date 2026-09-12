@@ -24,8 +24,8 @@
  *
  */
 
-#ifndef UFSRV_HEXCODEC_H
-#define UFSRV_HEXCODEC_H
+#ifndef UFLIB_HEXCODEC_H
+#define UFLIB_HEXCODEC_H
 
 
 #include <stddef.h>

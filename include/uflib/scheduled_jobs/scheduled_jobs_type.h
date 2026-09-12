@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2015-2021 unfacd works
+ * Copyright (C) 2015-2024 unfacd works
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SRC_INCLUDE_SCHEDULED_JOBS_TYPE_H_
-#define SRC_INCLUDE_SCHEDULED_JOBS_TYPE_H_
+#ifndef UFLIB_SCHEDULED_JOBS_SCHEDULED_JOBS_TYPE_H
+#define UFLIB_SCHEDULED_JOBS_SCHEDULED_JOBS_TYPE_H
 
 #include <uflib/main_types.h>
 #include <pthread.h>
@@ -41,6 +41,7 @@ typedef void JobContext;
 typedef int (*CallbackOnRun)(JobContext *, ClientContextData *);
 typedef int (*CallbackOnError)(ClientContextData *);
 typedef int (*CallbackOnCompareKeys)(void *, void *);
+typedef int (*CallbackOnInsert)(JobContext *, ClientContextData *);
 
 #define AS_JOB_CONTEXT(x) ((JobContext *)(x))
 
@@ -52,10 +53,11 @@ typedef struct ScheduledJobType {
 	uint64_t 																	frequency; //relative interval in microseconds. Can be overriden on invocation-basis if ScheduledJob.when_scheduled is set by user
 
 	struct {
-		int (*on_compare_keys)(void *, void *); //how to compare time values. Default provided
+		int (*on_compare_keys)(void *, void *); ///>how to compare time values. Default provided if none specified
 		int (*on_error)(ClientContextData *);
-		int (*on_run)(JobContext *, ClientContextData *); //callback when the job is ready to run
-		long long (*on_get_time)(void);//calculate current time value using user's chosen precision
+		int (*on_run)(JobContext *, ClientContextData *); ///>callback when the job is ready to run
+		long long (*on_get_time)(void);///> calculate current time value using user's chosen precision
+    int (*on_first_insert)(JobContext *, ClientContextData *); ///>callback when the job is inserted into scheduler for the first time
 	} callbacks;
 
 } ScheduledJobType;
@@ -73,7 +75,7 @@ typedef struct ScheduledJobs {
 		ScheduledJobType 	**job_types_index;//index array of job types provided by user
 	} job_types_descriptor;
 	pthread_spinlock_t spin_lock;//coarse lock over store
-	heap scheduled_jobs_store;//actual heap-sorted store of jobs
+	MinHeap *scheduled_jobs_store;//actual heap-sorted store of jobs (i64 fire-time keys)
 } ScheduledJobs;
 
 //hold the return of stored job from the store
@@ -82,4 +84,4 @@ typedef struct ScheduledJobContext {
 		ScheduledJob	*scheduled_job_ptr;//original user-provided ScheduledJob
 } ScheduledJobContext;
 
-#endif /* SRC_INCLUDE_SCHEDULED_JOBS_TYPE_H_ */
+#endif /* UFLIB_SCHEDULED_JOBS_SCHEDULED_JOBS_TYPE_H */

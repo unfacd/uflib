@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UFSRV_STANDARD_NET_INCLUDES_H
-#define UFSRV_STANDARD_NET_INCLUDES_H
+#ifndef UFLIB_STANDARD_NET_INCLUDES_H
+#define UFLIB_STANDARD_NET_INCLUDES_H
 
 #include <sys/socket.h>
 #include <netinet/in.h>

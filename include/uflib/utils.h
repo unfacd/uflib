@@ -6,17 +6,19 @@
 MODULEID("$Id: utils.h,v 1.1 1999/07/26 01:46:59 ayman Exp $")
 **
 */
-#ifndef __INCLUDE_FILE_UTILS__H__
-#define __INCLUDE_FILE_UTILS__H__
+#ifndef UFLIB_UTILS_H
+#define UFLIB_UTILS_H
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
+#include <uflib/uflib_defs.h>
+
+#ifdef HAVE_CONFIG_UFLIB_H
+# include <config_uflib.h>
 #endif
 
-#include "standard_c_includes.h"
+#include <uflib/standard_c_includes.h>
 #include "utils_base64.h"
-#include "utils_time.h"
-#include "utils_file.h"
+#include <uflib/utils_time.h>
+#include <uflib/utils_file.h>
 #include <sys/time.h>
 
 enum AccountRegoStatus {
@@ -25,7 +27,7 @@ enum AccountRegoStatus {
 	REGOSTATUS_ACTIVE			=	2,
 	REGOSTATUS_INACTIVE		=	3,
 	REGOSTATUS_SUSPENDED	=	4,
-	REGOSTATUS_VERIFIED   = 5 //user verified, but not active yet (logged on with signon cookie)
+	REGOSTATUS_VERIFIED   = 5 //user verified via previously provided registration account identifier (eg email), but not active yet (not logged on with signon cookie)
 };
 
 typedef struct UserCredentials {
@@ -117,14 +119,15 @@ typedef struct VerificationCode {
 	 return ((x != 0) && !(x & (x - 1)));
  }
 
-bool IsEmailAddressValid(const char *EM_Addr, size_t max_sz);
+#define EMAIL_BASIC_VALIDATION_TRUE true
+#define EMAIL_BASIC_VALIDATION_FALSE false
+
+PUBLIC_API bool IsEmailAddressValid(const char *EM_Addr, size_t max_sz);
+PUBLIC_API bool IsEmailLengthValid(const char * _Nonnull email, size_t max_sz, bool is_basic_validate);
 
  //http://locklessinc.com/articles/next_pow2/
 __attribute__((noinline)) unsigned next_pow2(unsigned x);
-char * mdsprintf(const char * message, ...) __attribute__ ((format (printf, 1, 2)));
-
-int SetThreadName(const char *thread_name);
-void *mymalloc(size_t);
+PUBLIC_API char * mdsprintf(const char * message, ...) __attribute__ ((format (printf, 1, 2)));
 
  unsigned char *mystrndup(const unsigned char *, size_t);
  char *io_error (int);
@@ -136,22 +139,22 @@ void *mymalloc(size_t);
 	 return x0 + (x1 - x0) * rand() / ((double) RAND_MAX);
  }
 
-bool IsPrimeNumber (size_t x);
- size_t GetNextPrimeNumber (size_t x);
+PUBLIC_API bool IsPrimeNumber (size_t x);
+ PUBLIC_API size_t GetNextPrimeNumber (size_t x);
 
- void SeedRandom(struct timeval *);
- int GeneratePasswordHash(UserCredentials *creds_ptr);
- int GenerateVerificationCode(VerificationCode *);
- bool IsPasswordCorrect(const char *password, const char *token, const char *salt);
+ PUBLIC_API void SeedRandom(struct timeval *);
+ PUBLIC_API int GeneratePasswordHash(UserCredentials *creds_ptr);
+ PUBLIC_API int GenerateVerificationCode(VerificationCode *);
+ PUBLIC_API bool IsPasswordCorrect(const char *password, const char *token, const char *salt);
  char *GenerateCookie(size_t max_sz);
 
- void DoBusyWait(size_t counter);
+ PUBLIC_API void DoBusyWait(size_t counter);
 
 #ifndef _CONFIGDEFAULT_ETAG_SIZE
 # define _CONFIGDEFAULT_ETAG_SIZE 32
 #endif
- void GenerateEtag(struct stat *st, char etag[_CONFIGDEFAULT_ETAG_SIZE]);
+ PUBLIC_API void GenerateEtag(struct stat *st, char etag[_CONFIGDEFAULT_ETAG_SIZE]);
 
- uint64_t inthash_u64(uint64_t key, size_t key_len);
+ PUBLIC_API uint64_t inthash_u64(uint64_t key, size_t key_len);
 
 #endif

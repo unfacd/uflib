@@ -18,6 +18,6 @@
 #include <version.h>
 #include <main_types.h>
 
-const char *t_compiled="Sun Oct 3 2021 at 23:00:18 AEDT";
-const char *u_compiled="devops@DESKTOP-NV7F7PK";
+const char *t_compiled="Sun Jul 5 2026 at 18:01:44 AEST";
+const char *u_compiled="devops@AYmAN-XPS17";
 const char *uflib_version=STRINGISE(UFLIB_MAJOR)"."STRINGISE(UFLIB_MINOR)"."STRINGISE(UFLIB_PATCH);

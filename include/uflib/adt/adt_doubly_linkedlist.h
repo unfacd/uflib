@@ -1,6 +1,8 @@
 
-#ifndef SRC_INCLUDE_ADT_DOUBLY_LINKEDLIST_H_
-#define SRC_INCLUDE_ADT_DOUBLY_LINKEDLIST_H_
+#ifndef UFLIB_ADT_ADT_DOUBLY_LINKEDLIST_H
+#define UFLIB_ADT_ADT_DOUBLY_LINKEDLIST_H
+
+#include <uflib/uflib_defs.h>
 
 
 /* adlist.h - A generic doubly linked list implementation
@@ -38,24 +40,24 @@
 #include <uflib/adt/adt_doubly_linkedlist_type.h>
 
 DoublyList *DoublyListCreate(DoublyList *);
-void DoublyListRelease(DoublyList *list);
+PUBLIC_API void DoublyListRelease(DoublyList *list);
 DoublyList *DoublyListAddNodeHead(DoublyList *list, DoublyListNode	*list_node_in, void *value);
 DoublyList *DoublyListAddNodeTail(DoublyList *list, DoublyListNode	*list_node_in, void *value);
 DoublyList *DoublyListInsertNode(DoublyList *list, DoublyListNode	*list_node_in, DoublyListNode *old_node, void *value, int after);
-void DoublyListDelNode(DoublyList *list, DoublyListNode *node, bool flag_self_destruct);
+PUBLIC_API void DoublyListDelNode(DoublyList *list, DoublyListNode *node, bool flag_self_destruct);
 DoublyListIterator *DoublyListGetIterator(DoublyList *list, DoublyListIterator *iter_in, int direction);
 DoublyListNode *DoublyListNext(DoublyListIterator *iter);
-void DoublyListReleaseIterator(DoublyListIterator *iter);
+PUBLIC_API void DoublyListReleaseIterator(DoublyListIterator *iter);
 DoublyList *DoublyListDup(DoublyList *orig);
 DoublyListNode *DoublyListSearchKey(DoublyList *list, void *key);
 DoublyListNode *DoublyListIndex(DoublyList *list, long index);
-void DoublyListRewind(DoublyList *list, DoublyListIterator *li);
-void DoublyListRewindTail(DoublyList *list, DoublyListIterator *li);
-void DoublyListRotate(DoublyList *list);
+PUBLIC_API void DoublyListRewind(DoublyList *list, DoublyListIterator *li);
+PUBLIC_API void DoublyListRewindTail(DoublyList *list, DoublyListIterator *li);
+PUBLIC_API void DoublyListRotate(DoublyList *list);
 
 /* Directions for iterators */
 #define AL_START_HEAD 0
 #define AL_START_TAIL 1
 
 
-#endif /* SRC_INCLUDE_ADT_DOUBLY_LINKEDLIST_H_ */
+#endif /* UFLIB_ADT_ADT_DOUBLY_LINKEDLIST_H */

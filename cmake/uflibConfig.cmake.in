@@ -1,18 +1,33 @@
 @PACKAGE_INIT@
 
-get_filename_component(${_PROJECT_NAME}_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)#get directory without filename /full_pathname/...
-message("get_filename_component: ${_PROJECT_NAME}_CMAKE_DIR")
+get_filename_component(uflib_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 
 include(CMakeFindDependencyMacro)
 
-list(APPEND CMAKE_MODULE_PATH ${${_PROJECT_NAME}_CMAKE_DIR}) #allow to search dependencies in our package
-#find_dependency(RapidJSON @MIN_RapidJSON_VERSION@)
-#list(REMOVE_AT CMAKE_MODULE_PATH -1)#remove our package from dependencies search path
+find_dependency(OpenSSL)
 
-set_and_check (${_PROJECT_NAME_X}_INCLUDE_DIRS "@PACKAGE_${_PROJECT_NAME_X}_INCLUDE_DIRS@")
+# Valgrind is optional — standard_valgrind_includes.h conditionally includes it.
+find_path(VALGRIND_INCLUDE_DIR valgrind/valgrind.h
+    HINTS /opt/include /usr/include /usr/local/include
+)
 
-if(NOT TARGET ${_PROJECT_NAME}::${_PROJECT_NAME})
-    include("${${_PROJECT_NAME}_CMAKE_DIR}/${_PROJECT_NAME}Targets.cmake")
+list(APPEND CMAKE_MODULE_PATH ${uflib_CMAKE_DIR})
+
+set_and_check(UFLIB_INCLUDE_DIRS "@PACKAGE_UFLIB_INCLUDE_DIRS@")
+
+include("${uflib_CMAKE_DIR}/uflibTargets.cmake")
+
+# Create canonical alias uflib::uflib — resolves to whichever target was built.
+# BUILD_SHARED_LIBS=ON  → uflib::uflib_shared (preferred, dynamic linking)
+# BUILD_SHARED_LIBS=OFF → uflib::uflib_static
+if(NOT TARGET uflib::uflib)
+    if(TARGET uflib::uflib_shared)
+        add_library(uflib::uflib ALIAS uflib::uflib_shared)
+    elseif(TARGET uflib::uflib_static)
+        add_library(uflib::uflib ALIAS uflib::uflib_static)
+    else()
+        message(FATAL_ERROR "Neither uflib::uflib_shared nor uflib::uflib_static found in uflibTargets.cmake")
+    endif()
 endif()
 
-set(${_PROJECT_NAME}_LIBRARIES ${_PROJECT_NAME}::${_PROJECT_NAME})
+set(uflib_LIBRARIES uflib::uflib)
