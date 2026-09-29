@@ -4,36 +4,36 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Tue, 29 Sep 2026 20:49:07 +0000
+Date: Tue, 29 Sep 2026 22:00:35 +0000
 Description: unfacd apt repository
 Label: unfacd
 Origin: unfacd
 Suite: stable
 MD5Sum:
  973283b03400491cbe5e0abd45f0dd54              615 main/binary-amd64/Packages
- 4cc8c073a86cd03c3eeb4fe928b43db1              455 main/binary-amd64/Packages.gz
+ b0d4a68f900170036060d87c266eaec7              455 main/binary-amd64/Packages.gz
 SHA1:
  249c91fe8d35a89621ba5dd3997964e19671dc35              615 main/binary-amd64/Packages
- 7cf69b58ed8bafd18e813560f6436330bc40a1a5              455 main/binary-amd64/Packages.gz
+ 936e635f68faf9d6cafc37045eb8fe746cb1901e              455 main/binary-amd64/Packages.gz
 SHA256:
  6e67aefd6415f9ad8e557c95fb5c8de5d9877d747ba201f186657d06518c02b0              615 main/binary-amd64/Packages
- 8f6f9802923eb0d2382c35561d9ce84ffa603bca9ff6df3ce611d04e61e7332f              455 main/binary-amd64/Packages.gz
+ b84230c391c2b80871552a91291cc553a340865bb488f3c3c7f547c43d7a3a48              455 main/binary-amd64/Packages.gz
 SHA512:
  753e98d982b2cb046c8fc4055ee3359eab76e5256bca0500ed12016dc8592de55ee654d43ac7adf8b0280bf779180d079279ecf7807a82b04e4a9a32bf21cb0b              615 main/binary-amd64/Packages
- 70e8b41a43e5003908d150fd436ab873687cd35bee5a1e2487f5306e2111197a5a42e943d23389ce997738116984af474caff33a12ef9e31665f698b31579506              455 main/binary-amd64/Packages.gz
+ 109ef8119b4076fb84860ab5a72cb4d8207ea4769738039e7e5f01c282d210a25323e4b716cbe10ee02c7bfd6a38328303a9a6228a7012c5e884aef617950051              455 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEE2AjuQUfMQZUsnLp7YXhJYEDZfgYFAmq8JEMACgkQYXhJYEDZ
-fgYfeBAAsqqaH5tDRPuDjC7BiYkGj4t63V+fZ+v6Wc0+xOqdGhvDT+Ngg3vF/FL3
-+Bnglr1vRqCDEev+DCNel2mnvkm6dYwOOE84isrP5MOC08JJk7gHzel2JSQ/l2Kn
-PhKE/n0nQaveJJFRRUtI5DfeXRPYqDbuag3HHivBe3py20akQ00XC5nBWeqTxptA
-iHMaY/fhjYslp/KtRjZBQU6ie3ML4nVBIxyasS1oC7ytdhy8u1gTEoMIxVd8doNb
-xqmTq0hplDdjItbymCWEuw5rMnUX4RIydvUZzIbt5t4UO4OTdV9x72ktx91dWDHy
-Pdp9gNJCSsm+pgiAabwtyYZ/Mg2kc124lTTUfcxS6wsEqW1wB9W4L9ElDibg0mzK
-+3TrXIQ0+fxeG7T6jidThnPpACO7jiRCPaLUZ5rn0KwthA8avbFYiMSwzpPhuRM3
-v20yfFdy08TkJ0c24I611hFO+KWyN5zFxPafPvP7eZpzFhA5izg2eCi5eqN7Bcck
-dhZf8ZM2hW/iYvOf6EZYwR/RRK+dcbNpOSoUGRNN7P6ICJ/WnZW2HOujD/vGmQPc
-mngqGLsds4ajj8eaHOh1do2q1gcI4jYf3cQQ9rvpgH+dOcq/URDxxGdodxamDz0H
-AiHQcl9Mmmh1N/fg2qY1JOYcuKlDdXrDpw66nqsTf4xG4llaMSg=
-=OmYJ
+iQIzBAEBCgAdFiEE2AjuQUfMQZUsnLp7YXhJYEDZfgYFAmq8NQMACgkQYXhJYEDZ
+fgZ4vxAAkuaZak6VS+2iLOC1JNhoJ5+6JIAbA0zrCS/NmpVBrMGa4c8QPW/Lerxu
++bd4Y1ZdkY2Mi0yZoBsRYTNdbB9IR684VUnWMaMbUQPLDOqLLrlz81ejIrKSKcMr
+M2gqngtvg1ga1u2zqq/o/FnSIXOPUJYve22tdSu9hVk+J4Fczbl9cTM1U+gvjGGD
+VKs7UNtR6leZZzAua/oByqog2aHq6vkLQ5k+dUIRTRKUmSbkiroKnA364JsjOQ7T
+X357aGSmSH9+5X87WRf4VuXfnm9CH2BUXicSd9lXrlwx6XQpfdOG8Mb4aKJ6Lf8W
+HkeSgRhl0RM38IPPwMZGoluKpcvHs9umGvegdvqtt/xuxk/4u+XgbDKLY5C758u3
+kLsp+L+VIZ9n6TvScKVmE16hpUcDXhDVsaC+Er4PmV1Jc0/Y21j1o5Iq4uyKwLSQ
+5Qyu4bdHZ0noGqR5j9i76vBBAur2VTjU3Ay8ZFE6LKE7VSltN3ObZdZsUsCbquP/
+wJDl12TFQ/S0drBd6oxHqoxQHg3riUgTc3U4Bfw2VPfAEyal9EIMUiketrbHxUrJ
+QpO9QC1NstfmrmJfyz725jogh6DhPvnQWx31HbeUx1DczVCh6d0hW1Z1UK5+jY3z
+6rXVRnNU315EBOqPDx3DUbj2QeIryntpNk9ChEsjrDberVk5fkE=
+=QPt4
 -----END PGP SIGNATURE-----
