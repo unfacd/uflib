@@ -1,0 +1,5 @@
+# Signed apt repository: every file must be byte-exact.
+# InRelease signs the exact bytes of Release, and Release records the hashes of
+# Packages and the .debs. Any EOL conversion on checkout invalidates all of it,
+# so disable text conversion for the whole tree regardless of client autocrlf.
+* -text
