@@ -12,6 +12,7 @@
 
 #include <uflib/adt/hopscotch_hashtable_v2/hopscotch_hashtable_v2_type.h>
 #include <uflib/adt/hopscotch_hashtable_v2/hopscotch_hashtable_v2_defs.h>
+#include <uflib/logger/logger_type.h>
 
 /*! Internal bucket — one per slot in the bucket array. */
 typedef struct {
@@ -31,6 +32,7 @@ struct HopscotchHashTable {
     HopscotchBucket          *buckets_ptr;   /*!< Bucket array, size = 1 << pfactor.       */
     size_t                    entry_count;   /*!< Current number of stored entries.         */
     HopscotchHashTableConfig  config;        /*!< Frozen copy of creation config.           */
+    UfLogger                 *uf_logger;     /*!< Borrowed diagnostic sink (write-once); NULL = silent. */
 };
 
 /* ── Error codes ─────────────────────────────────────────────────────── */

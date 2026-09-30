@@ -30,6 +30,7 @@
 
 #include <uflib/cdt/chase_lev_stealing_queue/cdt_chase_lev_stealing_queue.h>
 #include <uflib/cdt/chase_lev_stealing_queue/cdt_chase_lev_stealing_queue_type.h>
+#include <uflib/logger/logger_type.h>
 
 /** Cache-line size for padding to prevent false sharing. */
 #ifndef UFLIB_CDT_CACHE_LINE_SIZE
@@ -69,7 +70,13 @@ typedef struct ChaseLevStealingQueueArray {
  *   Line 1: `bottom`  — owner publish / pop.
  *   Line 2: `array`   — thieves acquire-load every steal.
  *   Line 3: `capacity`— diagnostic (relaxed).
- *   Then `retired` / `cached_top` — owner-only, never touched by thieves.
+ *   Then `retired` / `cached_top` / `uf_logger` — owner-only, never touched by
+ *   thieves, and past the last padded line so adding to the group shifts no
+ *   existing offset.
+ *
+ * `uf_logger` is borrowed, never owned, and written once at create.  It sits in
+ * the owner-only group because no thief and no hot path reads it: it is
+ * consulted only when the handle is created or released.
  */
 struct ChaseLevStealingQueue {
     /* ── Line 0: thief CAS hotspot ──────────────────────────────────── */
@@ -91,6 +98,7 @@ struct ChaseLevStealingQueue {
     /* ── Owner-only (thieves must not bounce these lines) ───────────── */
     ChaseLevStealingQueueArray *retired;   ///< Head of the retained-ring chain.
     uint64_t cached_top;                   ///< Cached lower bound on top.
+    UfLogger *uf_logger;                   ///< Borrowed diagnostic sink; NULL = silent.
 };
 
 /* The last-item arbitration CASes the array pointer; a non-lock-free pointer

@@ -56,6 +56,7 @@
 #include <uflib/uflib_defs.h>
 #include <uflib/cdt/lockless_minheap/cdt_lockless_minheap_type.h>
 #include <uflib/buffer_descriptor/buffer_descriptor.h>
+#include <uflib/logger/logger_type.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -84,6 +85,38 @@ enum {
  */
 PUBLIC_API LocklessMinHeap *
 LocklessMinHeapCreate(void);
+
+/**
+ * @brief Create an empty lock-free min-PQ that reports through @p logger_ptr.
+ *
+ * Behaves exactly as LocklessMinHeapCreate(), and additionally reports creation,
+ * each allocation failure, and release through the supplied logger — including
+ * forwarding the borrow to the internal retire stack, so one logger covers the
+ * whole structure.  Insert and delmin are never logged, so a queue built this
+ * way has the same concurrency behaviour as one built without a logger.
+ *
+ * The logger is **borrowed, not owned**.  The queue stores the pointer and never
+ * destroys it, so the logger must outlive the queue: destroy the queue before
+ * destroying the logger.  A queue destroyed after its logger would report
+ * through a dangling handle.
+ *
+ * @param logger_ptr  Logger to report through, or NULL to report nothing.
+ *                    NULL gives exactly LocklessMinHeapCreate().
+ * @return Opaque handle, or NULL on allocation failure.
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * LocklessMinHeap *pq = LocklessMinHeapCreateWithLogger(log_ptr);
+ * if (!pq) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * LocklessMinHeapDestroy(pq);   // the queue first —
+ * UfLoggerDestroy(log_ptr);     // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API LocklessMinHeap *
+LocklessMinHeapCreateWithLogger(UfLogger *logger_ptr);
 
 /**
  * @brief Tear down the queue and free all internal storage.
@@ -173,9 +206,14 @@ LocklessMinHeapReclaim(LocklessMinHeap *h);
  *
  * Composes a best-effort snapshot: the relaxed size counter, a walk of the
  * live ordered list (node count plus one entry per node with key and value
- * address), and a reclamation note.  All reads are relaxed snapshots, so
- * figures are approximate under concurrent mutation — introspection, not a
- * transactional view.  Call it only when no reclaim is in flight.
+ * address), a reclamation note, and a `logger` attribute reporting whether this
+ * queue was created with a logger to report through (`"enabled"` or `"none"`).
+ * All reads are relaxed snapshots, so figures are approximate under concurrent
+ * mutation — introspection, not a transactional view.  Call it only when no
+ * reclaim is in flight.
+ *
+ * A NULL handle emits `{"error":"null handle"}` and carries no `logger`
+ * attribute: with no instance there is no borrow to report.
  *
  * If @p provided is NULL, a fresh BufferDescriptor is allocated (the caller
  * must free it with BufferDescriptorRelease() + free()); otherwise the

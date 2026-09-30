@@ -1,0 +1,110 @@
+# id<TAB>scope<TAB>mode<TAB>input<TAB>expected
+# Expected is a canonical, exact oracle record. Do not regenerate this file in CI.
+direct-status	BASE	EXEC	status	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+direct-echo-0	BASE	EXEC	echo	status=OK|resolved=[echo]|argc=0|args=[]|handler_calls=1
+direct-echo-1	BASE	EXEC	echo main	status=OK|resolved=[echo]|argc=1|args=[main]|handler_calls=1
+direct-echo-2	BASE	EXEC	echo a b	status=OK|resolved=[echo]|argc=2|args=[a|b]|handler_calls=1
+direct-echo-3	BASE	EXEC	echo a b c	status=OK|resolved=[echo]|argc=3|args=[a|b|c]|handler_calls=1
+direct-remote-0	BASE	EXEC	remote	status=OK|resolved=[remote]|argc=0|args=[]|handler_calls=1
+direct-remote-1	BASE	EXEC	remote main	status=OK|resolved=[remote]|argc=1|args=[main]|handler_calls=1
+direct-remote-add	BASE	EXEC	remote add origin git@example.com	status=OK|resolved=[remote add]|argc=2|args=[origin|git@example.com]|handler_calls=1
+direct-remote-get	BASE	EXEC	remote get origin	status=OK|resolved=[remote get]|argc=1|args=[origin]|handler_calls=1
+direct-checkout	BASE	EXEC	checkout main	status=OK|resolved=[checkout]|argc=1|args=[main]|handler_calls=1
+direct-build-0	BASE	EXEC	build	status=OK|resolved=[build]|argc=0|args=[]|handler_calls=1
+direct-build-1	BASE	EXEC	build debug	status=OK|resolved=[build]|argc=1|args=[debug]|handler_calls=1
+direct-build-2	BASE	EXEC	build debug linux	status=OK|resolved=[build]|argc=2|args=[debug|linux]|handler_calls=1
+direct-config-get	BASE	EXEC	config get	status=OK|resolved=[config get]|argc=0|args=[]|handler_calls=1
+direct-config-set	BASE	EXEC	config set theme dark	status=OK|resolved=[config set]|argc=2|args=[theme|dark]|handler_calls=1
+direct-fail	BASE	EXEC	fail	status=HANDLER_ERROR|resolved=[fail]|argc=0|args=[]|handler_calls=1
+arity-checkout-0	BASE	EXEC	checkout	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+arity-checkout-2	BASE	EXEC	checkout a b	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+arity-remote-add-0	BASE	EXEC	remote add	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+arity-remote-add-1	BASE	EXEC	remote add origin	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+arity-remote-add-3	BASE	EXEC	remote add origin git@example.com extra	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+arity-echo-4	BASE	EXEC	echo a b c d	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+arity-build-3	BASE	EXEC	build a b c	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+unknown-command	BASE	EXEC	does-not-exist	status=NOT_FOUND|resolved=[-]|argc=0|args=[]|handler_calls=0
+unknown-subcommand	BASE	EXEC	remote delete origin	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+empty-command	BASE	EXEC		status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+whitespace-only	BASE	EXEC	   	status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+parse-unterminated-quote	BASE	EXEC	echo "unterminated	status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+parse-trailing-escape	BASE	EXEC	echo trailing\	status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+longest-remote-add	BASE	EXEC	remote add origin url	status=OK|resolved=[remote add]|argc=2|args=[origin|url]|handler_calls=1
+longest-remote-get	BASE	EXEC	remote get origin	status=OK|resolved=[remote get]|argc=1|args=[origin]|handler_calls=1
+longest-config-set	BASE	EXEC	config set key value	status=OK|resolved=[config set]|argc=2|args=[key|value]|handler_calls=1
+longest-config-get	BASE	EXEC	config get	status=OK|resolved=[config get]|argc=0|args=[]|handler_calls=1
+alias-st	BASE	EXEC	st	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+alias-co-main	BASE	EXEC	co main	status=OK|resolved=[checkout]|argc=1|args=[main]|handler_calls=1
+alias-co-feature/x	BASE	EXEC	co feature/x	status=OK|resolved=[checkout]|argc=1|args=[feature/x]|handler_calls=1
+alias-co-hot-fix	BASE	EXEC	co hot-fix	status=OK|resolved=[checkout]|argc=1|args=[hot-fix]|handler_calls=1
+alias-co-missing	BASE	EXEC	co	status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+alias-co-extra	BASE	EXEC	co main extra	status=OK|resolved=[checkout]|argc=1|args=[main]|handler_calls=1
+alias-ra	BASE	EXEC	ra origin url	status=OK|resolved=[remote add]|argc=2|args=[origin|url]|handler_calls=1
+alias-ra-missing	BASE	EXEC	ra origin	status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+alias-ra-extra	BASE	EXEC	ra origin url extra	status=OK|resolved=[remote add]|argc=2|args=[origin|url]|handler_calls=1
+alias-say-0	BASE	EXEC	say	status=OK|resolved=[echo]|argc=0|args=[]|handler_calls=1
+alias-say-1	BASE	EXEC	say hello	status=OK|resolved=[echo]|argc=1|args=[hello]|handler_calls=1
+alias-say-2	BASE	EXEC	say hello world	status=OK|resolved=[echo]|argc=2|args=[hello|world]|handler_calls=1
+alias-say-3	BASE	EXEC	say a b c	status=OK|resolved=[echo]|argc=3|args=[a|b|c]|handler_calls=1
+alias-say-over-max	BASE	EXEC	say a b c d	status=ARGUMENT_COUNT|resolved=[-]|argc=0|args=[]|handler_calls=0
+alias-say1	BASE	EXEC	say1 hello	status=OK|resolved=[echo]|argc=1|args=[hello]|handler_calls=1
+alias-say1-missing	BASE	EXEC	say1	status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+alias-cfg	BASE	EXEC	cfg	status=OK|resolved=[config get]|argc=0|args=[]|handler_calls=1
+alias-cfgset	BASE	EXEC	cfgset key value	status=OK|resolved=[config set]|argc=2|args=[key|value]|handler_calls=1
+alias-cfgset-missing	BASE	EXEC	cfgset key	status=PARSE_ERROR|resolved=[-]|argc=0|args=[]|handler_calls=0
+alias-fail	BASE	EXEC	failalias	status=HANDLER_ERROR|resolved=[fail]|argc=0|args=[]|handler_calls=1
+alias-cycle	BASE	EXEC	cycle-a	status=ALIAS_CYCLE|resolved=[-]|argc=0|args=[]|handler_calls=0
+quote-checkout-double	BASE	EXEC	checkout "feature branch"	status=OK|resolved=[checkout]|argc=1|args=[feature branch]|handler_calls=1
+quote-checkout-escape	BASE	EXEC	checkout feature\ branch	status=OK|resolved=[checkout]|argc=1|args=[feature branch]|handler_calls=1
+quote-remote-add	BASE	EXEC	remote add "origin one" "ssh://host/repo"	status=OK|resolved=[remote add]|argc=2|args=[origin one|ssh://host/repo]|handler_calls=1
+quote-echo-empty	BASE	EXEC	echo ""	status=OK|resolved=[echo]|argc=1|args=[]|handler_calls=1
+quote-echo-spaces	BASE	EXEC	echo "hello world" test	status=OK|resolved=[echo]|argc=2|args=[hello world|test]|handler_calls=1
+quote-echo-escaped-quote	BASE	EXEC	echo "a \"quoted\" value"	status=OK|resolved=[echo]|argc=1|args=[a "quoted" value]|handler_calls=1
+quote-echo-backslash	BASE	EXEC	echo path\\file	status=OK|resolved=[echo]|argc=1|args=[path\\file]|handler_calls=1
+quote-single-literal	BASE	EXEC	echo 'hello world'	status=OK|resolved=[echo]|argc=2|args=['hello|world']|handler_calls=1
+bind-status	BASE	BIND	CTRL+SHIFT:P	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+bind-build	BASE	BIND	CTRL+SHIFT:B	status=OK|resolved=[build]|argc=0|args=[]|handler_calls=1
+bind-alias	BASE	BIND	CTRL+SHIFT:C	status=OK|resolved=[checkout]|argc=1|args=[main]|handler_calls=1
+bind-alt	BASE	BIND	ALT:X	status=OK|resolved=[checkout]|argc=1|args=[main]|handler_calls=1
+bind-shift	BASE	BIND	SHIFT:E	status=OK|resolved=[echo]|argc=2|args=[bound|hello]|handler_calls=1
+bind-wrong-modifier	BASE	BIND	CTRL:P	status=NO_BINDING|resolved=[-]|argc=0|args=[]|handler_calls=0
+bind-wrong-key	BASE	BIND	CTRL+SHIFT:Z	status=NO_BINDING|resolved=[-]|argc=0|args=[]|handler_calls=0
+bind-none	BASE	BIND	NONE:P	status=NO_BINDING|resolved=[-]|argc=0|args=[]|handler_calls=0
+persist-pco	PERSIST	EXEC	pco persisted	status=OK|resolved=[checkout]|argc=1|args=[persisted]|handler_calls=1
+persist-pra	PERSIST	EXEC	pra origin persisted-url	status=OK|resolved=[remote add]|argc=2|args=[origin|persisted-url]|handler_calls=1
+persist-psay	PERSIST	EXEC	psay one two	status=OK|resolved=[echo]|argc=2|args=[one|two]|handler_calls=1
+persist-pst	PERSIST	EXEC	pst	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+persist-bind-status	PERSIST	BIND	ALT:P	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+persist-bind-alias	PERSIST	BIND	ALT:C	status=OK|resolved=[checkout]|argc=1|args=[persisted]|handler_calls=1
+persist-default-alt	PERSIST	DEFAULT	P	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+persist-default-old-mod	PERSIST	BIND	CTRL+SHIFT:P	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+whitespace-between	BASE	EXEC	remote   add    origin    url	status=OK|resolved=[remote add]|argc=2|args=[origin|url]|handler_calls=1
+whitespace-leading	BASE	EXEC	   checkout main	status=OK|resolved=[checkout]|argc=1|args=[main]|handler_calls=1
+whitespace-trailing	BASE	EXEC	status   	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1
+args-numeric	BASE	EXEC	echo 1 22 333	status=OK|resolved=[echo]|argc=3|args=[1|22|333]|handler_calls=1
+args-punctuation	BASE	EXEC	echo a-b c_d x.y	status=OK|resolved=[echo]|argc=3|args=[a-b|c_d|x.y]|handler_calls=1
+perm-ra-0-0	BASE	EXEC	ra origin url	status=OK|resolved=[remote add]|argc=2|args=[origin|url]|handler_calls=1
+perm-direct-ra-0-0	BASE	EXEC	remote add origin url	status=OK|resolved=[remote add]|argc=2|args=[origin|url]|handler_calls=1
+perm-ra-0-1	BASE	EXEC	ra origin ssh://host/repo	status=OK|resolved=[remote add]|argc=2|args=[origin|ssh://host/repo]|handler_calls=1
+perm-direct-ra-0-1	BASE	EXEC	remote add origin ssh://host/repo	status=OK|resolved=[remote add]|argc=2|args=[origin|ssh://host/repo]|handler_calls=1
+perm-ra-0-2	BASE	EXEC	ra origin git@example.com	status=OK|resolved=[remote add]|argc=2|args=[origin|git@example.com]|handler_calls=1
+perm-direct-ra-0-2	BASE	EXEC	remote add origin git@example.com	status=OK|resolved=[remote add]|argc=2|args=[origin|git@example.com]|handler_calls=1
+perm-ra-1-0	BASE	EXEC	ra upstream url	status=OK|resolved=[remote add]|argc=2|args=[upstream|url]|handler_calls=1
+perm-direct-ra-1-0	BASE	EXEC	remote add upstream url	status=OK|resolved=[remote add]|argc=2|args=[upstream|url]|handler_calls=1
+perm-ra-1-1	BASE	EXEC	ra upstream ssh://host/repo	status=OK|resolved=[remote add]|argc=2|args=[upstream|ssh://host/repo]|handler_calls=1
+perm-direct-ra-1-1	BASE	EXEC	remote add upstream ssh://host/repo	status=OK|resolved=[remote add]|argc=2|args=[upstream|ssh://host/repo]|handler_calls=1
+perm-ra-1-2	BASE	EXEC	ra upstream git@example.com	status=OK|resolved=[remote add]|argc=2|args=[upstream|git@example.com]|handler_calls=1
+perm-direct-ra-1-2	BASE	EXEC	remote add upstream git@example.com	status=OK|resolved=[remote add]|argc=2|args=[upstream|git@example.com]|handler_calls=1
+perm-ra-2-0	BASE	EXEC	ra o url	status=OK|resolved=[remote add]|argc=2|args=[o|url]|handler_calls=1
+perm-direct-ra-2-0	BASE	EXEC	remote add o url	status=OK|resolved=[remote add]|argc=2|args=[o|url]|handler_calls=1
+perm-ra-2-1	BASE	EXEC	ra o ssh://host/repo	status=OK|resolved=[remote add]|argc=2|args=[o|ssh://host/repo]|handler_calls=1
+perm-direct-ra-2-1	BASE	EXEC	remote add o ssh://host/repo	status=OK|resolved=[remote add]|argc=2|args=[o|ssh://host/repo]|handler_calls=1
+perm-ra-2-2	BASE	EXEC	ra o git@example.com	status=OK|resolved=[remote add]|argc=2|args=[o|git@example.com]|handler_calls=1
+perm-direct-ra-2-2	BASE	EXEC	remote add o git@example.com	status=OK|resolved=[remote add]|argc=2|args=[o|git@example.com]|handler_calls=1
+perm-say-quoted	BASE	EXEC	say "alpha beta" gamma	status=OK|resolved=[echo]|argc=2|args=[alpha beta|gamma]|handler_calls=1
+perm-say-three	BASE	EXEC	say alpha "beta gamma" delta	status=OK|resolved=[echo]|argc=3|args=[alpha|beta gamma|delta]|handler_calls=1
+persist-unknown	PERSIST	EXEC	does-not-exist	status=NOT_FOUND|resolved=[-]|argc=0|args=[]|handler_calls=0
+persist-wrong-binding	PERSIST	BIND	CTRL+SHIFT:Z	status=NO_BINDING|resolved=[-]|argc=0|args=[]|handler_calls=0
+roundtrip-pco	ROUNDTRIP	EXEC	pco persisted	status=OK|resolved=[checkout]|argc=1|args=[persisted]|handler_calls=1
+roundtrip-pra	ROUNDTRIP	EXEC	pra origin persisted-url	status=OK|resolved=[remote add]|argc=2|args=[origin|persisted-url]|handler_calls=1
+roundtrip-default	ROUNDTRIP	DEFAULT	P	status=OK|resolved=[status]|argc=0|args=[]|handler_calls=1

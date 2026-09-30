@@ -188,10 +188,10 @@ TEST(distinct_array, iteration_visits_all_items)
         sPut(&da, (uint8_t *)items[i], strlen(items[i]) + 1);
     }
 
-    __block int visited = 0;
-    DistinctArrayIterate(&da, ^(uint8_t *item) {
-        visited++;
-    });
+    int visited = 0;
+    DistinctArrayIterate(&da, [](void *ctx_ptr, uint8_t *item) {
+        (*static_cast<int *>(ctx_ptr))++;
+    }, &visited);
 
     EXPECT_EQ(visited, n);
 
@@ -209,10 +209,10 @@ TEST(distinct_array, iteration_yields_correct_contents)
         sPut(&da, (uint8_t *)items[i], strlen(items[i]) + 1);
     }
 
-    __block std::set<std::string> seen;
-    DistinctArrayIterate(&da, ^(uint8_t *item) {
-        seen.insert(std::string((char *)item));
-    });
+    std::set<std::string> seen;
+    DistinctArrayIterate(&da, [](void *ctx_ptr, uint8_t *item) {
+        static_cast<std::set<std::string> *>(ctx_ptr)->insert(std::string((char *)item));
+    }, &seen);
 
     EXPECT_EQ(seen.size(), (size_t)n);
     EXPECT_TRUE(seen.count("apple"));
@@ -227,10 +227,10 @@ TEST(distinct_array, iteration_on_empty_does_nothing)
     DistinctArray da;
     SetupDistinctArray(&da, 32);
 
-    __block int visited = 0;
-    DistinctArrayIterate(&da, ^(uint8_t *item) {
-        visited++;
-    });
+    int visited = 0;
+    DistinctArrayIterate(&da, [](void *ctx_ptr, uint8_t *item) {
+        (*static_cast<int *>(ctx_ptr))++;
+    }, &visited);
 
     EXPECT_EQ(visited, 0);
 
@@ -663,11 +663,11 @@ TEST(distinct_array, remove_last_leaves_no_hash_residue_for_iteration)
     DistinctArrayRemoveLast(&da);  // removes "keep2"
     DistinctArrayRemoveLast(&da);  // removes "discard"
 
-    __block int visited = 0;
-    DistinctArrayIterate(&da, ^(uint8_t *item) {
-        visited++;
+    int visited = 0;
+    DistinctArrayIterate(&da, [](void *ctx_ptr, uint8_t *item) {
+        (*static_cast<int *>(ctx_ptr))++;
         EXPECT_STREQ((char *)item, "keep");
-    });
+    }, &visited);
     EXPECT_EQ(visited, 1);
 
     EXPECT_TRUE(IS_PRESENT(

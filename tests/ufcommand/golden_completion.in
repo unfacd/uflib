@@ -1,0 +1,48 @@
+C001	re	2
+C002	r	1
+C003	re	1
+C004	remote 	7
+C005	remote a	8
+C006	remote r	8
+C007	remote s	8
+C008	remote add	10
+C009	remote add 	11
+C010	remote show 	12
+C011	st	2
+C012	sta	3
+C013	s	1
+C014	co	2
+C015	rs	2
+C016	z	1
+C017		0
+C018	rem	3
+C019	remote sh	9
+C020	remote x	8
+C021	remote add x	12
+C022	start	5
+C023	st	1
+C024	sto	3
+C025	syn	3
+C026	reset	5
+C027	rese	4
+C028	status	6
+C029	c	1
+C030	co 	3
+C031	rs 	3
+C032	remote	6
+C033	remote 	7
+C034	remote a	8
+C035	remote add	10
+C036	remote rem	10
+C037	remote sho	10
+C038	remote show	11
+C039	remote    	10
+C040	unknown	7
+C041	remote aXYZ	8
+C042	remote add foo	8
+C043	remote remove foo	10
+C044	co trailing	2
+C045	status trailing	3
+C046	remote show trailing	10
+C047	remote	3
+C048	remote add	8

@@ -54,6 +54,7 @@
 
 #include <uflib/uflib_defs.h>
 #include <uflib/cdt/lockless_ringbuffer/cdt_lockless_ringbuffer_type.h>
+#include <uflib/logger/logger_type.h>
 
 /* ── Lifecycle ─────────────────────────────────────────────────────────── */
 
@@ -80,6 +81,49 @@
  */
 PUBLIC_API LocklessRingBuffer *
 LocklessRingBufferCreate(size_t capacity, size_t elem_size, LocklessRingBufferMode mode);
+
+/**
+ * @brief Create a new ring buffer that reports through @p logger_ptr.
+ *
+ * Behaves exactly as LocklessRingBufferCreate(), and additionally reports the
+ * reason for every rejection and allocation failure, plus creation and release.
+ * TryPush and TryPop are never logged, so a buffer built this way has the same
+ * concurrency behaviour as one built without a logger.
+ *
+ * The rejection reasons are worth having: this constructor has five distinct
+ * ways to return NULL and no other channel through which to say which one
+ * happened.
+ *
+ * The logger is **borrowed, not owned**.  The buffer stores the pointer and
+ * never destroys it, so the logger must outlive the buffer: destroy the buffer
+ * before destroying the logger.  A buffer destroyed after its logger would
+ * report through a dangling handle.
+ *
+ * @param[in] capacity    Requested maximum element count; rounded up to the
+ *                        next power of two internally.  Must be non-zero.
+ * @param[in] elem_size   Size of each element in bytes.  Must be non-zero.
+ * @param[in] mode        Concurrency mode (SPSC / MPSC / MPMC).
+ * @param[in] logger_ptr  Logger to report through, or NULL to report nothing.
+ *                        NULL gives exactly LocklessRingBufferCreate().
+ *
+ * @return Opaque handle, or NULL on failure (zero capacity/elem_size,
+ *         invalid mode, size overflow, or allocation failure).
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * LocklessRingBuffer *ring_ptr = LocklessRingBufferCreateWithLogger(
+ *     1024, sizeof(int), LOCKLESS_RINGBUF_MODE_MPSC, log_ptr);
+ * if (!ring_ptr) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * LocklessRingBufferDestroy(ring_ptr);   // the buffer first —
+ * UfLoggerDestroy(log_ptr);              // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API LocklessRingBuffer *
+LocklessRingBufferCreateWithLogger(size_t capacity, size_t elem_size, LocklessRingBufferMode mode,
+                                  UfLogger *logger_ptr);
 
 /**
  * @brief Tear down the buffer and free all internal storage.
@@ -219,6 +263,12 @@ LocklessRingBufferFull(const LocklessRingBuffer *ring_ptr);
     NAME##Create(void)                                                        \
     {                                                                         \
         return LocklessRingBufferCreate((CAPACITY), sizeof(TYPE), (MODE));    \
+    }                                                                         \
+    static inline NAME##_t *                                                  \
+    NAME##CreateWithLogger(UfLogger *logger_ptr)                              \
+    {                                                                         \
+        return LocklessRingBufferCreateWithLogger((CAPACITY), sizeof(TYPE),   \
+                                                  (MODE), logger_ptr);        \
     }                                                                         \
     static inline void                                                        \
     NAME##Destroy(NAME##_t *queue_ptr)                                        \

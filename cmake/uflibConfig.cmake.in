@@ -13,8 +13,6 @@ find_path(VALGRIND_INCLUDE_DIR valgrind/valgrind.h
 
 list(APPEND CMAKE_MODULE_PATH ${uflib_CMAKE_DIR})
 
-set_and_check(UFLIB_INCLUDE_DIRS "@PACKAGE_UFLIB_INCLUDE_DIRS@")
-
 include("${uflib_CMAKE_DIR}/uflibTargets.cmake")
 
 # Create canonical alias uflib::uflib — resolves to whichever target was built.

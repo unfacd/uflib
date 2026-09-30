@@ -68,6 +68,7 @@
 #include <uflib/uflib_defs.h>
 #include <uflib/cdt/lockless_lru/cdt_lockless_lru_type.h>
 #include <uflib/buffer_descriptor/buffer_descriptor.h>
+#include <uflib/logger/logger_type.h>
 
 /* ── Lifecycle ─────────────────────────────────────────────────────────── */
 
@@ -91,6 +92,49 @@
  */
 PUBLIC_API LocklessLru *
 LocklessLruCreate(const LocklessLruConfig *config_ptr);
+
+/**
+ * @brief Create an LRU cache that reports through @p logger_ptr.
+ *
+ * Behaves exactly as LocklessLruCreate(), and additionally reports creation,
+ * each capacity/allocation failure, and release through the supplied logger.
+ * Get, Set and Remove are never logged, so a cache built this way has the same
+ * concurrency behaviour — and the same cache-line behaviour — as one built
+ * without a logger.
+ *
+ * The failures are worth distinguishing: this constructor has five distinct
+ * ways to return NULL and no other channel through which to say which one
+ * happened.
+ *
+ * The logger is **borrowed, not owned**, and is deliberately not a field of
+ * @ref LocklessLruConfig: the config describes what the cache should do, while
+ * the logger is a collaborator the caller supplies.  Keeping them apart means a
+ * config can be reused across caches without dragging a logger with it.
+ *
+ * The cache stores the pointer and never destroys it, so the logger must
+ * outlive the cache: destroy the cache before destroying the logger.
+ *
+ * @param config_ptr  Immutable config (NULL → defaults from
+ *                    cdt_lockless_lru_defs.h).
+ * @param logger_ptr  Logger to report through, or NULL to report nothing.
+ *                    NULL gives exactly LocklessLruCreate().
+ *
+ * @return Opaque handle, or NULL on allocation failure or capacity overflow.
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * LocklessLruConfig cfg = { .capacity_hint = 1024 };
+ * LocklessLru *lru_ptr = LocklessLruCreateWithLogger(&cfg, log_ptr);
+ * if (!lru_ptr) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * LocklessLruDestroy(lru_ptr);   // the cache first —
+ * UfLoggerDestroy(log_ptr);      // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API LocklessLru *
+LocklessLruCreateWithLogger(const LocklessLruConfig *config_ptr, UfLogger *logger_ptr);
 
 /**
  * @brief Tear down the cache and free all internal storage.
@@ -240,13 +284,18 @@ LocklessLruCapacity(LocklessLru *lru_ptr);
  *
  * Composes a best-effort introspection snapshot: physical capacity, logical
  * target (`max_items`), current item count, CLOCK hand position, load factor,
- * an occupancy breakdown (`occupied` / `empty` / `tombstone` / `referenced`),
- * and one entry per occupied slot (`index`, `key`, `referenced`, `gen`).
+ * whether this cache was created with a logger to report through (`logger`,
+ * `"enabled"` or `"none"`), an occupancy breakdown (`occupied` / `empty` /
+ * `tombstone` / `referenced`), and one entry per occupied slot (`index`, `key`,
+ * `referenced`, `gen`).
  *
  * All reads are relaxed snapshots, so figures may be slightly stale under
  * concurrent mutation — this is introspection, not a transactional view.  The
  * atomic `count` and the walked `occupied` total are both emitted so a reader
  * can spot a persistent drift between them.
+ *
+ * A NULL handle emits `{"error":"null handle"}` and carries no `logger`
+ * attribute: with no instance there is no borrow to report.
  *
  * If @p provided is NULL, a fresh BufferDescriptor is allocated (the caller
  * must free it with BufferDescriptorRelease() + free()); otherwise the caller's

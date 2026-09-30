@@ -1,16 +1,30 @@
 # install_verification.cmake — uflib informational install check.
 #
 # Run via the `install_verification` target (cmake -P). Purely informational:
-# it (1) compares the library version (UFLIB_MAJOR.MINOR.PATCH) across three
-# independent sources and reports any drift, and (2) introspects the last origin
-# commit for a newly added artefact and checks its presence in the installed
-# copy. It never fails the build — even a detected mismatch exits 0.
+# it (1) compares the library version across three independent sources and
+# reports any drift, and (2) introspects the last origin commit for a newly
+# added artefact and checks its presence in the installed copy. It never fails
+# the build — even a detected mismatch exits 0.
 #
 #   Source          Origin               Extracted from
 #   ------------    ------------------   ----------------------------------------
 #   system install  installed library    ${INSTALL_PREFIX}/include/uflib/version.h
 #   git             committed HEAD       git show HEAD:include/uflib/version.h
 #   local copy      working tree         ${SOURCE_DIR}/include/uflib/version.h
+#
+# Two version numbers are checked, and they mean different things:
+#
+#   UFLIB_MAJOR.MINOR.PATCH   the release.  A difference across the three
+#                             sources is a real error — sources built against
+#                             different releases.
+#
+#   UFLIB_INTERNAL            the gate counter.  It moves once per approved
+#                             gate, not per release, so a working tree ahead of
+#                             a commit, or a system install behind one, will
+#                             routinely differ.  Reported the same way but not
+#                             called drift: a difference here is expected, and
+#                             labelling it [DRIFT] beside the release check
+#                             would train the reader to ignore both.
 #
 # Inputs (passed as -D from add_custom_target in CMakeLists.txt):
 #   INSTALL_PREFIX  — CMAKE_INSTALL_PREFIX (system install destination)
@@ -63,6 +77,19 @@ function(parse_version content out_var)
     endif()
 endfunction()
 
+# parse_internal(<content> <out_var>)
+# Extracts the incremental UFLIB_INTERNAL gate counter, or "N/A" when the macro
+# is absent — a tree predating the counter, which is information rather than an
+# error.  Kept separate from parse_version because the two are compared with
+# different severity; see the note at the top of this file.
+function(parse_internal content out_var)
+    if(content MATCHES "#define[ \t]+UFLIB_INTERNAL[ \t]+([0-9]+)")
+        set(${out_var} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+    else()
+        set(${out_var} "N/A" PARENT_SCOPE)
+    endif()
+endfunction()
+
 # report_compare(<label> <a> <b>)
 # Prints OK when both sides match, DRIFT when they differ, and a neutral
 # "unavailable" line when either side could not be determined (N/A).
@@ -76,18 +103,37 @@ function(report_compare label a b)
     endif()
 endfunction()
 
+# report_gate(<label> <a> <b>)
+# Deliberately NOT report_compare.  A differing gate counter is the ordinary
+# state — a working tree sits ahead of the last commit, an install behind it —
+# so it is labelled GATE rather than DRIFT.  Calling it drift would put a line
+# in this report that is wrong most of the time, and the reader would learn to
+# skip the whole block, including the release check that is not.
+function(report_gate label a b)
+    if("${a}" STREQUAL "N/A" OR "${b}" STREQUAL "N/A")
+        message(STATUS "  [  -- ] ${label}: ${a} vs ${b} (source unavailable)")
+    elseif("${a}" STREQUAL "${b}")
+        message(STATUS "  [  OK ] ${label}: ${a}")
+    else()
+        message(STATUS "  [GATE] ${label}: ${a} vs ${b} (different gates — expected)")
+    endif()
+endfunction()
+
 # ── Collect the three versions ─────────────────────────────────────────────
 
 # 1. system install
 set(INSTALLED_VERSION "N/A")
+set(INSTALLED_INTERNAL "N/A")
 set(_installed_header "${INSTALL_PREFIX}/include/uflib/version.h")
 if(EXISTS "${_installed_header}")
     file(READ "${_installed_header}" _installed_content)
     parse_version("${_installed_content}" INSTALLED_VERSION)
+    parse_internal("${_installed_content}" INSTALLED_INTERNAL)
 endif()
 
 # 2. git (committed HEAD)
 set(GIT_VERSION "N/A")
+set(GIT_INTERNAL "N/A")
 find_program(_git_executable git)
 if(_git_executable)
     execute_process(
@@ -99,15 +145,18 @@ if(_git_executable)
     )
     if(_git_rc EQUAL 0)
         parse_version("${_git_content}" GIT_VERSION)
+        parse_internal("${_git_content}" GIT_INTERNAL)
     endif()
 endif()
 
 # 3. local copy (working tree)
 set(LOCAL_VERSION "N/A")
+set(LOCAL_INTERNAL "N/A")
 set(_local_header "${SOURCE_DIR}/include/uflib/version.h")
 if(EXISTS "${_local_header}")
     file(READ "${_local_header}" _local_content)
     parse_version("${_local_content}" LOCAL_VERSION)
+    parse_internal("${_local_content}" LOCAL_INTERNAL)
 endif()
 
 # ── Report ─────────────────────────────────────────────────────────────────
@@ -115,14 +164,21 @@ endif()
 message(STATUS "--------------------------------------------------------------")
 message(STATUS "uflib install_verification — version drift check (informational)")
 message(STATUS "--------------------------------------------------------------")
-message(STATUS "  local copy     (working tree)  : ${LOCAL_VERSION}   [${_local_header}]")
-message(STATUS "  git HEAD       (committed)     : ${GIT_VERSION}")
-message(STATUS "  system install (${INSTALL_PREFIX}) : ${INSTALLED_VERSION}   [${_installed_header}]")
+message(STATUS "  local copy     (working tree)  : ${LOCAL_VERSION}   internal ${LOCAL_INTERNAL}   [${_local_header}]")
+message(STATUS "  git HEAD       (committed)     : ${GIT_VERSION}   internal ${GIT_INTERNAL}")
+message(STATUS "  system install (${INSTALL_PREFIX}) : ${INSTALLED_VERSION}   internal ${INSTALLED_INTERNAL}   [${_installed_header}]")
 message(STATUS "--------------------------------------------------------------")
 
 report_compare("local  vs  git           " "${LOCAL_VERSION}" "${GIT_VERSION}")
 report_compare("local  vs  system install" "${LOCAL_VERSION}" "${INSTALLED_VERSION}")
 report_compare("git    vs  system install" "${GIT_VERSION}" "${INSTALLED_VERSION}")
+
+# The gate counter, reported on its own line and with its own severity: see the
+# note at the top of this file for why a difference here is not called drift.
+message(STATUS "  -- UFLIB_INTERNAL (gate counter, not part of the release) --")
+report_gate("gate   local  vs  git           " "${LOCAL_INTERNAL}" "${GIT_INTERNAL}")
+report_gate("gate   local  vs  system install" "${LOCAL_INTERNAL}" "${INSTALLED_INTERNAL}")
+report_gate("gate   git    vs  system install" "${GIT_INTERNAL}" "${INSTALLED_INTERNAL}")
 
 if("${LOCAL_VERSION}" STREQUAL "N/A" OR
    "${GIT_VERSION}" STREQUAL "N/A" OR
@@ -130,9 +186,15 @@ if("${LOCAL_VERSION}" STREQUAL "N/A" OR
     message(STATUS "=> comparison incomplete — one or more sources unavailable")
 elseif("${LOCAL_VERSION}" STREQUAL "${GIT_VERSION}" AND
        "${LOCAL_VERSION}" STREQUAL "${INSTALLED_VERSION}")
-    message(STATUS "=> all three sources agree on ${LOCAL_VERSION}")
+    message(STATUS "=> all three sources agree on the release, ${LOCAL_VERSION}")
+    if("${LOCAL_INTERNAL}" STREQUAL "${GIT_INTERNAL}" AND
+       "${LOCAL_INTERNAL}" STREQUAL "${INSTALLED_INTERNAL}")
+        message(STATUS "   and on the gate counter, internal ${LOCAL_INTERNAL}")
+    else()
+        message(STATUS "   gate counters differ (${LOCAL_INTERNAL} / ${GIT_INTERNAL} / ${INSTALLED_INTERNAL}) — expected between a working tree, a commit and an install")
+    endif()
 else()
-    message(STATUS "=> DRIFT detected (see lines above) — informational only, build unaffected")
+    message(STATUS "=> RELEASE DRIFT detected (see lines above) — informational only, build unaffected")
 endif()
 message(STATUS "--------------------------------------------------------------")
 

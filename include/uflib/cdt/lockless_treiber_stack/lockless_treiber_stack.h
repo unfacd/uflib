@@ -36,6 +36,7 @@
 #include <stdbool.h>
 
 #include <uflib/cdt/lockless_treiber_stack/lockless_treiber_stack_type.h>
+#include <uflib/logger/logger_type.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +51,37 @@ extern "C" {
  * @return A new stack handle, or NULL on allocation failure.
  */
 PUBLIC_API LocklessTreiberStack *lockless_treiber_stack_create(void);
+
+/*!
+ * @brief Create an empty stack that reports its lifecycle through @p logger_ptr.
+ *
+ * Behaves exactly as lockless_treiber_stack_create(), and additionally reports
+ * creation, allocation failure and release through the supplied logger.  Nodes
+ * are never logged: push and steal-all stay exactly as they were, so a stack
+ * built this way has the same concurrency behaviour as one built without a
+ * logger.
+ *
+ * The logger is **borrowed, not owned**.  The stack stores the pointer and never
+ * destroys it, so the logger must outlive the stack: release the stack before
+ * releasing the logger.  A stack released after its logger would report through
+ * a dangling handle.
+ *
+ * @param[in] logger_ptr  Logger to report through, or NULL to report nothing.
+ *                        NULL gives exactly lockless_treiber_stack_create().
+ * @return A new stack handle, or NULL on allocation failure.
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * LocklessTreiberStack *stack = lockless_treiber_stack_create_with_logger(log_ptr);
+ * if (stack == NULL) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * lockless_treiber_stack_destroy(stack);   // the stack first —
+ * UfLoggerDestroy(log_ptr);                // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API LocklessTreiberStack *lockless_treiber_stack_create_with_logger(UfLogger *logger_ptr);
 
 /*!
  * @brief Release a stack handle.

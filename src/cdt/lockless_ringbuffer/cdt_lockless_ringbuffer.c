@@ -25,6 +25,8 @@
 
 #include "cdt_lockless_ringbuffer_priv.h"
 
+#include <uflib/logger/logger.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -180,20 +182,48 @@ sRingMpmcPop(LocklessRingBuffer *ring_ptr, void *elem_ptr)
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 LocklessRingBuffer *
-LocklessRingBufferCreate(size_t capacity, size_t elem_size, LocklessRingBufferMode mode)
+LocklessRingBufferCreateWithLogger(size_t capacity, size_t elem_size, LocklessRingBufferMode mode,
+                                   UfLogger *logger_ptr)
 {
-    if (capacity == 0 || elem_size == 0) return NULL;
+    if (capacity == 0 || elem_size == 0) {
+        /* Each rejection below is reported separately: they all used to reach
+           the caller as the same bare NULL, with nothing to tell them apart. */
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "ring buffer rejected: capacity=%zu elem_size=%zu (both must be non-zero)",
+                            capacity, elem_size);
+        }
+        return NULL;
+    }
     if (mode != LOCKLESS_RINGBUF_MODE_SPSC &&
         mode != LOCKLESS_RINGBUF_MODE_MPSC &&
         mode != LOCKLESS_RINGBUF_MODE_MPMC) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "ring buffer rejected: mode %d is not SPSC, MPSC or MPMC", (int)mode);
+        }
         return NULL;
     }
 
     capacity = sNextPowerOfTwo(capacity);
-    if (capacity == 0) return NULL;   /* requested size unrepresentable */
+    if (capacity == 0) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "ring buffer rejected: requested capacity is unrepresentable");
+        }
+        return NULL;   /* requested size unrepresentable */
+    }
 
     LocklessRingBuffer *ring_ptr = calloc(1, sizeof(*ring_ptr));
-    if (!ring_ptr) return NULL;
+    if (!ring_ptr) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "ring buffer handle allocation failed");
+        }
+        return NULL;
+    }
+
+    /* Set the borrow first, so every failure below can be reported through it. */
+    ring_ptr->uf_logger = logger_ptr;
 
     ring_ptr->capacity  = capacity;
     ring_ptr->usable    = (mode == LOCKLESS_RINGBUF_MODE_SPSC) ? capacity - 1 : capacity;
@@ -206,6 +236,11 @@ LocklessRingBufferCreate(size_t capacity, size_t elem_size, LocklessRingBufferMo
 
     ring_ptr->data = sCallocChecked(capacity, elem_size);
     if (!ring_ptr->data) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "ring buffer storage allocation failed: capacity=%zu elem_size=%zu",
+                            capacity, elem_size);
+        }
         free(ring_ptr);
         return NULL;
     }
@@ -213,6 +248,10 @@ LocklessRingBufferCreate(size_t capacity, size_t elem_size, LocklessRingBufferMo
     if (mode != LOCKLESS_RINGBUF_MODE_SPSC) {
         ring_ptr->seq = sCallocChecked(capacity, sizeof(_Atomic(size_t)));
         if (!ring_ptr->seq) {
+            if (logger_ptr != NULL) {
+                UF_LOGGER_ERROR(logger_ptr,
+                                "ring buffer sequence allocation failed: capacity=%zu", capacity);
+            }
             free(ring_ptr->data);
             free(ring_ptr);
             return NULL;
@@ -222,15 +261,52 @@ LocklessRingBufferCreate(size_t capacity, size_t elem_size, LocklessRingBufferMo
         }
     }
 
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr,
+                        "ring buffer created: capacity=%zu elem_size=%zu mode=%d",
+                        capacity, elem_size, (int)mode);
+    }
     return ring_ptr;
+}
+
+LocklessRingBuffer *
+LocklessRingBufferCreate(size_t capacity, size_t elem_size, LocklessRingBufferMode mode)
+{
+    return LocklessRingBufferCreateWithLogger(capacity, elem_size, mode, NULL);
 }
 
 void
 LocklessRingBufferDestroy(LocklessRingBuffer *ring_ptr)
 {
+    UfLogger *logger_ptr;
+    size_t    unconsumed;
+
     if (!ring_ptr) return;
+
+    /* Read the borrow before anything is released: it lives in the handle that
+       is about to be freed. */
+    logger_ptr = ring_ptr->uf_logger;
+
+    /* Quiescent by contract, so this read is exact rather than the approximate
+       one the live accessor returns, and it is taken before the storage it
+       describes is released.  Elements still in the buffer at teardown were
+       never consumed — the one leak this structure can have, and previously an
+       invisible one. */
+    unconsumed = LocklessRingBufferSize(ring_ptr);
+
     free(ring_ptr->seq);
     free(ring_ptr->data);
+
+    if (logger_ptr != NULL) {
+        if (unconsumed != 0) {
+            UF_LOGGER_WARN(logger_ptr,
+                           "ring buffer destroyed with %zu unconsumed element(s) of %zu byte(s)",
+                           unconsumed, ring_ptr->elem_size);
+        } else {
+            UF_LOGGER_DEBUG(logger_ptr, "ring buffer destroyed: empty, capacity=%zu",
+                            ring_ptr->capacity);
+        }
+    }
     free(ring_ptr);
 }
 

@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Independent Lua-styled verifier: lex strings/comments, then reject operators."""
+import sys
+
+class Err(Exception):
+    def __init__(self, msg, line, col):
+        super().__init__(msg)
+        self.line, self.col, self.msg = line, col, msg
+
+def verify(src):
+    i, n, line, col = 0, len(src), 1, 1
+    def peek(k=0):
+        j = i + k
+        return src[j] if j < n else ""
+    def get():
+        nonlocal i, line, col
+        if i >= n:
+            return ""
+        c = src[i]; i += 1
+        if c == "\n":
+            line += 1; col = 1
+        else:
+            col += 1
+        return c
+    depth = 0
+    saw_eq = 0
+    last_rbrace_zero = 0
+    while i < n:
+        c = peek()
+        if c in " \t\r\n":
+            get(); continue
+        if c == "-" and peek(1) == "-":
+            get(); get()
+            if peek() == "[" and peek(1) == "[":
+                get(); get()
+                while peek() and not (peek() == "]" and peek(1) == "]"):
+                    get()
+                if peek() == "]":
+                    get(); get()
+            else:
+                while peek() and peek() != "\n":
+                    get()
+            continue
+        if c in "\"'":
+            q = get(); last_rbrace_zero = 0
+            while peek() and peek() != q:
+                if get() == "\\" and peek():
+                    get()
+            if peek() != q:
+                raise Err("unterminated string", line, col)
+            get(); continue
+        if c == "{":
+            depth += 1; last_rbrace_zero = 0; get(); continue
+        if c == "}":
+            depth -= 1
+            if depth < 0:
+                raise Err("unbalanced }", line, col)
+            get()
+            last_rbrace_zero = 1 if depth == 0 else 0
+            continue
+        if c == "=":
+            saw_eq = 1; last_rbrace_zero = 0; get(); continue
+        if c in "+*/%<>#":
+            raise Err("operator-not-allowed", line, col)
+        if c == "." and peek(1) == ".":
+            raise Err("concat", line, col)
+        if c == "(":
+            raise Err("call", line, col)
+        if c.isalpha() or c == "_":
+            sl, sc = line, col
+            ident = ""
+            while peek().isalnum() or peek() == "_":
+                ident += get()
+            if ident in ("and", "or", "not"):
+                raise Err("boolean-operator", sl, sc)
+            if ident == "require":
+                raise Err("call", sl, sc)
+            j = i
+            while j < n and src[j] in " \t\r\n":
+                j += 1
+            nxt = src[j] if j < n else ""
+            if ident != "return" and nxt == "{":
+                raise Err("expected '=' in binding", sl, sc)
+            if last_rbrace_zero and ident != "return" and nxt != "=":
+                raise Err("trailing-garbage", sl, sc)
+            last_rbrace_zero = 0
+            continue
+        get()
+        last_rbrace_zero = 0
+    if depth != 0:
+        raise Err("unbalanced braces", line, col)
+    if not saw_eq and "return" not in src:
+        raise Err("expected binding", 1, 1)
+
+def main():
+    if len(sys.argv) < 2:
+        print("usage: ufconfig-verify FILE", file=sys.stderr)
+        return 2
+    src = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+    try:
+        verify(src)
+        print("OK")
+        return 0
+    except Err as e:
+        print("REJECT %d:%d %s" % (e.line, e.col, e.msg))
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

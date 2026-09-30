@@ -34,6 +34,7 @@
 #include <uflib/main_types.h>
 #include <uflib/uflib_defs.h>
 #include <uflib/recycler_v2/instance_holder_v2_type.h>
+#include <uflib/logger/logger_type.h>
 
 /* ── Opaque context type ──────────────────────────────────────────────────── */
 
@@ -205,6 +206,7 @@ typedef struct RecyclerV2PoolConfig {
     const char                  *ufsrv_class;          ///< Server class e.g. "ufsrvwebsock" (NULL → no class subdirectory)
     const char                  *instance_id;          ///< Instance discriminator e.g. "1", "east" (NULL → no instance subdirectory)
     RecyclerV2StorageInitPolicy  storage_init_policy;  ///< Stale-blob policy on init (OVERWRITE / APPEND / ARCHIVE)
+    UfLogger                    *logger_ptr;           ///< Borrowed diagnostic sink (NULL → no reporting); see DescribeRecycler()
 } RecyclerV2PoolConfig;
 
 #endif /* UFLIB_RECYCLER_V2_RECYCLER_V2_TYPE_H */

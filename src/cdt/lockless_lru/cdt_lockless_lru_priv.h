@@ -27,6 +27,7 @@
 #include <uflib/cdt/lockless_lru/cdt_lockless_lru.h>
 #include <uflib/cdt/lockless_lru/cdt_lockless_lru_type.h>
 #include <uflib/cdt/lockless_lru/cdt_lockless_lru_defs.h>
+#include <uflib/logger/logger_type.h>
 
 /* ── Slot sentinel values ───────────────────────────────────────────────── */
 
@@ -71,7 +72,7 @@ _Static_assert(sizeof(LruSlot) == 64, "LruSlot must be cache-line sized (64 byte
  * (forward-declared typedef in cdt_lockless_lru_type.h).
  *
  * Cache-line layout:
- *   Line 0 (bytes  0– 63): slots, capacity, max_items, clock_hand
+ *   Line 0 (bytes  0– 63): slots, capacity, max_items, clock_hand, uf_logger
  *   Line 1 (bytes 64–127): count (isolated — no false sharing with clock_hand)
  *
  * @p clock_hand and @p count are both hot atomics updated on every
@@ -80,13 +81,21 @@ _Static_assert(sizeof(LruSlot) == 64, "LruSlot must be cache-line sized (64 byte
  * a thread doing eviction (write clock_hand) and a thread doing insert
  * (write count).  The @p _pad member pushes @p count to its own cache
  * line, eliminating this conflict.
+ *
+ * @p uf_logger is borrowed, never owned, and never touched by Get/Set/Remove:
+ * it is read only when the handle is created or released.  It is declared after
+ * @p clock_hand and its 8 bytes are taken out of @p _pad rather than added after
+ * it, which keeps every existing field — including @p count's line-1 isolation —
+ * at exactly the offset it had before.  Appending it instead would push
+ * @p count to offset 72 and the assertion below would refuse to compile.
  */
 struct LocklessLru {
     LruSlot          *slots;       ///< Read-mostly (set at init)
     size_t            capacity;    ///< Read-mostly (set at init)
     size_t            max_items;   ///< Read-mostly (set at init)
     _Atomic(size_t)   clock_hand;  ///< HOT — CLOCK sweep cursor (every eviction)
-    char              _pad[32];    ///< Cache-line isolation: push count to line 1
+    UfLogger         *uf_logger;   ///< Borrowed diagnostic sink (write-once); NULL = silent.
+    char              _pad[24];    ///< Cache-line isolation: push count to line 1
     _Atomic(size_t)   count;       ///< HOT — current item count (every insert/remove)
 };
 

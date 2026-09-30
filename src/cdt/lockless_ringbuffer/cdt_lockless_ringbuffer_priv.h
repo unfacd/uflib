@@ -30,6 +30,7 @@
 #include <uflib/cdt/lockless_ringbuffer/cdt_lockless_ringbuffer.h>
 #include <uflib/cdt/lockless_ringbuffer/cdt_lockless_ringbuffer_type.h>
 #include <uflib/cdt/lockless_ringbuffer/cdt_lockless_ringbuffer_defs.h>
+#include <uflib/logger/logger_type.h>
 
 #define UFLIB_CDT_LOCKLESS_RINGBUFFER_CACHE_LINE_SIZE \
         PRIV_CONFIG_DEFAULT_LOCKLESS_RINGBUFFER_CACHE_LINE_SIZE
@@ -44,7 +45,7 @@
  * sizeof(LocklessRingBufferMode) == 4):
  *
  *   Line 0 (bytes  0– 63): cold, read-mostly metadata (capacity, usable,
- *                          mask, elem_size, seq, data, mode).
+ *                          mask, elem_size, seq, data, uf_logger, mode).
  *   Line 1 (bytes 64–127): `tail` — producer cursor, RFO'd by every producer.
  *   Line 2 (bytes 128–191): `head` — consumer cursor, RFO'd by every consumer.
  *
@@ -53,6 +54,19 @@
  * cache line on every operation (measured ~2x throughput cost in the
  * sibling LocklessMpscQueue).  The `_pad_*` members push each cursor onto
  * its own line; the offsets are locked by _Static_assert below.
+ *
+ * @p uf_logger is borrowed, never owned, and never touched by push/pop: it is
+ * read only when the handle is created or released, which is why it belongs to
+ * the cold group and why its 8 bytes come out of @p _pad_meta rather than being
+ * added after it — appending it would move @p tail off line 1 and the offset
+ * assertion below would (correctly) refuse to compile.
+ *
+ * @p uf_logger is declared ahead of @p mode, not after it: a 4-byte enum
+ * followed by an 8-byte pointer leaves 4 bytes of implicit alignment padding
+ * that @p _pad_meta cannot see, and the cold group would no longer be exactly
+ * one cache line.  Declaring the pointer first keeps the group at 60 bytes with
+ * a 4-byte pad and no implicit holes.  This moved @p mode from offset 48 to 56;
+ * the struct is private, so nothing outside this module observes the offset.
  */
 struct LocklessRingBuffer {
     /* Cold metadata — read-mostly after create (cache line 0). */
@@ -62,13 +76,15 @@ struct LocklessRingBuffer {
     size_t              elem_size;     ///< Bytes per element.
     _Atomic(size_t)    *seq;           ///< Per-slot sequence numbers (MPSC/MPMC only; NULL for SPSC).
     unsigned char      *data;          ///< Raw element storage.
+    UfLogger           *uf_logger;     ///< Borrowed diagnostic sink (write-once); NULL = silent.
     LocklessRingBufferMode mode;       ///< Concurrency mode (SPSC/MPSC/MPMC).
     char                _pad_meta[UFLIB_CDT_LOCKLESS_RINGBUFFER_CACHE_LINE_SIZE
                                    - (2 * sizeof(size_t) /* capacity, usable */
                                    + 2 * sizeof(size_t) /* mask, elem_size */
                                    + sizeof(_Atomic(size_t) *) /* seq */
                                    + sizeof(unsigned char *) /* data */
-                                   + sizeof(LocklessRingBufferMode))];
+                                   + sizeof(UfLogger *) /* uf_logger */
+                                   + sizeof(LocklessRingBufferMode))]; /* mode */
 
     /* Producer cursor (cache line 1). */
     _Atomic(size_t)     tail;          ///< Producer cursor: number of successful pushes.

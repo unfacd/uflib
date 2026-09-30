@@ -22,6 +22,7 @@
 #define LOCKLESS_TREIBER_STACK_PRIV_H
 
 #include <uflib/cdt/lockless_treiber_stack/lockless_treiber_stack_type.h>
+#include <uflib/logger/logger_type.h>
 
 /*!
  * A lock-free Treiber stack: a single atomically-accessed head.
@@ -31,9 +32,15 @@
  *
  * This struct is private: the public header advertises only the opaque
  * LocklessTreiberStack handle.
+ *
+ * @p uf_logger is borrowed, never owned, and is never touched by push/steal_all:
+ * it is read only when the handle is created or released, so it stays off the
+ * hot path and out of any atomic protocol.  NULL means the stack reports
+ * nothing, which is the behaviour every caller had before the field existed.
  */
 struct LocklessTreiberStack {
-    _Atomic(struct LocklessTreiberStackNode *) head;     /*!< Top of the stack. */
+    _Atomic(struct LocklessTreiberStackNode *) head;      /*!< Top of the stack. */
+    UfLogger                                  *uf_logger; /*!< Borrowed diagnostic sink; NULL = silent. */
 };
 
 #endif /* LOCKLESS_TREIBER_STACK_PRIV_H */

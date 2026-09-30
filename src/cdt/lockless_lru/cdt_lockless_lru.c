@@ -18,6 +18,8 @@
 
 #include "cdt_lockless_lru_priv.h"
 
+#include <uflib/logger/logger.h>
+
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
@@ -305,31 +307,65 @@ sClockEvict(LocklessLru *lru_ptr)
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 PUBLIC_API LocklessLru *
-LocklessLruCreate(const LocklessLruConfig *config_ptr)
+LocklessLruCreateWithLogger(const LocklessLruConfig *config_ptr, UfLogger *logger_ptr)
 {
     size_t capacity_hint = config_ptr ? config_ptr->capacity_hint : 0;
     if (capacity_hint == 0)
         capacity_hint = CONFIG_DEFAULT_LOCKLESS_LRU_CAPACITY_HINT;
 
+    /* Each rejection below is reported separately: they all used to reach the
+       caller as the same bare NULL, with nothing to tell them apart. */
     const size_t mult = CONFIG_DEFAULT_LOCKLESS_LRU_PROBE_HEADROOM_MULT;
-    if (mult != 0 && capacity_hint > SIZE_MAX / mult)
+    if (mult != 0 && capacity_hint > SIZE_MAX / mult) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "LRU cache rejected: capacity_hint %zu overflows with headroom multiplier %zu",
+                            capacity_hint, mult);
+        }
         return NULL; /* capacity_hint * headroom overflows size_t */
+    }
 
     size_t min_phys = capacity_hint * mult;
     if (min_phys < PRIV_CONFIG_DEFAULT_LOCKLESS_LRU_MIN_SLOTS)
         min_phys = PRIV_CONFIG_DEFAULT_LOCKLESS_LRU_MIN_SLOTS;
 
     size_t phys_capacity = sNextPow2(min_phys);
-    if (phys_capacity == 0) return NULL;
-    if (phys_capacity > SIZE_MAX / sizeof(LruSlot)) return NULL;
+    if (phys_capacity == 0) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "LRU cache rejected: slot count %zu is unrepresentable", min_phys);
+        }
+        return NULL;
+    }
+    if (phys_capacity > SIZE_MAX / sizeof(LruSlot)) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "LRU cache rejected: %zu slots overflow the slot table size",
+                            phys_capacity);
+        }
+        return NULL;
+    }
 
     LocklessLru *lru_ptr = calloc(1, sizeof(LocklessLru));
-    if (!lru_ptr) return NULL;
+    if (!lru_ptr) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "LRU cache handle allocation failed");
+        }
+        return NULL;
+    }
+
+    /* Set the borrow first, so every failure below can be reported through it. */
+    lru_ptr->uf_logger = logger_ptr;
 
     /* aligned_alloc guarantees 64-byte alignment so every LruSlot sits on
      * its own cache line — no slot ever crosses a cache-line boundary. */
     lru_ptr->slots = aligned_alloc(64, phys_capacity * sizeof(LruSlot));
     if (!lru_ptr->slots) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "LRU cache slot table allocation failed: %zu slots of %zu byte(s)",
+                            phys_capacity, sizeof(LruSlot));
+        }
         free(lru_ptr);
         return NULL;
     }
@@ -349,15 +385,46 @@ LocklessLruCreate(const LocklessLruConfig *config_ptr)
         atomic_init(&lru_ptr->slots[i].data, (LruClientData *)NULL);
         atomic_init(&lru_ptr->slots[i].gen, (uint64_t)0);
     }
+
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr,
+                        "LRU cache created: max_items=%zu physical_slots=%zu",
+                        capacity_hint, phys_capacity);
+    }
     return lru_ptr;
+}
+
+PUBLIC_API LocklessLru *
+LocklessLruCreate(const LocklessLruConfig *config_ptr)
+{
+    return LocklessLruCreateWithLogger(config_ptr, NULL);
 }
 
 PUBLIC_API void
 LocklessLruDestroy(LocklessLru *lru_ptr)
 {
+    UfLogger *logger_ptr;
+    size_t    resident;
+
     if (!lru_ptr) return;
+
+    /* Read the borrow before anything is released: it lives in the handle that
+       is about to be freed. */
+    logger_ptr = lru_ptr->uf_logger;
+
+    /* Unlike a queue, a cache is expected to be holding entries at teardown, so
+       this is reported at DEBUG rather than as a warning: it is a sizing
+       datapoint (was max_items ever the binding constraint?), not an anomaly. */
+    resident = atomic_load_explicit(&lru_ptr->count, memory_order_relaxed);
+
     free(lru_ptr->slots);
     lru_ptr->slots = NULL;
+
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr,
+                        "LRU cache destroyed: %zu of %zu item(s) still resident",
+                        resident, lru_ptr->max_items);
+    }
     free(lru_ptr);
 }
 
@@ -656,13 +723,19 @@ DescribeLocklessLru(LocklessLru *lru_ptr, BufferDescriptor *provided)
 
     double load_factor = (capacity > 0) ? (double)occupied / (double)capacity : 0.0;
 
+    /* Whether this cache reports anywhere.  Emitted because "no diagnostics
+       appeared" and "no diagnostics were configured" are otherwise
+       indistinguishable from the outside, and they call for different fixes. */
+    const char *logger_state = lru_ptr->uf_logger != NULL ? "enabled" : "none";
+
     BufferDescriptorAppendFormatted(provided,
         "{\"capacity\":%zu,\"max_items\":%zu,\"count\":%zu,\"clock_hand\":%zu,"
+        "\"logger\":\"%s\","
         "\"load_factor\":%.4f,"
         "\"occupancy\":{\"occupied\":%zu,\"empty\":%zu,\"tombstone\":%zu,"
         "\"referenced\":%zu}",
-        capacity, max_items, count, clock_hand, load_factor,
-        occupied, empty, tombstone, referenced);
+        capacity, max_items, count, clock_hand, logger_state,
+        load_factor, occupied, empty, tombstone, referenced);
 
     /* Pass 2 — one entry per occupied slot. */
     BufferDescriptorAppendFormatted(provided, ",\"slots\":[");

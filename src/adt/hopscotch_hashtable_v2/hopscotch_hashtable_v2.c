@@ -21,6 +21,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <pthread.h>
+#include <uflib/logger/logger.h>
 
 /* ── Static helpers (s prefix) ──────────────────────────────────────── */
 
@@ -221,15 +222,21 @@ sResize(HopscotchHashTable *ht_ptr)
 /* ── Lifecycle ────────────────────────────────────────────────────────── */
 
 PUBLIC_API HopscotchHashTable *
-HopscotchHashTableCreate(const HopscotchHashTableConfig *config_ptr)
+HopscotchHashTableCreateWithLogger(const HopscotchHashTableConfig *config_ptr, UfLogger *logger_ptr)
 {
     static const HopscotchHashTableConfig sDefaultConfig = {0};
     const HopscotchHashTableConfig *cfg = config_ptr ? config_ptr : &sDefaultConfig;
 
     HopscotchHashTable *ht_ptr = calloc(1, sizeof(HopscotchHashTable));
     if (!ht_ptr) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "hopscotch table handle allocation failed");
+        }
         return NULL;
     }
+
+    /* Set the borrow first, so every failure below can be reported through it. */
+    ht_ptr->uf_logger = logger_ptr;
 
     /* Resolve defaults for zero fields */
     size_t pfactor = cfg->pfactor ? cfg->pfactor
@@ -242,6 +249,11 @@ HopscotchHashTableCreate(const HopscotchHashTableConfig *config_ptr)
     size_t capacity = 1UL << pfactor;
     ht_ptr->buckets_ptr = calloc(capacity, sizeof(HopscotchBucket));
     if (!ht_ptr->buckets_ptr) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "hopscotch table bucket array allocation failed: buckets=%zu",
+                            capacity);
+        }
         free(ht_ptr);
         return NULL;
     }
@@ -259,17 +271,43 @@ HopscotchHashTableCreate(const HopscotchHashTableConfig *config_ptr)
     ht_ptr->config.hash_func_callback_ptr = cfg->hash_func_callback_ptr;
     ht_ptr->config.key_compare_callback_ptr = cfg->key_compare_callback_ptr;
 
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr,
+                        "hopscotch table created: buckets=%zu hop_range=%zu key_len=%zu",
+                        capacity, hop_range, key_len);
+    }
+
     return ht_ptr;
+}
+
+PUBLIC_API HopscotchHashTable *
+HopscotchHashTableCreate(const HopscotchHashTableConfig *config_ptr)
+{
+    return HopscotchHashTableCreateWithLogger(config_ptr, NULL);
 }
 
 PUBLIC_API void
 HopscotchHashTableDestroy(HopscotchHashTable *ht_ptr)
 {
+    UfLogger *logger_ptr;
+
     if (!ht_ptr) {
         return;  /* NULL-safe */
     }
+
+    /* Read the borrow before anything is released: it lives in the handle that
+       is about to be freed. */
+    logger_ptr = ht_ptr->uf_logger;
+
     free(ht_ptr->buckets_ptr);
     ht_ptr->buckets_ptr = NULL;
+
+    if (logger_ptr != NULL) {
+        /* Stored items are caller-owned, so a non-empty table at teardown is a
+           sizing datapoint rather than an anomaly — reported, not warned about. */
+        UF_LOGGER_DEBUG(logger_ptr,
+                        "hopscotch table destroyed: %zu entry(ies) discarded", ht_ptr->entry_count);
+    }
     free(ht_ptr);
 }
 

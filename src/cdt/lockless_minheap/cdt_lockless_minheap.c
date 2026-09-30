@@ -30,6 +30,7 @@
 #include "cdt_lockless_minheap_priv.h"
 
 #include <uflib/cdt/lockless_treiber_stack/lockless_treiber_stack.h>
+#include <uflib/logger/logger.h>
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -176,34 +177,68 @@ sSizeSub(struct LocklessMinHeap *h)
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 PUBLIC_API struct LocklessMinHeap *
-LocklessMinHeapCreate(void)
+LocklessMinHeapCreateWithLogger(UfLogger *logger_ptr)
 {
     struct LocklessMinHeap *h = calloc(1, sizeof(*h));
-    if (!h)
+    if (!h) {
+        /* Previously this failure reached the caller as a bare NULL and nothing
+           else: no reason, and no record that it happened. */
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "min-heap handle allocation failed");
+        }
         return NULL;
+    }
 
-    h->retired = lockless_treiber_stack_create();
+    /* Set the borrow before any sub-allocation, so every path below can report
+       and so the handle is never briefly a logger-less half-built structure. */
+    h->uf_logger = logger_ptr;
+
+    /* The retire stack borrows the same logger: one handle covers the whole
+       structure, so a diagnostic never depends on which half reported it. */
+    h->retired = lockless_treiber_stack_create_with_logger(logger_ptr);
     if (!h->retired) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "min-heap retire stack allocation failed");
+        }
         free(h);
         return NULL;
     }
 
     h->head = sMakeNode(INT64_MIN, NULL);
     if (!h->head) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "min-heap sentinel allocation failed");
+        }
         lockless_treiber_stack_destroy(h->retired);
         free(h);
         return NULL;
     }
 
     atomic_store_explicit(&h->approx_size, 0, memory_order_relaxed);
+
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr, "min-heap created");
+    }
     return h;
+}
+
+PUBLIC_API struct LocklessMinHeap *
+LocklessMinHeapCreate(void)
+{
+    return LocklessMinHeapCreateWithLogger(NULL);
 }
 
 PUBLIC_API void
 LocklessMinHeapDestroy(struct LocklessMinHeap *h)
 {
+    UfLogger *logger_ptr;
+
     if (!h)
         return;
+
+    /* Read the borrow before anything is released: it lives in the handle that
+       is about to be freed. */
+    logger_ptr = h->uf_logger;
 
     /* Free the live chain.  Quiescent-only: no concurrent insert/delmin. */
     if (h->head) {
@@ -219,7 +254,14 @@ LocklessMinHeapDestroy(struct LocklessMinHeap *h)
     }
 
     LocklessMinHeapReclaim(h);
+
+    /* The retire stack borrows the same logger, so release it while the borrow
+       is still valid; it reports its own release. */
     lockless_treiber_stack_destroy(h->retired);
+
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr, "min-heap destroyed");
+    }
     free(h);
 }
 
@@ -327,9 +369,14 @@ DescribeLocklessMinHeap(struct LocklessMinHeap *h, BufferDescriptor *provided)
         live++;
     }
 
+    /* Whether this queue reports anywhere.  Emitted because "no diagnostics
+       appeared" and "no diagnostics were configured" are otherwise
+       indistinguishable from the outside, and they call for different fixes. */
+    const char *logger_state = h->uf_logger != NULL ? "enabled" : "none";
+
     BufferDescriptorAppendFormatted(provided,
-        "{\"approx_size\":%zu,\"live_nodes\":%zu,\"entries\":[",
-        approx, live);
+        "{\"approx_size\":%zu,\"live_nodes\":%zu,\"logger\":\"%s\",\"entries\":[",
+        approx, live, logger_state);
 
     bool first = true;
     for (struct LocklessMinHeapNode *n = sUnmark(sLoadNext(h->head, memory_order_relaxed));

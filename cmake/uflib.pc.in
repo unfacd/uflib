@@ -7,6 +7,26 @@ Name: uflib
 Description: C utility library for the ufsrv platform (ADTs, crypto, DB abstraction, networking)
 Version: @UFLIB_VERSION@
 Requires.private: openssl
+# -luflib alone.  The vendored archives — K12, lzf, mjson, protobuf-c and the
+# logger's zlog backend — are folded into libuflib.a at build time, so naming
+# them here would be redundant at best.  At worst it was wrong: `-lzlog`
+# resolved to whichever libzlog the loader found first rather than the one
+# installed beside libuflib, giving a pkg-config consumer a different backend
+# copy from the one uflib itself was built against.
 Libs: -L${libdir} -luflib
-Libs.private: -lssl -lcrypto
+# -lm is here because quirc's identify.o carries three libm relocations (rint
+# twice, sqrt once) and glibc does not export either from libc.so.6.  That
+# object is inside the folded archive whenever UFLIB_CAPABILITY_QUIRC was on,
+# and a static link that reaches UfUtilsQrCodeDecode extracts it.  Libs.private
+# is unconditional by construction — it cannot be conditioned on which symbols
+# a consumer calls — so it is named for every static pkg-config link, and in a
+# build without the capability it resolves to nothing.
+#
+# -lqrencode is deliberately absent.  The encoder names it and the consumer
+# names the encoder: a build that carries the QRENCODE translation unit has it
+# on the consumer's link line through CMake's own interface, and a pkg-config
+# consumer that calls UfUtilsQrCodeEncodeText adds it itself.  Adding it here
+# would make every uflib consumer depend on a library most of them never call —
+# the contract hiredis and libmariadb already follow.
+Libs.private: -lssl -lcrypto -lm
 Cflags: -I${includedir}

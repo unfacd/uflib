@@ -33,6 +33,12 @@ typedef struct DistinctArrayDescriptor {
     __unused size_t storage_slot_idx; ///< (unused) Legacy slot tracker — retained for ABI compatibility
 } DistinctArrayDescriptor;
 
+/*! Callback invoked by DistinctArrayIterate for each populated slot.
+ *
+ * @p ctx_ptr is the opaque value handed to DistinctArrayIterate, passed through unmodified.
+ */
+typedef void (*DistinctArrayIterateCallback)(void *ctx_ptr, uint8_t *item);
+
 /*! Duplicate-free variable-size array backed by contiguous slab allocation.
  *
  * Items are stored in fixed-width slots within a contiguous block.  An embedded

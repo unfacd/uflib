@@ -42,6 +42,7 @@
 #include <unistd.h>
 
 #include <uflib/adt/adt_minheap.h>
+#include <uflib/logger/logger.h>
 
 /* ── Internal key-mode tags ────────────────────────────────────────────── */
 
@@ -72,6 +73,7 @@ struct MinHeap {
     int          size;          /* live entries */
     int          cap;           /* allocated entries */
     int          mode;          /* HEAP_MODE_PTR or HEAP_MODE_I64 */
+    UfLogger     *uf_logger;    /* borrowed diagnostic sink (write-once); NULL = silent */
 };
 
 /* ── Comparators (public) ──────────────────────────────────────────────── */
@@ -123,14 +125,26 @@ sGrowTo(MinHeap *h, int needed)
 }
 
 static MinHeap *
-sCreateCommon(int initial_capacity, MinHeapCmpFn cmp, int mode)
+sCreateCommon(int initial_capacity, MinHeapCmpFn cmp, int mode, UfLogger *logger_ptr)
 {
-    if (initial_capacity < 0)
+    if (initial_capacity < 0) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "min-heap rejected: negative initial capacity %d", initial_capacity);
+        }
         return NULL;
+    }
 
     MinHeap *h = (MinHeap *)calloc(1, sizeof(*h));
-    if (!h)
+    if (!h) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "min-heap handle allocation failed");
+        }
         return NULL;
+    }
+
+    /* Set the borrow before the grow below, so its failure can be reported. */
+    h->uf_logger = logger_ptr;
 
     h->compare_func = cmp;
     h->mode = mode;
@@ -140,8 +154,17 @@ sCreateCommon(int initial_capacity, MinHeapCmpFn cmp, int mode)
 
     int want = initial_capacity > 0 ? initial_capacity : HEAP_DEFAULT_CAPACITY;
     if (sGrowTo(h, want) != MINHEAP_OK) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "min-heap entry array allocation failed: capacity=%d", want);
+        }
         free(h);
         return NULL;
+    }
+
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr, "min-heap created: mode=%s capacity=%d",
+                        mode == HEAP_MODE_I64 ? "i64" : "ptr", h->cap);
     }
     return h;
 }
@@ -239,28 +262,55 @@ sSiftDownI64(MinHeap *h, int hole, MinHeapEntry last, int n)
 /* ── Lifecycle ─────────────────────────────────────────────────────────── */
 
 MinHeap *
-MinHeapCreate(int initial_capacity, MinHeapCmpFn comp_func)
+MinHeapCreateWithLogger(int initial_capacity, MinHeapCmpFn comp_func, UfLogger *logger_ptr)
 {
     if (!comp_func)
         comp_func = MinHeapCompareIntKeys;
-    return sCreateCommon(initial_capacity, comp_func, HEAP_MODE_PTR);
+    return sCreateCommon(initial_capacity, comp_func, HEAP_MODE_PTR, logger_ptr);
+}
+
+MinHeap *
+MinHeapCreate(int initial_capacity, MinHeapCmpFn comp_func)
+{
+    return MinHeapCreateWithLogger(initial_capacity, comp_func, NULL);
+}
+
+MinHeap *
+MinHeapCreateI64WithLogger(int initial_capacity, UfLogger *logger_ptr)
+{
+    return sCreateCommon(initial_capacity, NULL, HEAP_MODE_I64, logger_ptr);
 }
 
 MinHeap *
 MinHeapCreateI64(int initial_capacity)
 {
-    return sCreateCommon(initial_capacity, NULL, HEAP_MODE_I64);
+    return MinHeapCreateI64WithLogger(initial_capacity, NULL);
 }
 
 void
 MinHeapDestroy(MinHeap *h)
 {
+    UfLogger *logger_ptr;
+    int       live;
+
     if (!h)
         return;
+
+    /* Read the borrow before anything is released: it lives in the handle that
+       is about to be freed. */
+    logger_ptr = h->uf_logger;
+    live = h->size;
+
     free(h->entries);
     h->entries = NULL;  /* defensive: a stale handle can no longer reach the array */
     h->size = 0;
     h->cap = 0;
+
+    if (logger_ptr != NULL) {
+        /* Entries are caller-owned pointers, so a non-empty heap at teardown is a
+           sizing datapoint rather than an anomaly — reported, not warned about. */
+        UF_LOGGER_DEBUG(logger_ptr, "min-heap destroyed: %d entry(ies) discarded", live);
+    }
     free(h);
 }
 
@@ -456,13 +506,19 @@ MinHeapDescribe(const MinHeap *h, BufferDescriptor *provided)
 
     double load_factor = (h->cap > 0) ? (double)h->size / (double)h->cap : 0.0;
 
+    /* Whether this heap reports anywhere.  Emitted because "no diagnostics
+       appeared" and "no diagnostics were configured" are otherwise
+       indistinguishable from the outside, and they call for different fixes. */
+    const char *logger_state = h->uf_logger != NULL ? "enabled" : "none";
+
     BufferDescriptorAppendFormatted(provided,
         "{\"size\":%d,\"capacity\":%d,\"mode\":\"%s\",\"load_factor\":%.4f,"
-        "\"has_comparator\":%s",
+        "\"has_comparator\":%s,\"logger\":\"%s\"",
         h->size, h->cap,
         h->mode == HEAP_MODE_I64 ? "i64" : "ptr",
         load_factor,
-        h->compare_func ? "true" : "false");
+        h->compare_func ? "true" : "false",
+        logger_state);
 
     BufferDescriptorAppendFormatted(provided, ",\"entries\":[");
     int emitted = 0;

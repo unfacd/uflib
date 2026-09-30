@@ -1,0 +1,542 @@
+#!/usr/bin/env python3
+"""ufconfig-gen — consume Lua schema tables (build-time only) and emit C."""
+from __future__ import annotations
+import argparse, hashlib, json, re, sys
+from pathlib import Path
+
+class LuaSchemaError(Exception):
+    def __init__(self, msg, file=None, line=None):
+        self.file, self.line, self.msg = file, line, msg
+        super().__init__(f"{file or '?'}:{line or '?'}: {msg}")
+
+def _strip_comments(src: str) -> str:
+    out, i, n = [], 0, len(src)
+    while i < n:
+        if src.startswith('--[[', i):
+            j = src.find(']]', i + 4)
+            if j < 0: break
+            i = j + 2
+            continue
+        if src.startswith('--', i):
+            j = src.find('\n', i)
+            if j < 0: break
+            i = j
+            continue
+        if src[i] in '"\'':
+            q = src[i]; out.append(q); i += 1
+            while i < n:
+                out.append(src[i])
+                if src[i] == '\\' and i + 1 < n:
+                    out.append(src[i + 1]); i += 2; continue
+                if src[i] == q:
+                    i += 1; break
+                i += 1
+            continue
+        out.append(src[i]); i += 1
+    return ''.join(out)
+
+def _lex(src: str):
+    src = _strip_comments(src)
+    i, n, line = 0, len(src), 1
+    while i < n:
+        c = src[i]
+        if c == '\n':
+            line += 1; i += 1; continue
+        if c.isspace():
+            i += 1; continue
+        if c in '{}=,[]':
+            yield (c, c, line); i += 1; continue
+        if c in '"\'':
+            q = c; i += 1; s = []
+            while i < n and src[i] != q:
+                if src[i] == '\\' and i + 1 < n:
+                    s.append(src[i + 1]); i += 2
+                else:
+                    s.append(src[i]); i += 1
+            i += 1
+            yield ('str', ''.join(s), line); continue
+        if c.isdigit() or (c == '-' and i + 1 < n and src[i + 1].isdigit()):
+            j = i + 1
+            while j < n and (src[j].isdigit() or src[j] in '.eE+-'):
+                j += 1
+            yield ('num', src[i:j], line); i = j; continue
+        if c.isalpha() or c == '_':
+            j = i + 1
+            while j < n and (src[j].isalnum() or src[j] == '_'):
+                j += 1
+            yield ('id', src[i:j], line); i = j; continue
+        raise LuaSchemaError(f"unexpected character {c!r}", line=line)
+    yield ('eof', None, line)
+
+class Parser:
+    def __init__(self, tokens, file):
+        self.toks = list(tokens); self.i = 0; self.file = file
+    def peek(self):
+        return self.toks[self.i]
+    def eat(self, kind=None):
+        t = self.toks[self.i]
+        if kind and t[0] != kind:
+            raise LuaSchemaError(f"expected {kind} got {t}", self.file, t[2])
+        self.i += 1
+        return t
+    def parse_value(self):
+        k, v, line = self.peek()
+        if k == '{':
+            return self.parse_table()
+        if k == 'str':
+            self.eat(); return v
+        if k == 'num':
+            self.eat()
+            return float(v) if '.' in v or 'e' in v.lower() else int(v)
+        if k == 'id':
+            self.eat()
+            if v == 'true': return True
+            if v == 'false': return False
+            if v == 'nil': return None
+            return v
+        raise LuaSchemaError(f"bad value {self.peek()}", self.file, line)
+    def parse_table(self):
+        self.eat('{')
+        t, arr_i = {}, 1
+        while self.peek()[0] != '}':
+            k, v, line = self.peek()
+            if k == 'id' and self.toks[self.i + 1][0] == '=':
+                key = v; self.eat(); self.eat('=')
+                t[key] = self.parse_value()
+            elif k == 'str' and self.toks[self.i + 1][0] == '=':
+                key = v; self.eat(); self.eat('=')
+                t[key] = self.parse_value()
+            else:
+                t[arr_i] = self.parse_value(); arr_i += 1
+            if self.peek()[0] == ',':
+                self.eat()
+            elif self.peek()[0] != '}':
+                raise LuaSchemaError("expected ',' or '}' in table", self.file, self.peek()[2])
+        self.eat('}')
+        return t
+
+def load_schema_file(path: Path):
+    src = path.read_text(encoding='utf-8')
+    p = Parser(_lex(src), str(path))
+    schema = None
+    while p.peek()[0] != 'eof':
+        k, v, line = p.peek()
+        if k == 'id' and v in ('local', 'return'):
+            p.eat()
+            if p.peek()[0] == 'id':
+                p.eat()
+            if p.peek()[0] == '=':
+                p.eat()
+                val = p.parse_value()
+                if isinstance(val, dict) and schema is None:
+                    schema = val
+            elif p.peek()[0] == '{':
+                val = p.parse_value()
+                if isinstance(val, dict):
+                    schema = val
+        elif k == '{':
+            schema = p.parse_table()
+        else:
+            p.eat()
+    if schema is None:
+        raise LuaSchemaError("no schema table found", str(path), 1)
+    return schema
+
+KNOWN_FIELD_KEYS = {
+    "type", "required", "default", "mutable", "min", "max",
+    "transform", "validate", "doc", "fields", "one_of", "fmt",
+    "array_max", "length", "encrypted",
+}
+KNOWN_TYPES = {"integer", "float", "boolean", "string", "array", "table"}
+KNOWN_TRANSFORMS = {"hex", "base64", "base64url", "base32", "toupper", "tolower",
+                    "varsub", "compress", "regex"}
+KNOWN_FMTS = {"date", "url", "email", "fqdn", "fqd", "ip4", "ip6", "file_size", "cidr", "netmask.cidr"}
+
+def is_leaf(d):
+    return isinstance(d, dict) and d.get("type") in ("integer", "float", "boolean", "string", "array")
+
+def _xf_names(xf):
+    """The transform names in a declaration, without their arguments.
+
+    Two argument forms exist and the runtime accepts both: regex(pattern,repl)
+    and regex/pattern/repl/.  Only the first was recognised here, so a schema
+    using the second was rejected as an unknown transform -- and the first
+    cannot survive the comma-separated `transforms` field the descriptor
+    carries, because the comma separating pattern from replacement is read as
+    a separator between transforms.  The slash form exists precisely to avoid
+    that, so it has to be accepted here too.
+    """
+    def base(x):
+        t = str(x)
+        if t.startswith("regex/"):
+            return "regex"
+        return t.split("(")[0]
+    if xf is None:
+        return []
+    if isinstance(xf, str):
+        return [base(xf)]
+    if isinstance(xf, list):
+        return [base(x) for x in xf]
+    if isinstance(xf, dict):
+        return [base(xf[k]) for k in xf]
+    return [base(xf)]
+
+def validate_leaf(path, d, file="schema"):
+    extra = set(d.keys()) - KNOWN_FIELD_KEYS
+    # numeric lua array keys from parser show as int
+    extra = {k for k in extra if not isinstance(k, int)}
+    if extra:
+        raise LuaSchemaError(f"{path}: unknown field-def keys {sorted(extra)}", file)
+    typ = d.get("type")
+    if typ not in KNOWN_TYPES:
+        raise LuaSchemaError(f"{path}: invalid type {typ!r}", file)
+    if "default" in d:
+        dv = d["default"]
+        if typ == "integer" and not (isinstance(dv, int) and not isinstance(dv, bool)):
+            raise LuaSchemaError(f"{path}: default type mismatch for integer", file)
+        if typ == "float" and not isinstance(dv, (int, float)):
+            raise LuaSchemaError(f"{path}: default type mismatch for float", file)
+        if typ == "boolean" and not isinstance(dv, bool):
+            raise LuaSchemaError(f"{path}: default type mismatch for boolean", file)
+        if typ == "string" and not isinstance(dv, str):
+            raise LuaSchemaError(f"{path}: default type mismatch for string", file)
+    for bound in ("min", "max"):
+        if bound in d:
+            v = d[bound]
+            if typ == "integer" and isinstance(v, float) and not v.is_integer():
+                raise LuaSchemaError(f"{path}: {bound} truncated for integer field", file)
+            if typ == "integer" and not isinstance(v, (int, float)):
+                raise LuaSchemaError(f"{path}: {bound} must be numeric", file)
+    for name in _xf_names(d.get("transform")):
+        if name not in KNOWN_TRANSFORMS:
+            raise LuaSchemaError(f"{path}: unknown transform {name!r}", file)
+    val = d.get("validate")
+    if isinstance(val, dict):
+        ft = val.get("type")
+        if ft is not None and ft not in KNOWN_FMTS:
+            raise LuaSchemaError(f"{path}: unknown validator type {ft!r}", file)
+    if d.get("fmt") and d.get("fmt") not in KNOWN_FMTS:
+        raise LuaSchemaError(f"{path}: unknown fmt {d.get('fmt')!r}", file)
+    if "encrypted" in d:
+        # Three combinations that cannot work, refused here rather than becoming
+        # a runtime failure in a consumer that has no way to see why.
+        if not isinstance(d["encrypted"], bool):
+            raise LuaSchemaError(f"{path}: encrypted must be true or false", file)
+        if d["encrypted"]:
+            if typ != "string":
+                # The value is an `enc:v1:<nonce>:<ciphertext>:<tag>` string. A
+                # field of any other type has nowhere to put one.
+                raise LuaSchemaError(
+                    f"{path}: encrypted requires type 'string', not {typ!r}", file)
+            if "default" in d:
+                # A default is plaintext written by the schema's author, and the
+                # decrypt step runs over a materialised default exactly as it
+                # does over a document value -- nothing downstream distinguishes
+                # the two. Since an encrypted field refuses a value without an
+                # envelope, a default here would refuse the load of any document
+                # that omits the field, which is every document that relies on
+                # the default.
+                raise LuaSchemaError(
+                    f"{path}: encrypted is incompatible with default -- a default is "
+                    f"plaintext, and the value must be an envelope", file)
+            if d.get("mutable"):
+                # Runtime writes to an encrypted field are refused, so declaring
+                # the field mutable would advertise a setter that always fails.
+                raise LuaSchemaError(
+                    f"{path}: encrypted is incompatible with mutable -- encrypted "
+                    f"fields are read-only", file)
+
+def walk(scope_path, node, fields, order, file="schema"):
+    if not isinstance(node, dict):
+        return
+    for k, v in node.items():
+        if k in ("required", "type", "fields", "doc"):
+            continue
+        if not isinstance(v, dict):
+            continue
+        path = f"{scope_path}.{k}" if scope_path else k
+        if "type" in v:
+            validate_leaf(path, v, file)
+        if is_leaf(v):
+            fields[path] = v
+            order.append(path)
+        else:
+            walk(path, v.get("fields", v), fields, order, file)
+
+def merge_schemas(schemas):
+    out = {}
+    def dm(a, b, prefix):
+        for k, v in b.items():
+            path = f"{prefix}.{k}" if prefix else k
+            if k in a and isinstance(a[k], dict) and isinstance(v, dict):
+                if "type" in a[k] and "type" in v and a[k]["type"] != v["type"]:
+                    raise LuaSchemaError(
+                        f"conflicting type on merge for {path}: {a[k]['type']} vs {v['type']}")
+                dm(a[k], v, path)
+            else:
+                a[k] = v
+    for s in schemas:
+        for scope, body in s.items():
+            if not isinstance(body, dict):
+                continue
+            if scope not in out:
+                out[scope] = dict(body)
+            else:
+                dm(out[scope], body, scope)
+    return out
+
+def enum_name(path: str) -> str:
+    q = re.sub(r'[^A-Za-z0-9]+', '_', path.upper()).strip('_')
+    return f"UF_CONFIG_FIELD_{q}"
+
+def ident(path: str) -> str:
+    parts = [p[:1].upper() + p[1:] for p in re.split(r'[^A-Za-z0-9]+', path) if p]
+    return ''.join(parts)
+
+def c_str(s):
+    if s is None:
+        return "NULL"
+    return json.dumps(str(s))
+
+def emit(merged, sources, outdir: Path, report_only=False):
+    # One destination, flat.  Headers and sources land side by side: which of
+    # them belongs on an include path, which in a source list, and where either
+    # sits relative to the consumer's own tree is the consumer's arrangement.
+    # A generator that imposed a layout would be deciding something it has no
+    # way to know.
+    fields, order = {}, []
+    for scope, body in merged.items():
+        walk(scope, body, fields, order, Path(sources[0]).name if sources else 'schema')
+    names = [enum_name(p) for p in order]
+    if len(names) != len(set(names)):
+        seen = {}
+        for p in order:
+            e = enum_name(p)
+            if e in seen:
+                raise SystemExit(f"enum name collision: {e} from {seen[e]} and {p}")
+            seen[e] = p
+    src_hash = hashlib.sha256("".join(Path(s).read_text(encoding='utf-8') for s in sources).encode()).hexdigest()[:16]
+    banner = f"/* DO NOT EDIT — generated by ufconfig-gen from {', '.join(Path(s).name for s in sources)} + {src_hash} */\n"
+    if report_only:
+        for p in order:
+            d = fields[p]
+            print(f"{p}\ttype={d.get('type')}\trequired={d.get('required', False)}\tdefault={d.get('default', '')}\tdoc={d.get('doc','')}")
+        return
+    h = [banner, "#ifndef UFCONFIG_FIELDS_GENERATED_H\n#define UFCONFIG_FIELDS_GENERATED_H\n",
+         "#include <stdint.h>\n",
+         "typedef enum UfConfigFieldId {\n",
+         "    UF_CONFIG_FIELD__INVALID = -1,\n"]
+    for i, p in enumerate(order):
+        h.append(f"    {enum_name(p)} = {i}, ///< {p}\n")
+    h.append("    UF_CONFIG_FIELD__COUNT\n} UfConfigFieldId;\n")
+    h.append("_Static_assert(sizeof(UfConfigFieldId) <= sizeof(int), \"UfConfigFieldId_is_int\");\n")
+    h.append("struct UfConfig;\n")
+    for p in order:
+        h.append(f"UfConfigStatus UfConfigGet{ident(p)}(const struct UfConfig *h, UfConfigValue *out);\n")
+    h.append("#endif\n")
+    (outdir / "ufconfig_fields_generated.h").write_text("".join(h))
+
+    def fnv(s):
+        hval = 2166136261
+        for b in s.encode():
+            hval ^= b
+            hval = (hval * 16777619) & 0xFFFFFFFF
+        return hval
+    size = 1
+    while size < max(8, len(order) * 4):
+        size *= 2
+    ok = False
+    for _ in range(8):
+        table = [None] * size
+        clash = False
+        for p in order:
+            idx = fnv(p) & (size - 1)
+            if table[idx] is not None:
+                clash = True; break
+            table[idx] = p
+        if not clash:
+            ok = True; break
+        size *= 2
+    if not ok:
+        raise SystemExit("perfect hash failed")
+
+    lk = [banner, '#include <uflib/ufconfig/ufconfig.h>\n#include <string.h>\n',
+          f"enum {{ UF_LOOKUP_SIZE = {size} }};\n",
+          "static const struct { unsigned hash; int id; const char *path; } g_lookup[UF_LOOKUP_SIZE] = {\n"]
+    slots = ["    {0, -1, 0}"] * size
+    for p in order:
+        idx = fnv(p) & (size - 1)
+        slots[idx] = f'    {{ {fnv(p)}u, {enum_name(p)}, "{p}" }}'
+    lk.append(",\n".join(slots) + "\n};\n")
+    lk.append("""
+static unsigned sFnv(const char *s) {
+    unsigned h = 2166136261u;
+    for (; *s; s++) { h ^= (unsigned char)*s; h *= 16777619u; }
+    return h;
+}
+int UfConfigLookupPath(const char *path) {
+    unsigned h = sFnv(path);
+    unsigned i = h & (UF_LOOKUP_SIZE - 1);
+    if (g_lookup[i].id >= 0 && g_lookup[i].hash == h && strcmp(g_lookup[i].path, path) == 0)
+        return g_lookup[i].id;
+    return -1;
+}
+""")
+    (outdir / "ufconfig_lookup_generated.c").write_text("".join(lk))
+
+    # The descriptor table is the consumer's object, built against the public
+    # contract only.  It must not reach for the library's private header: the
+    # consumer does not have it, and needing it would make every generated
+    # artefact depend on this library's internals rather than its interface.
+    fd = [banner, '#include <uflib/ufconfig/ufconfig.h>\n',
+          "const struct UfConfigFieldDesc g_ufconfig_fields[] = {\n"]
+    tmap = {"integer": "UF_FT_INT", "float": "UF_FT_FLOAT", "boolean": "UF_FT_BOOL",
+            "string": "UF_FT_STR", "array": "UF_FT_ARR", "table": "UF_FT_TAB"}
+    for p in order:
+        d = fields[p]
+        typ = tmap[d["type"]]
+        req = 1 if d.get("required") else 0
+        mut = 1 if d.get("mutable") else 0
+        hasd = 1 if "default" in d else 0
+        di, df, db, ds = 0, 0.0, 0, "NULL"
+        dv = d.get("default")
+        if isinstance(dv, bool):
+            db = 1 if dv else 0
+        elif isinstance(dv, int):
+            di = dv
+        elif isinstance(dv, float):
+            df = dv
+        elif isinstance(dv, str):
+            ds = c_str(dv)
+        has_min = 1 if "min" in d else 0
+        has_max = 1 if "max" in d else 0
+        vmin = int(d["min"]) if "min" in d else 0
+        vmax = int(d["max"]) if "max" in d else 0
+        xf = d.get("transform")
+        if isinstance(xf, dict):
+            xf = ",".join(str(xf[k]) for k in sorted(xf) if isinstance(k, int) or str(k).isdigit())
+        elif isinstance(xf, list):
+            xf = ",".join(str(x) for x in xf)
+        elif not isinstance(xf, str):
+            xf = None
+        one = None
+        fmt = None
+        val = d.get("validate")
+        if isinstance(val, dict):
+            if "one_of" in val:
+                oo = val["one_of"]
+                if isinstance(oo, dict):
+                    one = ",".join(str(oo[k]) for k in sorted(oo) if isinstance(k, int) or str(k).isdigit())
+            t = val.get("type")
+            if isinstance(t, str):
+                fmt = t
+        xf_c = c_str(xf) if xf else "NULL"
+        one_c = c_str(one) if one else "NULL"
+        fmt_c = c_str(fmt) if fmt else "NULL"
+        lmin = d.get("length")
+        has_lmin = has_lmax = 0
+        lnmin = lnmax = 0
+        if isinstance(lmin, dict):
+            if "min" in lmin: has_lmin=1; lnmin=int(lmin["min"])
+            if "max" in lmin: has_lmax=1; lnmax=int(lmin["max"])
+        elif isinstance(lmin, int):
+            has_lmax=1; lnmax=int(lmin)
+        am = d.get("array_max")
+        has_am = 1 if am is not None else 0
+        amv = int(am) if am is not None else 0
+        doc_c = c_str(d.get("doc")) if d.get("doc") else "NULL"
+        rx = None
+        val = d.get("validate")
+        if isinstance(val, dict) and val.get("regex"):
+            rx = val["regex"]
+        if d.get("regex"):
+            rx = d.get("regex")
+        rx_c = c_str(rx) if rx else "NULL"
+        # Appended last, not beside is_mutable where it belongs logically: the
+        # table is a positional initialiser, so inserting anywhere but the end
+        # shifts every member after it and silently rewrites what the generated
+        # tables mean.
+        enc = 1 if d.get("encrypted") else 0
+        fd.append(f'    {{ {enum_name(p)}, "{p}", {typ}, {req}, {mut}, {hasd}, {di}LL, {df}, {db}, {ds}, {has_min}, {has_max}, {vmin}LL, {vmax}LL, {xf_c}, {one_c}, {fmt_c}, {has_lmin}, {has_lmax}, {lnmin}LL, {lnmax}LL, {has_am}, {amv}LL, {doc_c}, {rx_c}, {enc} }},\n')
+    fd.append("};\n")
+    fd.append(f"const int g_ufconfig_field_count = {len(order)};\n")
+    for p in order:
+        fd.append(f"PUBLIC_API UfConfigStatus UfConfigGet{ident(p)}(const UfConfig *h, UfConfigValue *out) {{\n")
+        fd.append(f"    return UfConfigGetFieldByIndex(h, {enum_name(p)}, out);\n}}\n")
+    (outdir / "ufconfig_fielddesc_generated.c").write_text("".join(fd))
+    proto = [banner, "#ifndef UFCONFIG_SETTERS_STUB_GENERATED_H\n#define UFCONFIG_SETTERS_STUB_GENERATED_H\n",
+             "#include <uflib/ufconfig/ufconfig.h>\n"]
+    setmap = {"integer": ("int64_t", "UfConfigSetInt"),
+              "float": ("double", "UfConfigSetFloat"),
+              "boolean": ("bool", "UfConfigSetBool"),
+              "string": ("const char *", "UfConfigSetString")}
+    for p, d in fields.items():
+        if not d.get("mutable"):
+            continue
+        ct, fn = setmap.get(d["type"], ("int64_t", "UfConfigSetInt"))
+        proto.append(f"UfConfigStatus UfConfigSet{ident(p)}(struct UfConfig *h, {ct} v);\n")
+    proto.append("#endif\n")
+    (outdir / "ufconfig_setters_stub_generated.h").write_text("".join(proto))
+    ext_path = outdir / "ufconfig_setters_stub_generated.c"
+    preserved = ""
+    marker = "/* <<< UFCFG-EXTENSION-POINT — developer code below is preserved by the generator */"
+    if ext_path.exists():
+        oldc = ext_path.read_text()
+        if marker in oldc:
+            preserved = oldc.split(marker, 1)[1]
+    # Generated bodies first, then the marker, then whatever the developer added.
+    #
+    # The marker has to come after the generated code, not before it.  Placed
+    # first, everything following it -- including the bodies this run just
+    # emitted -- is read back as developer code on the next run, preserved, and
+    # then emitted again beside the fresh copy.  The file doubles every time it
+    # is regenerated, and the duplicate definitions only surface as a compile
+    # error in whichever target happens to include it.
+    sc = [banner, '#include "ufconfig_setters_stub_generated.h"\n']
+    for p, d in fields.items():
+        if not d.get("mutable"):
+            continue
+        ct, fn = setmap.get(d["type"], ("int64_t", "UfConfigSetInt"))
+        sc.append(f"PUBLIC_API UfConfigStatus UfConfigSet{ident(p)}(UfConfig *h, {ct} v) {{\n")
+        sc.append(f'    return {fn}(h, "{p}", v);\n}}\n')
+    sc.append("\n" + marker + "\n")
+    if preserved.strip():
+        sc.append(preserved if preserved.startswith("\n") else "\n" + preserved)
+    ext_path.write_text("".join(sc))
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("schemas", nargs="*")
+    ap.add_argument("-o", "--outdir", default="generated",
+                    help="where every artefact is written; flat")
+    ap.add_argument("--emit-schema-report", action="store_true")
+    args = ap.parse_args()
+    if not args.schemas:
+        return 2
+    loaded = []
+    for s in args.schemas:
+        try:
+            loaded.append(load_schema_file(Path(s)))
+        except LuaSchemaError as e:
+            print(f"ufconfig-gen: {e}", file=sys.stderr)
+            return 1
+    # The whole pipeline is guarded, not only the load.  Every schema rule that
+    # is checked per field -- the type of a default, the bounds, the transforms,
+    # and now the encrypted combinations -- runs inside emit(), and emit() was
+    # outside this handler, so each of those raised a bare traceback instead of
+    # the one-line diagnostic the handler exists to produce.  merge_schemas() had
+    # the same problem for a type that conflicts across tiers, which is a defect
+    # that predates the encrypted keyword: a schema error was reported as a
+    # Python stack trace.
+    try:
+        merged = merge_schemas(loaded)
+        out = Path(args.outdir)
+        out.mkdir(parents=True, exist_ok=True)
+        emit(merged, args.schemas, out, report_only=args.emit_schema_report)
+    except LuaSchemaError as e:
+        print(f"ufconfig-gen: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

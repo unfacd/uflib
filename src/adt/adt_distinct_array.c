@@ -273,20 +273,20 @@ DistinctArrayRemoveLast(DistinctArray *hash_map_ptr)
 }
 
 /**
- * @brief Iterate over every populated slot, invoking @p on_item_available
+ * @brief Iterate over every populated slot, invoking @p callback_ptr
  *        for each non-NULL entry.
  *
- * @param hash_map_ptr       The DistinctArray to iterate.
- * @param on_item_available  Block called with a pointer to each stored item.
- *
- * @note Requires Clang (@c -fblocks) — the callback is an Objective-C block.
+ * @param hash_map_ptr   The DistinctArray to iterate.
+ * @param callback_ptr   Invoked for each stored item; @p ctx_ptr is passed through unmodified.
+ * @param ctx_ptr        Caller-owned context, opaque to the iteration.
  *
  * FIX: walks stored_value_idx->value_index[] (previous value_block_storage[i]
  *      access was undefined behaviour).
  */
 void
 DistinctArrayIterate(DistinctArray *hash_map_ptr,
-                     void(^on_item_available)(uint8_t *item))
+                     DistinctArrayIterateCallback callback_ptr,
+                     void *ctx_ptr)
 {
   if (!hash_map_ptr->stored_value_idx || !hash_map_ptr->value_block_storage) {
     return;
@@ -295,7 +295,7 @@ DistinctArrayIterate(DistinctArray *hash_map_ptr,
   for (size_t i = 0; i < hash_map_ptr->stored_value_idx->size; i++) {
     uint8_t *item = hash_map_ptr->stored_value_idx->value_index[i];
     if (IS_PRESENT(item)) {
-      on_item_available(item);
+      callback_ptr(ctx_ptr, item);
     }
   }
 }

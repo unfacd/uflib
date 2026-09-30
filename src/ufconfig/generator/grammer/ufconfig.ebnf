@@ -1,0 +1,23 @@
+(* ISO/IEC 14977 EBNF — Lua-styled configuration data, not Lua *)
+document = { binding | comment | whitespace }, [ root-block ], { comment | whitespace } ;
+binding = identifier, [ whitespace ], '=', [ whitespace ], value ;
+root-block = 'return', [ whitespace ], value ;
+value = table | string | number | boolean | 'nil' | alias ;
+table = '{', [ whitespace ], [ member, { [ whitespace ], ',', [ whitespace ], member }, [ [ whitespace ], ',' ] ], [ whitespace ], '}' ;
+member = ( identifier, [ whitespace ], '=', [ whitespace ], value ) | value ;
+alias = identifier ;
+string = ( '"', { string-char }, '"' ) | ( "'", { string-char }, "'" ) ;
+string-char = ? any character except the opening quote unless escaped ? ;
+number = [ '-' ], digit, { digit }, [ '.', digit, { digit } ] ;
+boolean = 'true' | 'false' ;
+identifier = ( letter | '_' ), { letter | digit | '_' } ;
+letter = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
+       | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z'
+       | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm'
+       | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' ;
+digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
+whitespace = ' ' | ? tab ? | ? newline ? | ? cr ? ;
+comment = line-comment | block-comment ;
+line-comment = '--', { ? not newline ? } ;
+block-comment = '--[[', { ? any ? }, ']]' ;
+(* Excluded: expressions, calls, operators, require, metatables *)

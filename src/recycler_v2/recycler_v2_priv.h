@@ -37,6 +37,7 @@
 #include <uflib/recycler_v2/recycler_v2_type.h>
 #include <uflib/recycler_v2/instance_holder_v2_type.h>
 #include <uflib/recycler_v2/recycler_v2_defs.h>
+#include <uflib/logger/logger_type.h>
 
 /* ── Fallback multi-holder list ───────────────────────────────────────────── */
 
@@ -150,6 +151,7 @@ typedef struct RecyclerV2PoolDefinition {
     char                   *storage_root_ptr;           ///< stashed for config introspection (free'd separately)
     char                   *ufsrv_class_ptr;            ///< stashed ufsrv_class (NULL if not set)
     char                   *instance_id_ptr;            ///< stashed instance_id (NULL if not set)
+    UfLogger               *uf_logger;                  ///< borrowed from the caller's config (NULL → silent); before the FAM
     char                    storage_path[];             ///< <root>[/<instance>]/<type_name> — FAM
 } RecyclerV2PoolDefinition;
 
