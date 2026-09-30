@@ -22,6 +22,11 @@ extern "C" {
 #include "recycler_v2_priv.h"
 }
 
+/* The recording double for the logger's private driver seam.  It gives the
+   suite a real UfLogger whose lifetime it controls, without dragging zlog and
+   its documented upstream leak into this binary. */
+#include "mock_driver.h"
+
 /* ── Test payload type ────────────────────────────────────────────────────── */
 
 typedef struct {
@@ -1374,6 +1379,108 @@ TEST(RecyclerV2Describe, AllocatesWhenProvidedNull)
 
     BufferDescriptorRelease(out);
     free(out);
+}
+
+TEST(RecyclerV2Describe, LoggerAttributeReflectsTheConfiguredBorrow)
+{
+    /* Standing in for the caller's logger.  The pool only stores and compares
+       the pointer — it is a borrow, and nothing dereferences it yet — but a
+       real handle is used so this stays honest the moment emission is added. */
+    UfLogger *log_ptr = nullptr;
+    ASSERT_EQ(MockDriverCreateLogger(UfLoggerProvideSaneDefaults(), &log_ptr),
+              UF_LOGGER_STATUS_OK);
+    ASSERT_NE(log_ptr, nullptr);
+
+    /* Side by side: an answer hardcoded in either direction makes these two
+       describe the same thing, which is what the pair is here to catch. */
+    RecyclerV2PoolConfig cfg_on = {
+        .type_name           = "DescPoolLoggerOn",
+        .blocksz             = sizeof(TestPayloadV2),
+        .group_allocation_sz = 2,
+        .expansion_threshold = 8,
+        .ops_ptr             = &sTestOpsV2,
+        .logger_ptr          = log_ptr,
+    };
+    RecyclerV2PoolConfig cfg_off = {
+        .type_name           = "DescPoolLoggerOff",
+        .blocksz             = sizeof(TestPayloadV2),
+        .group_allocation_sz = 2,
+        .expansion_threshold = 8,
+        .ops_ptr             = &sTestOpsV2,
+        .logger_ptr          = nullptr,
+    };
+    ASSERT_NE(RecyclerV2InitTypePool(&cfg_on), nullptr);
+    ASSERT_NE(RecyclerV2InitTypePool(&cfg_off), nullptr);
+
+    BufferDescriptor bd;
+    BufferDescriptorInit(&bd, 1024);
+    ASSERT_NE(bd.data, nullptr);
+
+    ASSERT_EQ(DescribeRecycler("DescPoolLoggerOn", &bd), &bd);
+    EXPECT_NE(strstr(bd.data, "\"logger\":\"enabled\""), nullptr) << "got: " << bd.data;
+
+    bd.size = 0;
+    bd.data[0] = '\0';
+    ASSERT_EQ(DescribeRecycler("DescPoolLoggerOff", &bd), &bd);
+    EXPECT_NE(strstr(bd.data, "\"logger\":\"none\""), nullptr) << "got: " << bd.data;
+
+    BufferDescriptorRelease(&bd);
+    UfLoggerDestroy(log_ptr);
+}
+
+TEST(RecyclerV2Describe, LoggerAttributeIsPerPoolNotGlobal)
+{
+    /* Two pools, one borrow: the attribute must follow the pool that was given
+       the logger, not a process-wide answer.  A single-pool case would pass
+       even if the value were read from somewhere shared. */
+    UfLogger *log_ptr = nullptr;
+    ASSERT_EQ(MockDriverCreateLogger(UfLoggerProvideSaneDefaults(), &log_ptr),
+              UF_LOGGER_STATUS_OK);
+
+    RecyclerV2PoolConfig cfg_on = {
+        .type_name           = "DescPoolPerPoolOn",
+        .blocksz             = sizeof(TestPayloadV2),
+        .group_allocation_sz = 2,
+        .expansion_threshold = 8,
+        .ops_ptr             = &sTestOpsV2,
+        .logger_ptr          = log_ptr,
+    };
+    RecyclerV2PoolConfig cfg_off = {
+        .type_name           = "DescPoolPerPoolOff",
+        .blocksz             = sizeof(TestPayloadV2),
+        .group_allocation_sz = 2,
+        .expansion_threshold = 8,
+        .ops_ptr             = &sTestOpsV2,
+        .logger_ptr          = nullptr,
+    };
+    ASSERT_NE(RecyclerV2InitTypePool(&cfg_on), nullptr);
+    ASSERT_NE(RecyclerV2InitTypePool(&cfg_off), nullptr);
+
+    /* One document containing both pools, so both answers are read from the
+       same emission. */
+    BufferDescriptor *out = DescribeRecycler(NULL, NULL);
+    ASSERT_NE(out, nullptr);
+    ASSERT_NE(out->data, nullptr);
+
+    const char *on_pos  = strstr(out->data, "DescPoolPerPoolOn");
+    const char *off_pos = strstr(out->data, "DescPoolPerPoolOff");
+    ASSERT_NE(on_pos, nullptr);
+    ASSERT_NE(off_pos, nullptr);
+
+    /* Each pool's attribute must sit between that pool's name and the next
+       pool's name — i.e. inside its own object. */
+    const char *enabled_pos = strstr(on_pos, "\"logger\":\"enabled\"");
+    const char *none_pos    = strstr(off_pos, "\"logger\":\"none\"");
+    EXPECT_NE(enabled_pos, nullptr) << "the logger-configured pool did not report enabled";
+    EXPECT_NE(none_pos, nullptr) << "the pool without a logger did not report none";
+    if (enabled_pos != nullptr && off_pos != nullptr) {
+        EXPECT_LT(enabled_pos, off_pos)
+            << "the 'enabled' attribute leaked into a later pool's object";
+    }
+
+    BufferDescriptorRelease(out);
+    free(out);
+    UfLoggerDestroy(log_ptr);
 }
 
 TEST(RecyclerV2ListTypes, ReturnsSingleSlabOfNames)

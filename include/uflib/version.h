@@ -18,13 +18,15 @@
 #ifndef UFLIB_VERSION_H
 #define UFLIB_VERSION_H
 
-#define UFLIB_MAJOR 3
-#define UFLIB_MINOR 11
-#define UFLIB_PATCH 4
+#define UFLIB_MAJOR     4
+#define UFLIB_MINOR     0
+#define UFLIB_PATCH     0
+#define UFLIB_INTERNAL  9
 
 const char *UfsrvUfLibVersion()      __attribute__((const));
 const char *UfsrvUfLibVersionMajor() __attribute__((const));
 const char *UfsrvUfLibVersionMinor() __attribute__((const));
 const char *UfsrvUfLibVersionPatch() __attribute__((const));
+const char *UfsrvUfLibVersionInternal() __attribute__((const));
 
 #endif

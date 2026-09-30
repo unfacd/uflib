@@ -1,0 +1,16 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+BreakBeforeBraces: Linux
+AllowShortIfStatementsOnASingleLine: false
+AllowShortCaseExpressionOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+IndentCaseLabels: false
+
+ColumnLimit: 100
+
+ForEachMacros: [
+  "zc_arraylist_foreach",
+  "zc_hashtable_foreach"
+]

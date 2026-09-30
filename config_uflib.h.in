@@ -30,6 +30,39 @@
 
 #define UF_DEBUG_BUILD  @UF_DEBUG_BUILD@   /* 1 when CMAKE_BUILD_TYPE=Debug, else 0 */
 
-#include "config_defs_uflib.h"
+/* Build-time capabilities.  Every capability the build understands appears
+ * here, and every one is off unless the build asks for it:
+ *
+ *   cmake -DUFLIB_CAPABILITY_HIREDIS=ON …     the config module's Redis driver
+ *   cmake -DUFLIB_CAPABILITY_SQL=ON …         the config module's SQL driver
+ *   cmake -DUFLIB_CAPABILITY_QUIRC=ON …       QR-code reading
+ *   cmake -DUFLIB_CAPABILITY_QRENCODE=ON …    QR-code rendering
+ *   cmake -DUFLIB_CAPABILITY_UTF8PROC=ON …    the utf8proc-backed UTF-8 helpers
+ *   cmake -DUFLIB_CAPABILITY_K12=ON …         the KangarooTwelve hash
+ *   cmake -DUFLIB_CAPABILITY_LZF=ON …         lzf compression
+ *   cmake -DUFLIB_CAPABILITY_MJSON=ON …       the JSON parser
+ *   cmake -DUFLIB_CAPABILITY_PROTOBUF_C=ON …  the protobuf-c runtime
+ *   cmake -DUFLIB_CAPABILITY_ZLOG=ON …        the logger's backend
+ *
+ * A build names what it carries.
+ *
+ * `#cmakedefine` rather than `#define`, so a capability that is off leaves the
+ * macro *undefined* instead of defined to 0.  Both read as false in `#if`, but
+ * only this form is also right under `#ifdef` — and an author reaching for
+ * `#ifdef` should not have to know which of the two was used.
+ *
+  */
+#cmakedefine UFLIB_CAPABILITY_HIREDIS 1
+#cmakedefine UFLIB_CAPABILITY_SQL 1
+#cmakedefine UFLIB_CAPABILITY_QUIRC 1
+#cmakedefine UFLIB_CAPABILITY_QRENCODE 1
+#cmakedefine UFLIB_CAPABILITY_UTF8PROC 1
+#cmakedefine UFLIB_CAPABILITY_K12 1
+#cmakedefine UFLIB_CAPABILITY_LZF 1
+#cmakedefine UFLIB_CAPABILITY_MJSON 1
+#cmakedefine UFLIB_CAPABILITY_PROTOBUF_C 1
+#cmakedefine UFLIB_CAPABILITY_ZLOG 1
+
+#include <uflib/config_defs_uflib.h>
 
 #endif /* CONFIG_H */

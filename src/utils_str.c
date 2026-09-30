@@ -15,6 +15,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef HAVE_CONFIG_UFLIB_H
+#include <config_uflib.h>
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -75,15 +79,15 @@ strbufdup(const char *s, size_t n)
 
 /**
  * @brief Dynamically copy a provided string, with extra semantics around source string being null, in which case a
- * user supplied lambda is executed, instead.
+ * user supplied callback is executed, instead.
  * @param s source string to be copied
  * @param n max chars to copy from source string. Will only be used if source str length exceeded this value. Buffer allocated is always
  * extended by an additional char for null.
- * @param on_null user lambda to execute, which must return a 'char *'
+ * @param on_null user callback to execute, which must return a 'char *'
  * @return
  */
 char *
-strbufdup_nullable(const char *s, size_t n, char *(^on_null)(void))
+strbufdup_nullable(const char *s, size_t n, char *(*on_null)(void))
 {
   if (!IS_EMPTY(s)) {
     size_t copy_sz = strlen(s) > n ? n : strlen(s);
@@ -376,6 +380,11 @@ char *mystrdup(const char *s)
   return p ? memcpy(p, s, len) : NULL;
 }
 
+/* The three helpers below decode UTF-8.  Without the capability they do not
+   exist: the declarations stay in the header, which ships and cannot read a
+   build's macro, so the absence is at the symbol. */
+#if UFLIB_CAPABILITY_UTF8PROC
+
 #include <utf8proc.h>
 
 /**
@@ -524,6 +533,8 @@ IsUtf8Valid(const char *str, size_t max_bytes)
 
   return true;
 }
+
+#endif /* UFLIB_CAPABILITY_UTF8PROC */
 
 /**
  * Defensively measures ASCII string length with a hard maximum limit.

@@ -32,6 +32,7 @@
 #include <string.h>
 #include <uflib/main_types.h>
 #include <uflib/utils.h>
+#include <uflib/logger/logger.h>
 
 /* Forward declarations — locking functions are defined after their call sites */
 static int  sReadLock(HashTableV2 *ht_ptr, int try_flag);
@@ -276,7 +277,7 @@ sFindSlot(HashTableV2 *ht_ptr, const void *key_ptr, bool insert_mode,
  * ═══════════════════════════════════════════════════════════════════ */
 
 PUBLIC_API HashTableV2 *
-HashTableV2Create(const HashTableV2Config *config_ptr)
+HashTableV2CreateWithLogger(const HashTableV2Config *config_ptr, UfLogger *logger_ptr)
 {
 	HashTableV2 *ht_ptr;
 	HashTableV2Config cfg;
@@ -294,10 +295,24 @@ HashTableV2Create(const HashTableV2Config *config_ptr)
 	           : CONFIG_DEFAULT_HASHTABLE_V2_INITIAL_SIZE;
 
 	ht_ptr = (HashTableV2 *)calloc(1, sizeof(HashTableV2));
-	if (IS_EMPTY(ht_ptr)) return NULL;
+	if (IS_EMPTY(ht_ptr)) {
+		if (IS_PRESENT(logger_ptr)) {
+			UF_LOGGER_ERROR(logger_ptr, "hashtable '%s' handle allocation failed",
+			                cfg.name ? cfg.name : "HashTableV2");
+		}
+		return NULL;
+	}
+
+	/* Set the borrow first, so every failure below can be reported through it. */
+	ht_ptr->uf_logger = logger_ptr;
 
 	ht_ptr->slots = (HashTableV2Slot *)calloc(capacity, sizeof(HashTableV2Slot));
 	if (IS_EMPTY(ht_ptr->slots)) {
+		if (IS_PRESENT(logger_ptr)) {
+			UF_LOGGER_ERROR(logger_ptr,
+			                "hashtable '%s' slot array allocation failed: capacity=%zu",
+			                cfg.name ? cfg.name : "HashTableV2", capacity);
+		}
 		free(ht_ptr);
 		return NULL;
 	}
@@ -317,6 +332,11 @@ HashTableV2Create(const HashTableV2Config *config_ptr)
 	if (ht_ptr->enable_locking) {
 		int ret = pthread_rwlock_init(&ht_ptr->rwlock, NULL);
 		if (ret != 0) {
+			if (IS_PRESENT(logger_ptr)) {
+				UF_LOGGER_ERROR(logger_ptr,
+				                "hashtable '%s' rwlock initialisation failed: %d",
+				                ht_ptr->name ? ht_ptr->name : "HashTableV2", ret);
+			}
 			free(ht_ptr->slots);
 			free(ht_ptr->name);
 			free(ht_ptr);
@@ -324,16 +344,42 @@ HashTableV2Create(const HashTableV2Config *config_ptr)
 		}
 	}
 
+	if (IS_PRESENT(logger_ptr)) {
+		UF_LOGGER_DEBUG(logger_ptr,
+		                "hashtable '%s' created: capacity=%zu key_size=%zu locking=%s",
+		                ht_ptr->name ? ht_ptr->name : "HashTableV2", capacity, cfg.key_size,
+		                cfg.enable_locking ? "on" : "off");
+	}
+
 	return ht_ptr;
+}
+
+PUBLIC_API HashTableV2 *
+HashTableV2Create(const HashTableV2Config *config_ptr)
+{
+	return HashTableV2CreateWithLogger(config_ptr, NULL);
 }
 
 PUBLIC_API void
 HashTableV2Destroy(HashTableV2 *ht_ptr)
 {
+	UfLogger *logger_ptr;
+
 	if (IS_EMPTY(ht_ptr)) return;
+
+	/* Read the borrow before anything is released: it lives in the handle that
+	   is about to be freed. */
+	logger_ptr = ht_ptr->uf_logger;
 
 	if (ht_ptr->enable_locking)
 		pthread_rwlock_destroy(&ht_ptr->rwlock);
+
+	if (IS_PRESENT(logger_ptr)) {
+		/* Stored items are caller-owned, so a non-empty table at teardown is a
+		   sizing datapoint rather than an anomaly — reported, not warned about. */
+		UF_LOGGER_DEBUG(logger_ptr, "hashtable '%s' destroyed: %zu entry(ies) discarded",
+		                ht_ptr->name ? ht_ptr->name : "HashTableV2", ht_ptr->num_entries);
+	}
 
 	free(ht_ptr->slots);
 	free(ht_ptr->name);

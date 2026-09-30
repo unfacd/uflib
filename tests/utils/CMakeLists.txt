@@ -14,14 +14,18 @@ add_c_test(
         ${CMAKE_SOURCE_DIR}/include
     LIBRARIES uflib::uflib ${UTF8PROC_LIBRARY}
 )
-add_c_test(
-    NAME utf8_tests
-    TEST_SOURCE utf8_tests.cpp
-    INCLUDE_DIRS
-        ${CMAKE_SOURCE_DIR}/include/uflib
-        ${CMAKE_SOURCE_DIR}/include
-    LIBRARIES uflib::uflib ${UTF8PROC_LIBRARY}
-)
+# Exists only with the capability: its cases call functions a build without
+# utf8proc does not define.
+if(UFLIB_CAPABILITY_UTF8PROC)
+    add_c_test(
+        NAME utf8_tests
+        TEST_SOURCE utf8_tests.cpp
+        INCLUDE_DIRS
+            ${CMAKE_SOURCE_DIR}/include/uflib
+            ${CMAKE_SOURCE_DIR}/include
+        LIBRARIES uflib::uflib ${UTF8PROC_LIBRARY}
+    )
+endif()
 add_c_test(
     NAME url_tests
     TEST_SOURCE url_tests.cpp

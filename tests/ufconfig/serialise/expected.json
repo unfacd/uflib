@@ -1,0 +1,1 @@
+{"s":{"bool_v":true,"float_v":3.5,"int_v":-42,"list_v":["alpha","beta","gamma"],"quoted":"has \"quotes\" and a \\ backslash","str_v":"plain text"},"t":{"alias_table":{"a_v":11,"b_v":"aliased"},"nested":{"deep_v":7}}}

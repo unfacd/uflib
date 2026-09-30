@@ -61,7 +61,6 @@ typedef enum DBOPStatus {
 } DBOPStatus;
 
 typedef struct DbOpDescriptor DbOpDescriptor;
-typedef int (^TransformerBlock)(DbOpDescriptor *);
 
 struct DbOpDescriptor {
   int insert_id; ///< last insert id if available
@@ -70,7 +69,7 @@ struct DbOpDescriptor {
 
  struct {
    int (*transform)(struct DbOpDescriptor *); ///< user-supplied call back that handles the transfer of query result-set to user domain (mostly into ctx_data)
-   TransformerBlock on_transform;
+   int (*on_transform)(struct DbOpDescriptor *); ///< deferrable transformer, invoked by the installed @c transform when present
  } transformer;
 
  struct {

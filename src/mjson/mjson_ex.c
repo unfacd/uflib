@@ -79,7 +79,9 @@ mjson_find_all_ex(json, len, "$.store.book[?(@.price>10)]", print_match, NULL);
  *
  */
 
-#include "mjson_ex.h"
+#include <uflib/mjson/mjson_ex.h>
+
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -149,6 +151,17 @@ static int compile_path(const char *path, struct path_step *steps, int max_steps
         steps[n].type = STEP_RECURSIVE;
         n++;
         p++;
+        /* `..name` is a descent followed by the key, not a stray token. */
+        if (*p && *p != '.' && *p != '[' && n < max_steps) {
+          steps[n].type = STEP_KEY;
+          int i = 0;
+          while (*p && *p != '.' && *p != '[' && i < (int)sizeof(steps[n].key)-1) {
+            if (*p == '\\' && p[1]) p++;
+            steps[n].key[i++] = *p++;
+          }
+          steps[n].key[i] = '\0';
+          n++;
+        }
         continue;
       }
       /* .key */
@@ -301,7 +314,7 @@ static int emit(struct match_ctx *ctx, const char *tok, int toklen, int type) {
 }
 
 /* Recursive descent helper – walks every value */
-static int walk(const char *s, int len, int off, int depth,
+static int walk(const char *s, int len, int off, int clen, int depth,
                 struct match_ctx *ctx);
 
 static int try_match(const char *s, int len, int off, int vlen, int type,
@@ -314,83 +327,84 @@ static int try_match(const char *s, int len, int off, int vlen, int type,
 
   if (st->type == STEP_RECURSIVE) {
     ctx->cur++;
-    int stop = walk(s, len, off, 0, ctx);
+    int stop = walk(s, len, off, vlen, 0, ctx);
     ctx->cur--;
     return stop;
   }
 
   if (type == MJSON_TOK_OBJECT || type == '{' ) {
-    /* need to iterate keys */
+    /* mjson_next always parses from the start of the buffer it is handed and
+       reports that buffer's own members, so a nested container is iterated by
+       handing it the container.  Offsets below are relative to cs. */
+    const char *cs = s + off;
     int koff, klen, voff, vlen2, vtype;
-    int pos = off;
-    while ((pos = mjson_next(s, len, pos, &koff, &klen, &voff, &vlen2, &vtype)) > 0) {
+    int pos = 0;
+    while ((pos = mjson_next(cs, vlen, pos, &koff, &klen, &voff, &vlen2, &vtype)) > 0) {
       int matched = 0;
       if (st->type == STEP_KEY) {
         if (klen - 2 == (int)strlen(st->key) &&
-            memcmp(s + koff + 1, st->key, klen - 2) == 0)
+            memcmp(cs + koff + 1, st->key, klen - 2) == 0)
           matched = 1;
       } else if (st->type == STEP_WILDCARD) {
         matched = 1;
       } else if (st->type == STEP_FILTER) {
         /* filter applies to the value (object) */
         if (vtype == MJSON_TOK_OBJECT || vtype == '{') {
-          if (eval_filter(s + voff, vlen2, &st->filter))
+          if (eval_filter(cs + voff, vlen2, &st->filter))
             matched = 1;
         }
       }
 
       if (matched) {
         ctx->cur++;
-        int stop = try_match(s, len, voff, vlen2, vtype, ctx);
+        int stop = try_match(s, len, off + voff, vlen2, vtype, ctx);
         ctx->cur--;
         if (stop) return 1;
       }
-      if (vtype == '}' || vtype == ']') pos = voff + vlen2;
     }
   } else if (type == MJSON_TOK_ARRAY || type == '[') {
+    const char *cs = s + off;
     int idx = 0;
     int koff, klen, voff, vlen2, vtype;
-    int pos = off;
-    while ((pos = mjson_next(s, len, pos, &koff, &klen, &voff, &vlen2, &vtype)) > 0) {
+    int pos = 0;
+    while ((pos = mjson_next(cs, vlen, pos, &koff, &klen, &voff, &vlen2, &vtype)) > 0) {
       int matched = 0;
       if (st->type == STEP_INDEX && idx == st->index) matched = 1;
       else if (st->type == STEP_WILDCARD) matched = 1;
       else if (st->type == STEP_FILTER) {
         if (vtype == MJSON_TOK_OBJECT || vtype == '{') {
-          if (eval_filter(s + voff, vlen2, &st->filter))
+          if (eval_filter(cs + voff, vlen2, &st->filter))
             matched = 1;
         }
       }
 
       if (matched) {
         ctx->cur++;
-        int stop = try_match(s, len, voff, vlen2, vtype, ctx);
+        int stop = try_match(s, len, off + voff, vlen2, vtype, ctx);
         ctx->cur--;
         if (stop) return 1;
       }
       idx++;
-      if (vtype == '}' || vtype == ']') pos = voff + vlen2;
     }
   }
   return 0;
 }
 
-static int walk(const char *s, int len, int off, int depth,
+static int walk(const char *s, int len, int off, int clen, int depth,
                 struct match_ctx *ctx) {
+  const char *cs = s + off;
   int koff, klen, voff, vlen, vtype;
-  int pos = off;
-  while ((pos = mjson_next(s, len, pos, &koff, &klen, &voff, &vlen, &vtype)) > 0) {
-    /* try current position against remaining path */
-    int stop = try_match(s, len, voff, vlen, vtype, ctx);
+  int pos = 0;
+  while ((pos = mjson_next(cs, clen, pos, &koff, &klen, &voff, &vlen, &vtype)) > 0) {
+    int stop = try_match(s, len, off + voff, vlen, vtype, ctx);
     if (stop) return 1;
 
     /* recurse into containers for recursive descent */
     if (vtype == MJSON_TOK_OBJECT || vtype == '{' ||
         vtype == MJSON_TOK_ARRAY  || vtype == '[') {
-      stop = walk(s, len, voff, depth + 1, ctx);
+      stop = walk(s, len, off + voff, vlen, depth + 1, ctx);
       if (stop) return 1;
     }
-    if (vtype == '}' || vtype == ']') pos = voff + vlen;
   }
   return 0;
 }

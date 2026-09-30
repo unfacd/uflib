@@ -17,6 +17,10 @@
 
  */
 
+#ifdef HAVE_CONFIG_UFLIB_H
+#include <config_uflib.h>
+#endif
+
 #include <uflib/utils_file_loader.h>
 #include <uflib/standard_defs.h>
 #include <uflib/utils_str.h>
@@ -45,7 +49,14 @@ FileLoaderLoadIfModified(FileLoader *file_loader_ptr, bool is_hashed) {
   size_t current_file_sz = file_loader_ptr->file_info.size;
 
   bool is_valid = false;
+#if UFLIB_CAPABILITY_UTF8PROC
   size_t file_length_sz = DefensiveStrlenUtf8(file_loader_ptr->filename, FILE_LOADER_MAX_FILENAME, IGNORE_BYTES_READ_PARAM, &is_valid);
+#else
+  /* No codepoint count without utf8proc, and none is needed: this call only
+     establishes that the name is non-empty and terminates in range. */
+  size_t file_length_sz = 0;
+  is_valid = DefensiveStrlen(file_loader_ptr->filename, FILE_LOADER_MAX_FILENAME, &file_length_sz);
+#endif
   if (!is_valid || file_length_sz == 0) {
     return FL_FILENAME_ERROR;
   }

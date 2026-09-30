@@ -143,22 +143,22 @@ DistinctArrayDestruct(DistinctArray *hash_map_ptr);
  * The callback receives a pointer to each stored item.  Empty slots (NULL
  * entries) are skipped.
  *
- * @param hash_map_ptr       The DistinctArray to iterate.
- * @param on_item_available  Block invoked for each populated item.
- *
- * @note Requires Clang (@c -fblocks) — the callback is an Objective-C block.
+ * @param hash_map_ptr   The DistinctArray to iterate.
+ * @param callback_ptr   Invoked for each populated item; @p ctx_ptr is passed through unmodified.
+ * @param ctx_ptr        Caller-owned context, opaque to the iteration.
  *
  * FIX: implementation now walks the value_index array (previous layout
  *      access was undefined behaviour).
  *
  * @code{.c}
- * DistinctArrayIterate(&da, ^(uint8_t *item) {
+ * static void sPrintItem(void *ctx_ptr, uint8_t *item) {
  *     printf("origin: %s\n", (char *)item);
- * });
+ * }
+ * DistinctArrayIterate(&da, sPrintItem, NULL);
  * @endcode
  */
 PUBLIC_API void
-DistinctArrayIterate(DistinctArray *hash_map_ptr, void(^on_item_available)(uint8_t *item));
+DistinctArrayIterate(DistinctArray *hash_map_ptr, DistinctArrayIterateCallback callback_ptr, void *ctx_ptr);
 
 /**
  * @brief Look up an item in the hash table.

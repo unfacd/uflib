@@ -1,0 +1,7 @@
+document = *binding [root-block]
+binding = identifier "=" value
+root-block = "return" table
+value = table / alias / string / number / boolean / "nil"
+table = "{" [member *("," member) [","]] "}"
+member = identifier "=" value
+alias = identifier

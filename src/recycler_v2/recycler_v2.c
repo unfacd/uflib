@@ -279,6 +279,9 @@ RecyclerV2InitTypePool(const RecyclerV2PoolConfig *config_ptr)
         : CONFIG_DEFAULT_RECYCLER_V2_EXPANSION_THRESHOLD;
     pool_ptr->marshal_blob_max_sz = config_ptr->marshal_blob_max_sz;
     pool_ptr->storage_init_policy = config_ptr->storage_init_policy;
+    /* Borrowed, never owned: the pool lives for the process, so the caller's
+       logger must outlive the process too — create it before any pool. */
+    pool_ptr->uf_logger = config_ptr->logger_ptr;
     /* OVERWRITE (0) is both the enum default and the safe behaviour — no
      * ambiguity: a zero-initialized config inherently means OVERWRITE. */
 
@@ -1762,6 +1765,11 @@ sDescribePool(BufferDescriptor *bd, RecyclerV2PoolDefinition *pool_ptr)
     sDescribeJsonString(bd, pool_ptr->ufsrv_class_ptr);
     BufferDescriptorAppendFormatted(bd, ",\"instance_id\":");
     sDescribeJsonString(bd, pool_ptr->instance_id_ptr);
+    /* Whether this pool was configured to report.  Emitted beside the other
+       caller-supplied deployment context, because "no diagnostics appeared" and
+       "no logger was configured" call for different fixes. */
+    BufferDescriptorAppendFormatted(bd, ",\"logger\":\"%s\"",
+        pool_ptr->uf_logger != NULL ? "enabled" : "none");
     BufferDescriptorAppendFormatted(bd, ",\"storage_path\":");
     sDescribeJsonString(bd, pool_ptr->storage_path);
     BufferDescriptorAppendFormatted(bd, ",\"storage_init_policy\":\"%s\"",

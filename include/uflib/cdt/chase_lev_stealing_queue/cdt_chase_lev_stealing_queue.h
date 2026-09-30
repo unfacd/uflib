@@ -66,6 +66,7 @@
 
 #include <uflib/uflib_defs.h>
 #include <uflib/cdt/chase_lev_stealing_queue/cdt_chase_lev_stealing_queue_type.h>
+#include <uflib/logger/logger_type.h>
 
 /* ── Lifecycle ─────────────────────────────────────────────────────────── */
 
@@ -87,6 +88,45 @@
  */
 PUBLIC_API ChaseLevStealingQueue *
 ChaseLevStealingQueueCreate(size_t requested_capacity);
+
+/**
+ * @brief Create a work-stealing deque that reports through @p logger_ptr.
+ *
+ * Behaves exactly as ChaseLevStealingQueueCreate(), and additionally reports
+ * creation, each failure, and release through the supplied logger.  Push, Pop
+ * and Steal are never logged — a deque built this way has the same concurrency
+ * behaviour, and the same cache-line behaviour, as one built without a logger.
+ *
+ * The failures are worth distinguishing: this constructor can fail on size
+ * overflow, on allocation, and on a platform whose pointer atomics are not
+ * lock-free — the last of which means the structure cannot work at all, and is
+ * reported at CRITICAL for that reason.
+ *
+ * The logger is **borrowed, not owned**.  The deque stores the pointer and
+ * never destroys it, so the logger must outlive the deque: destroy the deque
+ * before destroying the logger.  A deque destroyed after its logger would
+ * report through a dangling handle.
+ *
+ * @param[in] requested_capacity  Initial capacity (rounded up; 0 → minimum 2).
+ * @param[in] logger_ptr          Logger to report through, or NULL to report
+ *                                nothing.  NULL gives exactly
+ *                                ChaseLevStealingQueueCreate().
+ *
+ * @return Opaque handle, or NULL on size overflow or allocation failure.
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * ChaseLevStealingQueue *q = ChaseLevStealingQueueCreateWithLogger(0, log_ptr);
+ * if (!q) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * ChaseLevStealingQueueDestroy(q);   // the deque first —
+ * UfLoggerDestroy(log_ptr);          // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API ChaseLevStealingQueue *
+ChaseLevStealingQueueCreateWithLogger(size_t requested_capacity, UfLogger *logger_ptr);
 
 /**
  * @brief Tear down the deque and free all storage (including retired rings).

@@ -38,32 +38,65 @@
 #include <uflib/standard_c_includes.h>
 
 #include <uflib/cdt/lockless_treiber_stack/lockless_treiber_stack.h>
+#include <uflib/logger/logger.h>
 #include "lockless_treiber_stack_priv.h"
 
 LocklessTreiberStack *
-lockless_treiber_stack_create(void)
+lockless_treiber_stack_create_with_logger(UfLogger *logger_ptr)
 {
 	LocklessTreiberStack *stack = malloc(sizeof(*stack));
 
-	if (unlikely(stack == NULL)) return NULL;
+	if (unlikely(stack == NULL)) {
+		/*
+		 * The one failure this module has, and the one that was previously
+		 * reported nowhere: the caller got NULL and no reason.
+		 */
+		if (logger_ptr != NULL) {
+			UF_LOGGER_ERROR(logger_ptr, "treiber stack handle allocation failed");
+		}
+		return NULL;
+	}
 
 	/*
 	 * Relaxed: initialisation happens-before any sharing of the stack with
 	 * other threads (caller's responsibility) — no publication ordering needed.
+	 * The logger pointer is set before the handle is returned, so it needs no
+	 * ordering of its own either: no other thread can observe the stack yet.
 	 */
 	atomic_store_explicit(&stack->head, NULL, memory_order_relaxed);
+	stack->uf_logger = logger_ptr;
+
+	if (logger_ptr != NULL) {
+		UF_LOGGER_DEBUG(logger_ptr, "treiber stack created");
+	}
 	return stack;
+}
+
+LocklessTreiberStack *
+lockless_treiber_stack_create(void)
+{
+	return lockless_treiber_stack_create_with_logger(NULL);
 }
 
 void
 lockless_treiber_stack_destroy(LocklessTreiberStack *stack)
 {
+	UfLogger *logger_ptr;
+
 	if (unlikely(stack == NULL)) return;
 
 	/*
 	 * The stack owns no node memory; the caller must have drained (or otherwise
 	 * released) all pushed nodes before releasing the handle.
+	 *
+	 * Read the borrow before releasing the handle it lives in, and report before
+	 * freeing: the caller contracted to outlive us, so the logger is still
+	 * valid here.
 	 */
+	logger_ptr = stack->uf_logger;
+	if (logger_ptr != NULL) {
+		UF_LOGGER_DEBUG(logger_ptr, "treiber stack destroyed");
+	}
 	free(stack);
 }
 

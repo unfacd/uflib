@@ -30,10 +30,11 @@
  * provided.
  * @param username system user name to change to
  * @param chroot_dir
+ * @param on_success callback invoked once privileges have been dropped
  * @return 0 on success,
  */
 int
-DropRootPrivileges(const char *username, const char *chroot_dir, void(^on_success)(void))
+DropRootPrivileges(const char *username, const char *chroot_dir, void (*on_success)(void))
 {
   if (chroot_dir && !username) {
     syslog(LOG_WARNING, "chroot without dropping user privileges...");

@@ -56,6 +56,7 @@
 #include <uflib/main_types.h>
 #include <uflib/adt/adt_minheap_type.h>
 #include <uflib/buffer_descriptor/buffer_descriptor.h>
+#include <uflib/logger/logger_type.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -114,6 +115,45 @@ PUBLIC_API int MinHeapComparePtrAsInteger(const void *key1, const void *key2);
 PUBLIC_API MinHeap *MinHeapCreate(int initial_capacity, MinHeapCmpFn comp_func);
 
 /**
+ * @brief Allocate a pointer-key heap that reports through @p logger_ptr.
+ *
+ * Behaves exactly as MinHeapCreate(), and additionally reports creation, each
+ * rejection and allocation failure, and release.  Insert and delmin are never
+ * logged, so a heap built this way behaves identically under load to one built
+ * without a logger.
+ *
+ * The failures are worth distinguishing: this constructor can reject a negative
+ * capacity, fail on the handle allocation, and fail on the entry array — all of
+ * which used to reach the caller as the same bare NULL.
+ *
+ * The logger is **borrowed, not owned**.  The heap stores the pointer and never
+ * destroys it, so the logger must outlive the heap: destroy the heap before
+ * destroying the logger.  A heap destroyed after its logger would report
+ * through a dangling handle.
+ *
+ * @param initial_capacity  Entries to reserve up front; 0 chooses a default.
+ *                          Negative is rejected (returns NULL).
+ * @param comp_func         Key comparator; NULL selects MinHeapCompareIntKeys
+ *                          (keys are then `int *`).
+ * @param logger_ptr        Logger to report through, or NULL to report nothing.
+ *                          NULL gives exactly MinHeapCreate().
+ * @return Heap handle, or NULL on allocation failure / invalid capacity.
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * MinHeap *h = MinHeapCreateWithLogger(64, MinHeapCompareIntKeys, log_ptr);
+ * if (!h) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * MinHeapDestroy(h);        // the heap first —
+ * UfLoggerDestroy(log_ptr); // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API MinHeap *MinHeapCreateWithLogger(int initial_capacity, MinHeapCmpFn comp_func,
+                                            UfLogger *logger_ptr);
+
+/**
  * @brief Allocate a heap whose keys are inline `int64_t` values.
  *
  * Comparisons are a direct integer subtract-sign — no comparator function
@@ -124,6 +164,25 @@ PUBLIC_API MinHeap *MinHeapCreate(int initial_capacity, MinHeapCmpFn comp_func);
  * @return Heap handle, or NULL on allocation failure / invalid capacity.
  */
 PUBLIC_API MinHeap *MinHeapCreateI64(int initial_capacity);
+
+/**
+ * @brief Allocate an inline-`int64_t`-key heap that reports through @p logger_ptr.
+ *
+ * Behaves exactly as MinHeapCreateI64(), and additionally reports creation and
+ * release through the supplied logger.  The borrow contract is the same as
+ * MinHeapCreateWithLogger(): the logger is borrowed, never owned, and must
+ * outlive the heap.
+ *
+ * @param initial_capacity  Entries to reserve up front; 0 chooses a default.
+ * @param logger_ptr        Logger to report through, or NULL to report nothing.
+ *                          NULL gives exactly MinHeapCreateI64().
+ * @return Heap handle, or NULL on allocation failure / invalid capacity.
+ *
+ * @code{.c}
+ * MinHeap *h = MinHeapCreateI64WithLogger(32, log_ptr);
+ * @endcode
+ */
+PUBLIC_API MinHeap *MinHeapCreateI64WithLogger(int initial_capacity, UfLogger *logger_ptr);
 
 /**
  * @brief Release backing storage and the handle.
@@ -301,10 +360,11 @@ PUBLIC_API size_t MinHeapForeach(const MinHeap *h,
  *
  * Composes a best-effort introspection snapshot: live size, backing
  * capacity, key mode (`"ptr"` or `"i64"`), load factor, whether a comparator
- * is installed, and one entry per live slot in heap-array order (index, key,
- * value).  For a pointer-key heap the key/value are rendered as hex addresses
- * (`null` when NULL); for an i64 heap the key is rendered as a decimal
- * integer.
+ * is installed, whether this heap was created with a logger to report through
+ * (`logger`, `"enabled"` or `"none"`), and one entry per live slot in
+ * heap-array order (index, key, value).  For a pointer-key heap the key/value
+ * are rendered as hex addresses (`null` when NULL); for an i64 heap the key is
+ * rendered as a decimal integer.
  *
  * The heap is single-threaded, so the snapshot is exact (unlike the lock-free
  * introspection of DescribeLocklessLru(), which is approximate under
@@ -315,7 +375,9 @@ PUBLIC_API size_t MinHeapForeach(const MinHeap *h,
  * caller's descriptor is appended to.  Returns @p provided, or NULL only if a
  * fresh descriptor could not be allocated.
  *
- * @param h         Heap handle (NULL → emits `{"error":"null handle"}`).
+ * @param h         Heap handle (NULL → emits `{"error":"null handle"}`, which
+ *                  carries no `logger` attribute: with no instance there is no
+ *                  borrow to report).
  * @param provided  Optional caller-owned BufferDescriptor (NULL → allocate).
  * @return The populated BufferDescriptor.
  *

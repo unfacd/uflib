@@ -17,7 +17,7 @@ All tests passed
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "mjson_ex.h"
+#include <uflib/mjson/mjson_ex.h>
 
 static int g_count;
 static char g_buf[32][128];

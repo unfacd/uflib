@@ -1,0 +1,57 @@
+# LeakSanitizer suppressions for the logger module's real-backend tests.
+#
+# ── What this covers, and why it exists ───────────────────────────────────
+#
+# ISS-001, recorded in dev/technical_designs/UFLIB_MODULE_LOGGER_DESIGN.md:
+# the vendored zlog (packages/zlog, 1.2.18) does not free the configuration it
+# allocates.  Measured on a zlog-only program containing no uflib code, so the
+# defect is unambiguously upstream:
+#
+#     zlog_init_from_string + zlog_fini   121,184 bytes in 16 allocations
+#     zlog_reload_from_string             121,184 bytes in 16 allocations
+#     (flat; measured at 0, 5 and 25 reloads)
+#
+# Applying that to this suite's 12 cases — several of which create more than one
+# logger, and each creation installs a fresh configuration — produces the
+# ~2.1 MB / 288 allocations LeakSanitizer reports without this file.
+#
+# ── Why it is scoped this narrowly ────────────────────────────────────────
+#
+# These are the leaf allocator frames the leaking stacks actually pass through,
+# enumerated from a measured run rather than guessed.  Naming frames rather than
+# the source directory means:
+#
+#   - a leak anywhere in uflib is still reported, even one whose stack happens
+#     to pass through zlog on its way down;
+#   - a leak that grows, or a new one appearing in zlog, is reported, because a
+#     frame that is not listed here is not suppressed;
+#   - the suppression says exactly which upstream functions are responsible.
+#
+# It is attached to logger_zlog_tests alone (see tests/logger/CMakeLists.txt).
+# logger_core_tests runs under full leak detection with nothing suppressed,
+# because it never initialises zlog and therefore never incurs this.
+#
+# ── Observed match counts ─────────────────────────────────────────────────
+#
+# Measured with print_suppressions=1 over the suite as it stands.  The totals
+# reconcile exactly with the unsuppressed report (288 allocations, 2,181,312
+# bytes), which is what establishes that nothing outside these frames leaks:
+#
+#     count      bytes   frame
+#       216    2007936   zlog_spec_new
+#        18     147744   zlog_format_new
+#        36       5040   zc_arraylist_new
+#        18      20592   zlog_rotater_new
+#
+# zlog_conf_new_from_string is retained although it did not match as a leaf in
+# this run: every leaking stack passes through it, and a configuration of a
+# different shape could well end its allocation there instead.
+#
+# Re-examine when zlog is re-vendored or patched.  Removing this file is the
+# correct outcome of that work, not maintaining it.
+
+leak:zlog_conf_new_from_string
+leak:zlog_format_new
+leak:zlog_spec_new
+leak:zlog_rotater_new
+leak:zc_arraylist_new

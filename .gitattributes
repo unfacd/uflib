@@ -34,3 +34,16 @@ CMakeLists.txt text eol=lf
 devops/git_mirror_exclusions.txt                text eol=lf
 devops/git_last_mirror_commit_ids_registry.txt  text eol=lf
 devops/*.sh                                      text eol=lf
+
+# Test fixtures and case tables must have LF.
+#
+# The truth table is compared field by field and the reader strips '\n' but not
+# '\r' (ufconfig_validate.c), so with core.autocrlf=true a fresh clone would
+# check these out as CRLF and every row would report a mismatch against an
+# expected status carrying a trailing carriage return.  The document parser
+# itself tolerates CR; this is about the harness's comparison, not the format.
+*.lua text eol=lf
+*.tsv text eol=lf
+
+# This file must itself be LF: a CR would enter the patterns.
+.gitattributes text eol=lf

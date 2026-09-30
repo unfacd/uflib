@@ -3,3 +3,5 @@
 /.idea/
 /build/
 /.cache/
+uflib-gh/*
+!uflib-gh/.gitkeep

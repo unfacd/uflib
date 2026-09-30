@@ -75,7 +75,7 @@ PUBLIC_API bool DefensiveStrlenWithMinMax(const char * _Nonnull str, size_t min_
 #define STRINGIFY_PARAMETER(...) sprintf_provided_buffer(alloca(get_buffer_size(__VA_ARGS__)), __VA_ARGS__)
 
 char *strbufdup(const char *s, size_t n);
-char *strbufdup_nullable(const char *s, size_t n, char *(^on_null)(void));
+char *strbufdup_nullable(const char *s, size_t n, char *(*on_null)(void));
 char *sprintf_provided_buffer (char *user_allocated_buffer, char *format, ...);
 
 PUBLIC_API char * mystrdup(const char *);

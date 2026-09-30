@@ -1,0 +1,9 @@
+# input<TAB>STATUS;resolved-command;argc;handler-args
+status	OK;status;0;
+st	OK;status;0;
+remote add origin git@example.com	OK;remote add;2;origin|git@example.com
+ra origin git@example.com	OK;remote add;2;origin|git@example.com
+co main	OK;checkout;1;main
+say hello world	OK;echo;2;hello|world
+"remote add" origin git@example.com	OK;remote add;2;origin|git@example.com
+build	OK;build;0;

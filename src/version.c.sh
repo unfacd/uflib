@@ -32,11 +32,12 @@ cat >version.c <<!END!
 
 static const char *t_compiled="$WHEN";
 static const char *u_compiled="$HIM";
-const char *uflib_version=STRINGISE(UFLIB_MAJOR)"."STRINGISE(UFLIB_MINOR)"."STRINGISE(UFLIB_PATCH);
+const char *uflib_version=STRINGISE(UFLIB_MAJOR)"."STRINGISE(UFLIB_MINOR)"."STRINGISE(UFLIB_PATCH)"."STRINGISE(UFLIB_INTERNAL);
 
 const char *UfsrvUfLibVersion()      { return uflib_version; }
-const char *UfsrvUfLibVersionMajor() { return STRINGISE(UFLIB_MAJOR_MAJOR); }
-const char *UfsrvUfLibVersionMinor() { return STRINGISE(UFLIB_MAJOR_MINOR); }
-const char *UfsrvUfLibVersionPatch() { return STRINGISE(UFLIB_MAJOR_PATCH); }
+const char *UfsrvUfLibVersionMajor() { return STRINGISE(UFLIB_MAJOR); }
+const char *UfsrvUfLibVersionMinor() { return STRINGISE(UFLIB_MINOR); }
+const char *UfsrvUfLibVersionPatch() { return STRINGISE(UFLIB_PATCH); }
+const char *UfsrvUfLibVersionInternal() { return STRINGISE(UFLIB_INTERNAL); }
 
 !END!

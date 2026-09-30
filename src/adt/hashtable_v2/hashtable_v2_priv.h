@@ -38,6 +38,7 @@
 
 #include <uflib/adt/hashtable_v2/hashtable_v2_type.h>
 #include <uflib/adt/hashtable_v2/hashtable_v2_defs.h>
+#include <uflib/logger/logger_type.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,7 @@ struct HashTableV2 {
 	HashTableV2KeyExtractor key_extractor;      /**< NULL → identity (item IS the key) */
 	HashTableV2KeyComparator key_comparator;    /**< NULL → memcmp/strcmp based on key_size */
 	pthread_rwlock_t        rwlock;             /**< Coarse-grained lock (only if enable_locking) */
+	UfLogger               *uf_logger;          /**< Borrowed diagnostic sink (write-once); NULL = silent. */
 };
 
 /* ──────────────────────────────────────────────

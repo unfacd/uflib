@@ -19,7 +19,6 @@
 #include <uflib/standard_defs.h>
 #include <math.h>
 
-#include <resolv.h>
 #include <bsd/stdlib.h>
 
 #include <uflib/utils_crypto.h>
@@ -154,9 +153,17 @@ ComputeSHA1(const unsigned char *input, size_t input_len, char *output, size_t o
   SHA1(input, input_len, raw_buf);
 
   if (b64flag) {
-    int result = b64_ntop(raw_buf, SHA_DIGEST_LENGTH, output, output_len);
+    // b64_ntop used to enforce this bound itself; the in-tree encoder takes no
+    // target size, so the 28 characters plus the terminator are checked here.
+    size_t required = ((size_t)SHA_DIGEST_LENGTH + 2) / 3 * 4 + 1;
 
-    return result;
+    if (output_len < required) {
+      return -1;
+    }
+
+    (void)base64_encode(raw_buf, SHA_DIGEST_LENGTH, (unsigned char *)output);
+
+    return (int)(required - 1);
   }
   else {
     int i;

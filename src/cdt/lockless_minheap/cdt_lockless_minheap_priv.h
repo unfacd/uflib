@@ -28,6 +28,7 @@
 #include <uflib/cdt/lockless_minheap/cdt_lockless_minheap.h>
 #include <uflib/cdt/lockless_minheap/cdt_lockless_minheap_type.h>
 #include <uflib/cdt/lockless_treiber_stack/lockless_treiber_stack_type.h>
+#include <uflib/logger/logger_type.h>
 
 /* ── Internal types ─────────────────────────────────────────────────────── */
 
@@ -64,11 +65,18 @@ _Static_assert(offsetof(struct LocklessMinHeapNode, retire) == 0,
  * on the hot path, so it is isolated onto its own cache line (the pad is
  * defensive — @p head/@p retired have no co-writer, but the isolation keeps
  * the counter from colliding with any future hot field).
+ *
+ * @p uf_logger is borrowed, never owned, and never touched by insert/delmin:
+ * it is read only when the handle is created or released, which is why it sits
+ * in the cold group rather than behind a pointer of its own.  NULL means the
+ * queue reports nothing, which is the behaviour every caller had before the
+ * field existed.
  */
 struct LocklessMinHeap {
     struct LocklessMinHeapNode *head;        ///< Dummy sentinel (write-once).
     LocklessTreiberStack       *retired;     ///< Retire stack (write-once).
-    char                        _pad[48];    ///< Isolate approx_size to its own line.
+    UfLogger                   *uf_logger;   ///< Borrowed diagnostic sink (write-once); NULL = silent.
+    char                        _pad[40];    ///< Isolate approx_size to its own line.
     _Atomic(int64_t)            approx_size; ///< HOT — relaxed telemetry (signed; may transiently go negative, clamped on read).
 };
 

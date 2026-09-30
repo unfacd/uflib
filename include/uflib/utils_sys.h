@@ -21,7 +21,7 @@
 #include <stdbool.h>
 #include <uflib/uflib_defs.h>
 
-PUBLIC_API int DropRootPrivileges(const char *username, const char *chroot_dir, void(^on_success)(void));
+PUBLIC_API int DropRootPrivileges(const char *username, const char *chroot_dir, void (*on_success)(void));
 PUBLIC_API ssize_t GetFileSize(const char *file_name);
 PUBLIC_API bool IsFileExists(const char *file_name);
 PUBLIC_API bool IsFileWithContentPossibly(const char *file_name);

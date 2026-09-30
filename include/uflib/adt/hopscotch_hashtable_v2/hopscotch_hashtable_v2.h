@@ -37,6 +37,7 @@
 
 #include <uflib/uflib_defs.h>
 #include <uflib/adt/hopscotch_hashtable_v2/hopscotch_hashtable_v2_type.h>
+#include <uflib/logger/logger_type.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,6 +64,42 @@ extern "C" {
  */
 PUBLIC_API HopscotchHashTable *
 HopscotchHashTableCreate(const HopscotchHashTableConfig *config_ptr);
+
+/**
+ * @brief Create a hopscotch table that reports through @p logger_ptr.
+ *
+ * Behaves exactly as HopscotchHashTableCreate(), and additionally reports
+ * creation, each allocation failure, and release through the supplied logger.
+ * Insert/lookup/remove are never logged, so a table built this way performs
+ * identically to one built without a logger.
+ *
+ * The logger is **borrowed, not owned**, and is deliberately not a field of
+ * @ref HopscotchHashTableConfig: the config is a frozen value that is copied
+ * into the table and reused by callers across instances, while the logger is a
+ * collaborator supplied per instance.  The table stores the pointer and never
+ * destroys it, so the logger must outlive the table: destroy the table before
+ * destroying the logger.
+ *
+ * @param config_ptr  Optional config; NULL selects defaults.
+ * @param logger_ptr  Logger to report through, or NULL to report nothing.
+ *                    NULL gives exactly HopscotchHashTableCreate().
+ * @return Table handle, or NULL on allocation failure.
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * HopscotchHashTableConfig cfg = { .pfactor = 8 };
+ * HopscotchHashTable *ht_ptr = HopscotchHashTableCreateWithLogger(&cfg, log_ptr);
+ * if (!ht_ptr) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * HopscotchHashTableDestroy(ht_ptr);   // the table first —
+ * UfLoggerDestroy(log_ptr);            // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API HopscotchHashTable *
+HopscotchHashTableCreateWithLogger(const HopscotchHashTableConfig *config_ptr,
+                                   UfLogger *logger_ptr);
 
 /**
  * @brief Destroy the hash table and free all internal memory.

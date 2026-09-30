@@ -91,6 +91,7 @@
 #include <stddef.h>
 
 #include <uflib/adt/hashtable_v2/hashtable_v2_type.h>
+#include <uflib/logger/logger_type.h>
 
 /* ──────────────────────────────────────────────
  * Lifecycle
@@ -109,6 +110,43 @@
  */
 PUBLIC_API HashTableV2 *
 HashTableV2Create(const HashTableV2Config *config_ptr);
+
+/**
+ * @brief Create a table that reports through @p logger_ptr.
+ *
+ * Behaves exactly as HashTableV2Create(), and additionally reports creation,
+ * each allocation and lock-initialisation failure, and release through the
+ * supplied logger.  Records carry the table's own `name` from the
+ * configuration, so a process running several tables can tell them apart.
+ * Insert/lookup/remove are never logged, so a table built this way performs
+ * identically to one built without a logger.
+ *
+ * The logger is **borrowed, not owned**, and is deliberately not a field of
+ * @ref HashTableV2Config: the config describes what the table should do, while
+ * the logger is a collaborator the caller supplies, and a config is often
+ * reused across tables.  The table stores the pointer and never destroys it,
+ * so the logger must outlive the table: destroy the table before destroying
+ * the logger.
+ *
+ * @param config_ptr  Optional config; NULL selects defaults.
+ * @param logger_ptr  Logger to report through, or NULL to report nothing.
+ *                    NULL gives exactly HashTableV2Create().
+ * @return Table handle, or NULL on allocation failure.
+ *
+ * @code{.c}
+ * UfLogger *log_ptr = NULL;
+ * if (UfLoggerCreateWithDefaults(&log_ptr) != UF_LOGGER_STATUS_OK) { return NULL; }
+ *
+ * HashTableV2Config cfg = { .name = "SessionsByID", .key_size = 8 };
+ * HashTableV2 *ht_ptr = HashTableV2CreateWithLogger(&cfg, log_ptr);
+ * if (!ht_ptr) { UfLoggerDestroy(log_ptr); return NULL; }
+ *
+ * HashTableV2Destroy(ht_ptr);   // the table first —
+ * UfLoggerDestroy(log_ptr);     // then the logger it borrowed
+ * @endcode
+ */
+PUBLIC_API HashTableV2 *
+HashTableV2CreateWithLogger(const HashTableV2Config *config_ptr, UfLogger *logger_ptr);
 
 /**
  * @brief Destroy a HashTableV2 instance, freeing all internal memory.

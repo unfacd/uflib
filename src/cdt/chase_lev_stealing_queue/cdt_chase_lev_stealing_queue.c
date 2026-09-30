@@ -27,6 +27,8 @@
 
 #include "cdt_chase_lev_stealing_queue_priv.h"
 
+#include <uflib/logger/logger.h>
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -123,20 +125,35 @@ grow(ChaseLevStealingQueue *q, uint64_t top, uint64_t bottom)
 }
 
 ChaseLevStealingQueue *
-ChaseLevStealingQueueCreate(size_t requested_capacity)
+ChaseLevStealingQueueCreateWithLogger(size_t requested_capacity, UfLogger *logger_ptr)
 {
     size_t capacity = 0u;
     if (!round_capacity(requested_capacity, &capacity)) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "work-stealing deque rejected: requested capacity %zu is unrepresentable",
+                            requested_capacity);
+        }
         return NULL;
     }
 
     ChaseLevStealingQueue *q = calloc(1u, sizeof(*q));
     if (q == NULL) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr, "work-stealing deque handle allocation failed");
+        }
         return NULL;
     }
 
+    /* Set the borrow first, so every failure below can be reported through it. */
+    q->uf_logger = logger_ptr;
+
     ChaseLevStealingQueueArray *initial = array_alloc(capacity);
     if (initial == NULL) {
+        if (logger_ptr != NULL) {
+            UF_LOGGER_ERROR(logger_ptr,
+                            "work-stealing deque ring allocation failed: capacity=%zu", capacity);
+        }
         free(q);
         return NULL;
     }
@@ -149,21 +166,44 @@ ChaseLevStealingQueueCreate(size_t requested_capacity)
     if (!atomic_is_lock_free(&q->top) ||
         !atomic_is_lock_free(&q->bottom) ||
         !atomic_is_lock_free(&q->array)) {
+        /* Not a resource shortage: the lock-free guarantee this structure is
+           built on does not hold on this platform, so no deque can work here.
+           Reported as CRITICAL because retrying or reallocating cannot help. */
+        if (logger_ptr != NULL) {
+            UF_LOGGER_CRITICAL(logger_ptr,
+                               "work-stealing deque unusable: 64-bit and pointer atomics are not lock-free on this platform");
+        }
         free(initial);
         free(q);
         return NULL;
     }
     q->retired = NULL;
     q->cached_top = 0u;
+
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr, "work-stealing deque created: capacity=%zu", capacity);
+    }
     return q;
+}
+
+ChaseLevStealingQueue *
+ChaseLevStealingQueueCreate(size_t requested_capacity)
+{
+    return ChaseLevStealingQueueCreateWithLogger(requested_capacity, NULL);
 }
 
 void
 ChaseLevStealingQueueDestroy(ChaseLevStealingQueue *q)
 {
+    UfLogger *logger_ptr;
+
     if (q == NULL) {
         return;
     }
+
+    /* Read the borrow before anything is released: it lives in the handle that
+       is about to be freed. */
+    logger_ptr = q->uf_logger;
 
     ChaseLevStealingQueueArray *a = atomic_load_explicit(&q->array, memory_order_relaxed);
     free(a);
@@ -173,6 +213,10 @@ ChaseLevStealingQueueDestroy(ChaseLevStealingQueue *q)
         ChaseLevStealingQueueArray *older = a->older;
         free(a);
         a = older;
+    }
+
+    if (logger_ptr != NULL) {
+        UF_LOGGER_DEBUG(logger_ptr, "work-stealing deque destroyed");
     }
     free(q);
 }

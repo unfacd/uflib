@@ -1,0 +1,30 @@
+/**
+ * @file ufconfig_test_paths.h
+ * @brief Fixture locations for the config module's tests, resolved by CMake.
+ *
+ * Generated from ufconfig_test_paths.h.in.  Tests need to reach two fixture
+ * roots, and neither can be expressed as a literal path in the source:
+ *
+ *   The corpus belongs to the test suite and moves with it.
+ *   The sample documents belong to the module and are read by the generator's
+ *   verify target as well, so they are not duplicated here.
+ *
+ * CTest runs each test with the build directory as its working directory, so a
+ * relative path from the source file would be wrong at run time.  Configuring
+ * the absolute paths in keeps the two roots stated once, in the CMake file that
+ * already has to know them.
+ */
+
+#ifndef UFCONFIG_TEST_PATHS_H
+#define UFCONFIG_TEST_PATHS_H
+
+/*! Root of this suite's fixtures: holds corpus/, corpus_alias/, corpus_noeval/. */
+#define UFCONFIG_TEST_FIXTURE_DIR  "@UFCONFIG_TEST_FIXTURE_DIR@"
+
+/*! The parse corpus itself, where verdicts.tsv lives. */
+#define UFCONFIG_TEST_CORPUS_DIR  "@UFCONFIG_TEST_FIXTURE_DIR@/corpus"
+
+/*! Directory holding the sample documents the module ships. */
+#define UFCONFIG_TEST_SAMPLE_DIR  "@UFCONFIG_TEST_SAMPLE_DIR@"
+
+#endif /* UFCONFIG_TEST_PATHS_H */

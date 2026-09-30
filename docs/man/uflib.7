@@ -1,4 +1,4 @@
-.TH UFLIB 7 "September 2026" "uflib 3.10.5" "UFSRV Programmer's Manual"
+.TH UFLIB 7 "September 2026" "uflib 4.0.0.8" "UFSRV Programmer's Manual"
 .\" ---------------------------------------------------------------------------
 .SH NAME
 uflib \- foundational C library for the ufsrv messaging-server platform
@@ -11,7 +11,11 @@ uflib \- foundational C library for the ufsrv messaging-server platform
 .B #include <uflib/cdt/cdt_mpsc_queue.h>
 .B #include <uflib/cdt/lockless_ringbuffer/cdt_lockless_ringbuffer.h>
 .B #include <uflib/recycler_v2/recycler_v2.h>
+.B #include <uflib/logger/logger.h>
+.B #include <uflib/ufconfig/ufconfig.h>
+.B #include <uflib/ufcommand/ufcommand.h>
 .B #include <uflib/buffer_descriptor/buffer_descriptor.h>
+.B #include <uflib/optional/ufoptional.h>
 .fi
 .sp
 Link with
@@ -22,8 +26,9 @@ Link with
 is the bottom layer of the ufsrv development stack.  It provides the
 general-purpose software primitives every higher layer builds on: abstract
 data types, lock-free concurrent data structures, an object recycler,
-crypto and DB abstractions, networking helpers, coroutines, compression,
-JSON, protobuf, UUID generation, and utility routines.  Dependencies flow
+crypto and DB abstractions, networking helpers, an owning optional
+container, a command registry, compression, JSON, protobuf, UUID generation,
+a backend-agnostic logging interface, and utility routines.  Dependencies flow
 strictly downward \(em uflib has no visibility of ufsrvcorelib, ufnetcorelib,
 or any application server.
 .PP
@@ -36,6 +41,14 @@ from a single OBJECT library.  It is consumed by the higher layers via
 .BR "find_package(uflib REQUIRED)" " + " uflib::uflib .
 The library is written in C17 with GNU extensions, requires Clang, and is
 licensed under the GNU Affero General Public License, version 3 or later.
+.PP
+This page describes version
+.BR 4.0.0.8 " of "
+.BR uflib ,
+that being
+.BR MAJOR.MINOR.PATCH.INTERNAL
+as defined in the installed
+.BR version.h .
 .\" ---------------------------------------------------------------------------
 .SH MODULES
 .\" ===================================================
@@ -68,9 +81,9 @@ emits state as JSON (size, capacity, mode, load factor, entries).
 Mutex-protected least-recently-used cache.
 .\" ===================================================
 .SS Concurrent data types \&(cdt) \(em \fBcdt/\fP
-Lock-free and lock-based structures for multi-threaded hot paths.  Each is
-documented in its own design document under
-.IR dev/technical_designs/ .
+Lock-free and lock-based structures for multi-threaded hot paths, each
+declared in its own header under
+.IR cdt/ .
 .PP
 .TP
 .B LamportQueue
@@ -86,18 +99,31 @@ Lock-free fixed-width hash map (seq-lock + open addressing).
 Bounded copy-in/copy-out ring buffer with three concurrency modes \(em
 SPSC, MPSC, and MPMC (Vyukov per-slot sequence numbers).
 .TP
-.B LocklessLRU
+.B LocklessLru
 Lock-free approximate least-recently-used cache (CLOCK second-chance
 eviction, per-slot seqlocks, upsert
-.BR Set / SetEx ).
+.BR LocklessLruSet / LocklessLruSetEx ).
+.TP
+.B LocklessMinHeap
+Lock-free integer min-priority queue.  The concurrent companion to the
+single-threaded
+.BR MinHeap ,
+and deliberately not a binary heap: a sift is a multi-word update on a
+path and cannot be linearised portably, so this is a Harris lock-free
+ordered list.  Inline
+.B int64_t
+keys with an opaque value, insert and delete-min only, no peek; reclamation
+is quiescent
+.RB ( LocklessMinHeapReclaim ).
 .TP
 .B ChaseLevStealingQueue
 Chase-Lev work-stealing deque.
 .TP
-.B AndersonSpinlock / MCSLock / spinlock
-Lock-based synchronization primitives.
+.B spinlock_anderson_t / SpinlockMcs
+Anderson and MCS locks, with the spin-pause definitions they share in
+.IR cdt_spinlock_defs.h .
 .TP
-.B TreiberStack
+.B LocklessTreiberStack
 Shared ABA-protected intrusive LIFO free-list (used by the recycler and
 hash map).
 .\" ===================================================
@@ -149,22 +175,111 @@ Append printf-style output, growing as needed.
 .B BufferDescriptorRelease(bd)
 Free the backing buffer.
 .\" ===================================================
+.SS Optional \&(optional)
+An opaque container holding either one payload or nothing, following the
+semantics of Java's
+.B Optional
+where they survive the crossing into C.  The payload is a
+.BR "void *" ,
+and every operation that can fail reports a
+.B UfOptionalStatus
+rather than throwing.
+.sp
+The container
+.B owns
+its payload.  A constructor takes ownership of a non-NULL payload on success,
+.BR UfOptionalMap " and " UfOptionalFlatMap
+take ownership of what the mapper publishes, and
+.B UfOptionalTake
+hands ownership back to the caller.  Release and transfer both go through the
+destroy callback fixed when the payload was stored, so the container never has
+to know what kind of payload it holds.  A NULL handle is
+.B not
+a container: every read accessor tolerates one and reports empty, so a host
+that has not yet built an optional needs no guard branch at each use.
+.sp
+.TP
+.B UfOptionalEmpty(destroy, context) / UfOptionalOf(value, destroy, context) / UfOptionalOfNullable(value, destroy, context)
+Constructors.  The first two yield an empty container and reject a NULL
+payload; the third collapses a NULL payload to empty.
+.TP
+.B UfOptionalClone(source, clone, destroy, context)
+Deep-copy through a caller-supplied clone operation.
+.TP
+.B UfOptionalDestroy(optional)
+Destroy a container, releasing the payload it still owns.
+.TP
+.B UfOptionalIsPresent(optional) / UfOptionalIsEmpty(optional) / UfOptionalGet(optional)
+State and borrowed access.
+.TP
+.B UfOptionalTake(optional)
+Take the payload, leaving the container empty.
+.TP
+.B UfOptionalOrElse(optional, other) / UfOptionalOrElseGet(optional, supplier, context)
+The payload, or a fallback.  The supplier is consulted only when it is needed.
+.TP
+.B UfOptionalOrElseThrow(optional, out_value)
+Java's
+.BR orElseThrow ,
+expressed as a status and an out-parameter.
+.TP
+.B UfOptionalIfPresent(optional, consumer, context) / UfOptionalFilter(optional, predicate, context)
+Act on the payload; discard it unless it satisfies a predicate.
+.TP
+.B UfOptionalMap(optional, mapper, context, mapped_destroy, out_optional) / UfOptionalFlatMap(optional, mapper, context, out_optional)
+Transform the payload into a new container, flat in the second case.  A mapper
+that publishes a payload and
+.B then
+reports failure leaves the release to the library, so it must not release the
+value itself.  The context given to the mapper is the one later handed to the
+mapped payload's destroy callback.
+.TP
+.B UfOptionalSet(optional, value, destroy, context)
+Replace the payload.  Re-setting the payload the container already holds is a
+no-op on the payload itself.
+.TP
+.B UfOptionalLastStatus(optional)
+The outcome of the most recent state-changing call.  Reads never record, and
+neither do calls that found nothing to do:
+.BR UfOptionalTake " and " UfOptionalFilter
+record
+.B UFOPTIONAL_OK
+when they had a payload to work on and
+.B UFOPTIONAL_EMPTY
+when the container was already empty.
+.sp
+What the module does not do: it is not thread-safe.  A container is
+single-owner, and if one is shared between threads synchronization belongs at
+that boundary, outside this API.
+.\" ===================================================
 .SS Utilities \&(utils*.h)
 String, file, crypto, time, thread, and encoding helpers:
 .BR utils_str ,
 .BR utils_file ,
 .BR utils_crypto ,
+.BR utils_secrets ,
 .BR utils_time ,
 .BR utils_threads ,
 .BR utils_base64 ,
 .BR utils_base64url ,
+.BR base32 ,
 .BR utils_hex ,
 .BR utils_iec_quantity ,
 .BR utils_urls ,
 .BR utils_bits ,
+.BR utils_collection_str ,
 .BR utils_sys ,
 and
 .BR tokeniser .
+.PP
+.B utils_secrets
+carries the AES-256-GCM envelope primitives used by
+.BR ufconfig 's
+encrypted fields: it produces and consumes
+.B enc:v1:<nonce>:<ciphertext>:<tag>
+values, reads a secrets file mapping a field's path to its key, and wipes key
+material and plaintext.  It is usable on its own by anything that needs an
+envelope rather than only by the configuration module.
 .\" ===================================================
 .SS Persistence and networking \&(db, net)
 .B db/
@@ -173,28 +288,419 @@ is a MariaDB/MySQL abstraction;
 provides networking helpers.  Both resolve OpenSSL through
 .BR find_package(OpenSSL) .
 .\" ===================================================
+.SS Ufsrv identifier \&(ufsrvuid)
+The ufsrv-native user identifier: a timestamp, instance and sequence tuple
+with reserved system-user values.  Generated, converted to and from binary and
+encoded text, and compared.
+.PP
+.TP
+.B UfsrvUidGenerate(uid) / UfsrvUidCopy(dst, src)
+Create an identifier, or copy one.
+.TP
+.B UfsrvUidConvertToBinary(uid, buf) / UfsrvUidConvertSerialise(uid, buf)
+Binary and serialised forms.
+.TP
+.B UfsrvUidCreateFromBinary(buf) / UfsrvUidCreateFromEncodedText(text)
+Reconstruct an identifier from either form.
+.TP
+.B UfsrvUidGetTimestamp(uid) / UfsrvUidGetInstanceId(uid) / UfsrvUidGetSequenceId(uid)
+The components the identifier is built from.
+.TP
+.B UfsrvUidIsSystemUser(uid) / UfsrvUidRawDataSystemUser()
+The reserved system-user range.
+.\" ===================================================
 .SS Scheduled jobs \&(scheduled_jobs)
 Scheduled task execution.
 .\" ===================================================
-.SS Embedded third-party libraries
-.BR lzf " (compression), " mjson " (JSON), "
-.BR protobuf-c ", " K12 " (KangarooTwelve), " uuid4 ", and " exponential_backoff
-are vendored under
-.IR src/ .
+.SS File loader \&(file_loader, thread_worker)
+Caching a file's contents and reloading it when it changes, and a service that
+loads files concurrently across registered threads.
+.PP
+.TP
+.B FileLoaderLoadIfModified(loader, path) / FileLoaderReset(loader)
+Load on change; drop the cached copy.
+.TP
+.B FileLoaderCompareHashes(a, b)
+Detect change by content digest rather than by timestamp.
+.TP
+.B FileLoaderServiceInit(svc, ...) / FileLoaderServiceDestroy(svc)
+Start and stop the concurrent loading service.
+.TP
+.B FileLoaderServiceRegisterThread(svc, ...) / FileLoaderServiceGetThread(svc)
+Attach a worker; retrieve its handle.
+.TP
+.B FileLoaderServiceAddFile(svc, path) / FileLoaderServiceGetFileContent(svc, ...)
+Submit a file and read back its contents.
+.TP
+.B FileLoaderServiceGetFileInfo(svc, ...) / FileLoaderServiceCapacity(svc) / FileLoaderServiceHeartbeat(svc)
+Per-file state, and the service's own health.
+.\" ===================================================
+.SS Logging \&(logger) \(em \fBlogger/\fP
+Records are emitted at eight ordered severity ranks through an opaque
+.B UfLogger
+handle, to syslog, stderr, stdout, or a size-bounded file.
+.PP
+The interface names no backend.  A caller states a category, a severity
+floor, a destination and an output pattern; the library binds the
+implementation and never reports which one it chose.  Records carry the
+caller's own source location, and per-thread context can be rendered into
+the pattern so that a request identifier set once appears on every record
+that request produces.
+.PP
+Operations a build cannot honour are refused with
+.B UF_LOGGER_STATUS_ERR_UNSUPPORTED
+rather than silently ignored.
+.B UfLoggerGetCapabilities
+reports in advance what the bound implementation supports, and
+.B UfLoggerDescribeConfiguration
+renders the effective configuration as JSON.
+.PP
+The backend is folded into
+.BR libuflib :
+a consumer of
+.B uflib::uflib
+needs no additional include path, no additional link flag, and no knowledge
+that a third-party logging library is involved.
+.\" ===================================================
+.SS QR code \&(qr_code)
+Reading and rendering, each behind its own capability so neither drags in the
+other's dependency.  Reading uses the vendored
+.B quirc
+decoder and is built with
+.BR UFLIB_CAPABILITY_QUIRC ;
+rendering uses libqrencode and is built with
+.BR UFLIB_CAPABILITY_QRENCODE .
+.PP
+.TP
+.B UfUtilsQrCodeDecode(image, width, height, stride, text, cap, len)
+Read the QR symbol in a greyscale image.
+.TP
+.B UfUtilsQrCodeCameraGenerate(device, width, height, timeout_ms, text, cap, len)
+Open a V4L2 capture device, read a frame from it, and return the decoded text.
+.TP
+.B UfUtilsQrCodeEncodeText(text, out_matrix)
+Encode text as a QR symbol, returned as a module matrix rather than an image.
+.\" ===================================================
+.SS ufconfig
+.B ufconfig
+is a configuration loader for ufsrv-class servers.  It parses a document
+written in a Lua-styled table syntax, validates it against a schema,
+canonicalises it, and serves the result through an opaque handle.
+.sp
+The syntax mimics Lua and is
+.B not
+evaluated: there is no expression language, no standard library, and an
+operator in a document is a parse error rather than something computed.
+.sp
+.B The library holds no schema.
+A schema describes one application's configuration \- which fields exist, what
+they default to, what they must satisfy \- and that is the application's
+business.  It is generated from the application's own files by a separate
+pipeline, compiled into the application, and injected at
+.BR UfConfigCreate .
+.sp
+.nf
+UfConfigDescriptor d = {
+    .fields      = g_ufconfig_fields,     \"* generated from the schema *\"
+    .field_count = (size_t)g_ufconfig_field_count,
+    .lookup      = UfConfigLookupPath,    \"* generated index *\"
+    .uf_logger   = app_logger,            \"* optional; NULL logs nothing *\"
+    .kind        = UF_CONFIG_BACKEND_FILE,
+};
+
+UfConfig *h = NULL;
+UfConfigCreate(&h, &d);
+
+UfConfigLoadOptions opt = { .size = sizeof(opt), .version = 1,
+                            .mode = UF_CONFIG_LOAD_STRICT };
+UfConfigLoadFile(h, "etc/ufsrvwebsock.config.lua", &opt, NULL);
+
+UfConfigValue v;
+UfConfigGetField(h, "ufsrv.main_listener_port", &v);
+UfConfigDestroy(h);
+.fi
+.sp
+.B Loading from a store
+rather than a file is the same call with a different descriptor: the origin is
+stated once, at create, and the API does not change.
+.B UF_CONFIG_BACKEND_REDIS
+and
+.B UF_CONFIG_BACKEND_SQL
+name it, with the endpoint beside it:
+.sp
+.nf
+\&.kind   = UF_CONFIG_BACKEND_REDIS,
+\&.redis  = { .address = "10.0.0.5", .port = 6379,
+            .namespace = "alice", .config_name = "ufsrvwebsock" },
+.fi
+.sp
+and for SQL the address carries the connection string rather than a host and
+port pair:
+.sp
+.nf
+\&.kind   = UF_CONFIG_BACKEND_SQL,
+\&.sql    = { .address = "host=10.0.0.6;port=3306;user=ufsrv;password=...;database=ufsrv",
+            .ns = "alice", .config_name = "ufsrvwebsock" },
+.fi
+.sp
+followed by
+.BR UfConfigLoad ,
+.BR UfConfigPersist " and " UfConfigReload .
+The Redis driver is built only when the library is configured with
+.BR UFLIB_CAPABILITY_HIREDIS ,
+and hiredis is then the consumer's to link \- the library does not fold it
+into the archive.
+.B UFLIB_CAPABILITY_SQL
+is the same arrangement for the SQL driver, and goes further: libmariadb is not
+vendored at all, so it is looked for only when that option is set, and the
+client remains the consumer's to link.
+.sp
+.B Values are borrowed.
+Strings and byte runs in
+.B UfConfigValue
+stay valid while the handle lives, and across a reload for any path whose value
+did not change.  A caller that needs them to outlive the handle must copy them.
+.B Namespace handles
+are the opposite: every one a walk is given is the caller's to
+.BR free .
+.sp
+.B Reload is synchronous.
+Whether it is called from a timer, a thread or a request path is the caller's
+decision; the module does not schedule anything.  A reload reports drift per
+field and, on failure, leaves the last good configuration in force.
+.sp
+.B Encrypted values.
+A field whose schema declares
+.B encrypted = true
+holds an envelope rather than a secret in the clear, and a caller reading it
+receives the plaintext.  The envelope stays in the document, in every
+serialised form, in the digest, and in anything written back to a store, so a
+configuration containing secrets remains safe to copy between hosts and to keep
+in version control.
+.sp
+.nf
+db_password = { type = \"string\", required = false, encrypted = true }
+.fi
+.sp
+The value is
+.B enc:v1:<nonce_hex>:<ciphertext_hex>:<tag_hex>
+\- AES-256-GCM, a 12-byte nonce drawn fresh per encryption, and a 16-byte
+authentication tag.  A wrong key and a tampered ciphertext are the same
+failure, because the tag does not verify, and the two are deliberately
+indistinguishable.
+.sp
+Keys are per field, held in a secrets file of
+.B path=key
+lines, one 64-hex-character key per full node path:
+.sp
+.nf
+# /opt/ufsrv/etc/secrets/ufsrv.secrets
+ufsrv.ufnet.db_backend.password=3f2a...e9
+.fi
+.sp
+The file is named by
+.B UfConfigDescriptor.config_file_secrets
+at create.  When the descriptor names none,
+.B ufconfig.secrets
+in the process's working directory is used instead; when neither can be read
+the handle is refused.  A path that
+.B is
+named but cannot be read is an error and does not fall back, because honouring
+a default after an explicit path failed would let anyone able to create a file
+in the working directory substitute the keys.
+.sp
+The mechanism is driven by the
+.B schema
+declaring an encrypted field, not by any document containing one \- not every
+field is mandatory, and an encrypted field may be absent from a given document
+altogether.  A schema with no such field never opens a file and creates handles
+exactly as before.  Where one is declared, every field's key is resolved at
+create, so a server that cannot read its keys does not start and the load path
+stays free of filesystem access.
+.sp
+.B It fails closed.
+A value on an encrypted field that carries no
+.B enc:v1:
+prefix refuses the load.  Were the prefix optional, deleting four characters
+from a configuration file would convert a secret into an accepted plaintext and
+the declaration would enforce nothing.  An encrypted field is also
+.B read-only
+at runtime: the generator refuses
+.B encrypted
+together with
+.BR mutable ,
+and refuses it alongside
+.B default
+(a default is plaintext, and the decrypt step runs over a materialised default
+exactly as over a document value) and on any non-string type.
+.sp
+Decryption happens before any declared transforms and before validation, so a
+length, a
+.B one_of
+or a format on the field constrains the secret and not its envelope.  A
+rejected secret is never quoted back:
+.B UfConfigLastError
+names the rule that refused it and masks the value.
+.sp
+What the module does not do: it does not manage or rotate keys, and it does not
+wipe the arena, so a decrypted plaintext remains in arena memory until the
+handle is destroyed.  Envelopes are produced by
+.BR UflibSecretEncrypt .
+\" ===================================================
+.SS Command registry \&(ufcommand)
+A registry of named commands with alias expansion and keyboard bindings, and
+the parser that dispatches against it.  This is what a console, a dispatcher
+or a REPL is built on.
+.sp
+Commands and aliases share
+.B one namespace
+and are canonicalised on the way in, so one command has one spelling.
+Registering either over the other's name is refused rather than resolved by
+precedence.  A command name may be of any depth, bounded only by
+.BR max_command_components ,
+and at any depth the longest registered name wins, so
+.B remote
+and
+.B remote add
+coexist.  Aliases expand with positional substitution, chained, with cycle
+detection and a depth bound
+.RB ( max_alias_depth ,
+32 by default).
+.sp
+The parser holds no registry: each execution names the one to dispatch
+against.
+.sp
+.TP
+.B UfCommandRegistryCreate(registry, config) / UfCommandRegistryDestroy(registry)
+Create and destroy a registry.
+.TP
+.B UfCommandRegistryAdd(registry, definition) / UfCommandRegistryRemove(registry, name)
+Register and unregister a command.
+.TP
+.B UfCommandRegistryAddAlias(registry, alias) / UfCommandRegistryRemoveAlias(registry, alias)
+Alias registration and removal.
+.TP
+.B UfCommandRegistryAddBinding(registry, binding) / UfCommandRegistryRemoveBinding(registry, modifiers, ...)
+Keystroke-binding registration and removal.
+.TP
+.B UfCommandRegistryFind(registry, name, ...)
+Resolve a name without dispatching.
+.TP
+.B UfCommandRegistryGetKeyConfig(registry, ...) / UfCommandRegistrySetKeyConfig(registry, config)
+The modifier set a binding is dispatched under.
+.TP
+.B UfCommandParserCreate(config, out_parser) / UfCommandParserDestroy(parser)
+Create and destroy a dispatcher.
+.TP
+.B UfCommandParserExecute(parser, registry, ...) / UfCommandParserExecuteBinding(parser, registry, ...) / UfCommandParserExecuteDefaultBinding(parser, registry, ...)
+Dispatch a line, a specific keystroke sequence, or the default binding.
+.TP
+.B UfCommandResultGetResolvedCommand(result) / UfCommandResultGetArgs(result) / UfCommandResultGetArgCount(result)
+What the line resolved to.
+.TP
+.B UfCommandResultGetStatus(result) / UfCommandResultGetDispatchStatus(result) / UfCommandResultGetHandlerStatus(result)
+The dispatch outcome and the handler's own outcome, kept apart.
+.TP
+.B UfCommandStatusName(status)
+Render a status as text.
+.TP
+.B UfCommandContextCreate(config, out_context) / UfCommandContextDestroy(ctx) / UfCommandContextSetUserData(ctx, ...) / UfCommandContextGetUserData(ctx)
+Caller state carried through a dispatch.
+.TP
+.B UfCommandRegistryLoadUserConfig(registry, path) / UfCommandRegistrySaveUserConfig(registry, path)
+Load and save a user configuration of aliases and bindings.
+.sp
+.B Predictive completion
+is an engine the registry owns and creates only when the configuration asks
+for it with
+.BR completion_enabled ,
+reached through
+.BR UfCommandCompletionGetCompletion .
+A caller then asks through
+.BR UfCommandCompletionSuggest ,
+walks the candidates with
+.BR UfCommandCompletionResultGetCandidate " and " UfCommandCompletionResultGetCount ,
+and releases the result with
+.BR UfCommandCompletionResultDestroy .
+Candidate sources are registered separately through
+.BR UfCommandCompletionAddProvider ,
+which is the seam a host uses to supply its own; command history is one such
+provider.  Off by default, so a host that never asks for a suggestion carries
+neither the engine nor its per-call lookup.
+.sp
+.B Telemetry
+is likewise opt-in
+.RB ( telemetry_enabled ),
+and is an observer rather than a log: a caller installs one with
+.BR UfCommandRegistrySetTelemetry ,
+reads it back through
+.BR UfCommandRegistryGetTelemetry ,
+and writes it as JSON with
+.BR UfCommandTelemetrySaveJson .
+.sp
+The logger in the registry configuration is
+.B borrowed
+and must outlive every registry that references it, so create it first and
+destroy it last.
+\" ===================================================
+.SH THIRD-PARTY PACKAGES
+Seven third-party libraries are carried verbatim under
+.IR packages/ ,
+each built as a private static archive and folded into
+.BR libuflib ,
+so a consumer links nothing extra for them.  The one exception is
+.BR hiredis ,
+which is never folded in.
+.PP
+.TP
+.B K12
+KangarooTwelve, the Keccak Team's extendable-output hash, taken from XKCP
+under a public-domain dedication.  Only one Keccak-p[1600] implementation may
+be compiled at a time, because every variant defines the same permute symbols;
+the Optimized64 variant is the one in use.
+.TP
+.B lzf
+Marc Lehmann's LZF \(em fast, lossless, byte-oriented compression, trading
+ratio for speed.  BSD 2-clause.
+.TP
+.B mjson
+Cesanta's JSON parser.  MIT.
+.TP
+.B protobuf-c
+Protocol Buffers in C, by Dave Benson and the protobuf-c authors.  BSD
+2-clause.
+.TP
+.B quirc
+Daniel Beer's QR-code recognition library.  ISC.  Folded in only under
+.BR UFLIB_CAPABILITY_QUIRC ,
+and called into only by the QR-code module.
+.TP
+.B zlog
+Hardy Simpson's thread-safe C logging library, vendored at 1.2.18.  Apache
+License 2.0.  It is the backend behind the
+.B UfLogger
+interface, which names no implementation.
+.TP
+.B hiredis
+The minimal C client for Redis, vendored at 0.14.0.  BSD 3-clause.  It is
+confined to the configuration module's Redis driver and to nothing else in the
+library.  That driver is built only under
+.BR UFLIB_CAPABILITY_HIREDIS ;
+hiredis itself is never built or folded in here, and is the consumer's to link.
+Its asynchronous and TLS transports are not carried.
+.PP
+Two further third-party originals \(em a UUID v4 generator and Amazon's
+backoff algorithm \(em are compiled into the library rather than carried here.
 .\" ---------------------------------------------------------------------------
 .SH CONVENTIONS
 Public functions are
 .B PascalCase
 with a module prefix, are annotated
 .BR PUBLIC_API ,
-and are declared in installed headers under
-.IR include/uflib/ .
-Opaque handles hide implementation layout; private headers under
-.I src/
-are never installed.  Lock-free CDTs additionally follow the design
-correctness criteria in
-.IR UF_LIBRARY_CONVENTIONS.md
-(ABA, memory ordering, false sharing, reclamation, testing).
+and are declared in installed headers.
+Opaque handles hide implementation layout; private headers are never
+installed.  Lock-free CDTs are additionally designed against the correctness
+criteria of ABA, memory ordering, false sharing, reclamation and testing.
 .\" ---------------------------------------------------------------------------
 .SH EXAMPLE
 .nf
@@ -208,17 +714,10 @@ while (!LocklessRingBufferTryPop(ring, &out))  { /* empty: poll  */ }
 
 LocklessRingBufferDestroy(ring);
 .fi
-.sp
-See the runnable programs and gtest suites under
-.IR tests/ .
 .\" ---------------------------------------------------------------------------
 .SH SEE ALSO
 .BR uflib (3)
-(future per-function pages),
-.IR include/uflib/ " \(em the authoritative header declarations."
-.sp
-The design documents under
-.IR dev/technical_designs/ .
+(future per-function pages).
 .\" ---------------------------------------------------------------------------
 .SH AUTHOR
 unfacd works.
