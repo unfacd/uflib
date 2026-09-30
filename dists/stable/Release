@@ -1,20 +1,20 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Tue, 29 Sep 2026 23:36:31 +0000
+Date: Wed, 30 Sep 2026 11:20:05 +0000
 Description: unfacd apt repository
 Label: unfacd
 Origin: unfacd
 Suite: stable
 MD5Sum:
- 3c3c759325ae7e2135c718679c8d19f9             1233 main/binary-amd64/Packages
- 050570b4e8c3bdf60d730c294310b95b              651 main/binary-amd64/Packages.gz
+ 417b9637fabd0b938a1c5cbf23361a89             1851 main/binary-amd64/Packages
+ ac0a878167c3c841b86c94b2ba50421f              835 main/binary-amd64/Packages.gz
 SHA1:
- a763e4c1edaf5dcd4084867e24ece0603b8254e4             1233 main/binary-amd64/Packages
- 88774cf7038b10b434513faae75331f1bfe0130d              651 main/binary-amd64/Packages.gz
+ 4a5a7088b8fb9a0c4597496cca1a88c4a05fa9dd             1851 main/binary-amd64/Packages
+ e2ce5ebe8cb08c514b39ff96e0da7aaa5decf5d4              835 main/binary-amd64/Packages.gz
 SHA256:
- be54ce46373c74786fcf9110a96b70649625a8b26482ffedb5dcb355f9b42366             1233 main/binary-amd64/Packages
- fe8934c37259d082382c8df447c17ec3b7f99ae87112931d5521fecbc3251641              651 main/binary-amd64/Packages.gz
+ 4db5ca1989ffcc885ed6fda43210118e0eae398be659ac1968c22e35aab04926             1851 main/binary-amd64/Packages
+ 288a206489af4a55e61fc0f2c2c4bd62e41f921c40606c406ea5abd57e83cff4              835 main/binary-amd64/Packages.gz
 SHA512:
- e52f4082f11ffe60bc0c7b7d00357ebdc440fcccdb87702f522f6914bc252f5e8a9ba28ce2f23e91ec00c9eecccf877f05d27f09dac94ee6e57f977ecb7688e1             1233 main/binary-amd64/Packages
- 0bc2ee1798d2afed2508e79dfafd4a5abdeecde54c0b083722108d145d11a14066ee8622b7942cc19e8188f1c4d53b656b81936473d0b97571f5b372fc689254              651 main/binary-amd64/Packages.gz
+ 0b6176252278e54e5905da5742d87a3ef6ce8f2878a281d21465f9aa3e4c00fe592e54ddc844fc7d59fc2bc0e62dd17cd8e455383f9ba267c21d770202dfd5c3             1851 main/binary-amd64/Packages
+ 0c1adf57d9f6be9d031d4ebff62c271d61c9c20a69f61312b8a808d159574457fa9dddb9a8acdac91611c03980b9b21e9a1a92555c4955933f91a7c818cdb5db              835 main/binary-amd64/Packages.gz

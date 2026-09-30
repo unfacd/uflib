@@ -30,3 +30,19 @@ SHA256: d60bf7fb1ff078cdfca0d604fb80d076216b9e4a11ce4e64993971b87071e9cf
 SHA512: 26097651903c4fb96510053b08d339f02d90ba84244fa8c1648c19bde3cbb3f8357d57e60590dda8621ce63c5b8d93e3feb1ef7ce6a646786277a9000d3daf32
 Description: C utility library for ufsrv (ADTs, crypto, DB abstraction, networking)
 
+Package: uflib-dev
+Architecture: amd64
+Version: 4.0.0.9
+Priority: optional
+Section: libs
+Maintainer: unfacd works
+Installed-Size: 1552
+Depends: libc6, libssl-dev
+Filename: pool/main/u/uflib-dev/uflib-dev_4.0.0.9_amd64.deb
+Size: 415596
+MD5sum: f9d3cb3a811eb7d4d633e506648a9569
+SHA1: 8d25b9826f550239f6afcb0bacb023fca5304960
+SHA256: b37d9ac7f167492fe0b57551797834eb9b08b36dc57c30b267544622c51e0aaf
+SHA512: 8b03ebb4b4aeb38ee67751c2afeed32d394fe98c7df12d1d35b03e9f88a19639abacb86067e6a9eaeee9589fa51a9bbcd4213ab4fde1deb69e03f0c349db3e84
+Description: C utility library for ufsrv (ADTs, crypto, DB abstraction, networking)
+
