@@ -46,8 +46,8 @@ PUBLIC_API size_t mstrlcpy(char *, const char *, size_t);
 PUBLIC_API size_t DefensiveStrlenUtf8(const char *str, size_t max_bytes, size_t *bytes_read, bool *is_valid);
 PUBLIC_API size_t DefensiveStrlenUtf8Binary(const uint8_t *buf, size_t buf_size, size_t max_chars);
 PUBLIC_API bool IsUtf8Valid(const char *str, size_t max_bytes);
-PUBLIC_API bool DefensiveStrlen(const char * _Nonnull str, size_t max_sz, size_t * _Nullable out_len);
-PUBLIC_API bool DefensiveStrlenWithMinMax(const char * _Nonnull str, size_t min_sz, size_t max_sz, size_t * _Nullable out_len);
+PUBLIC_API bool DefensiveStrlen(const char *str, size_t max_sz, size_t *out_len) __attribute__((nonnull(1)));
+PUBLIC_API bool DefensiveStrlenWithMinMax(const char *str, size_t min_sz, size_t max_sz, size_t *out_len) __attribute__((nonnull(1)));
 
 #if defined(__GNUC__)
 //call vardic function without using classic c style va variables INVOKE_FUNCTION(MyFunctionaName, {(intptr)0, (intptr)1, (intptr_t)"hello"})

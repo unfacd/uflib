@@ -30,6 +30,6 @@
 
 enum FileLoaderResult FileLoaderLoadIfModified(FileLoader *file_loader_ptr, bool is_hashed);
 PUBLIC_API bool FileLoaderCompareHashes(FileLoader *fl, const unsigned char *expected_hash);
-PUBLIC_API void FileLoaderReset(FileLoader * _Nonnull file_loader_ptr);
+PUBLIC_API void FileLoaderReset(FileLoader *file_loader_ptr) __attribute__((nonnull(1)));
 
 #endif //UFSRV_UTILS_FILE_LOADER_H

@@ -34,7 +34,7 @@
 
 
 static void _HashToHex(const unsigned char *hash, char *hex);
-static void _ComputeContentHash(FileLoader * _Nonnull file_loader_ptr);
+static void _ComputeContentHash(FileLoader *file_loader_ptr);
 static bool _IsHashEqual(const unsigned char *hash1, const unsigned char *hash2, size_t digest_length);
 
 /**
@@ -124,7 +124,7 @@ FileLoaderLoadIfModified(FileLoader *file_loader_ptr, bool is_hashed) {
 }
 
 void
-FileLoaderReset(FileLoader * _Nonnull file_loader_ptr)
+__attribute__((nonnull(1))) FileLoaderReset(FileLoader *file_loader_ptr)
 {
   if (file_loader_ptr->is_mapped && file_loader_ptr->content && file_loader_ptr->file_info.size > 0) {
     munmap(file_loader_ptr->content, file_loader_ptr->file_info.size);
@@ -137,7 +137,7 @@ FileLoaderReset(FileLoader * _Nonnull file_loader_ptr)
 }
 
 const unsigned char *
-FileLoaderGetContent(FileLoader * _Nonnull file_loader_ptr, size_t *size) {
+__attribute__((nonnull(1))) FileLoaderGetContent(FileLoader *file_loader_ptr, size_t *size) {
   if (size) *size = file_loader_ptr->file_info.size;
   return file_loader_ptr->content;
 }
@@ -160,7 +160,7 @@ FileLoaderCompareHashes(FileLoader *fl, const unsigned char *expected_hash) {
 #include <openssl/sha.h>
 
 static void
-_ComputeContentHash(FileLoader * _Nonnull file_loader_ptr) {
+_ComputeContentHash(FileLoader *file_loader_ptr) {
   if (!file_loader_ptr || !file_loader_ptr->content || file_loader_ptr->file_info.size == 0) {
     memset(file_loader_ptr->hashed.hash, 0, SHA256_DIGEST_LENGTH);
     _HashToHex(file_loader_ptr->hashed.hash, file_loader_ptr->hashed.hash_hex);

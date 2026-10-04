@@ -532,7 +532,7 @@ AddToHashWithReference(HashTable *hash, void *item_value_ptr, void(*reference_in
  * 	Prefer a callback that only selects a victim pointer without locking the table.
  */
 PUBLIC_API void *
-AddToHashEvictIfNecessary(HashTable *hasht_ptr, const void * _Nullable item_key, void *item_container_ptr, void * (*item_evictor_callback)(ContextData *), ContextData *ctx_ptr, void **evicted_item_out)
+AddToHashEvictIfNecessary(HashTable *hasht_ptr, const void *item_key, void *item_container_ptr, void * (*item_evictor_callback)(ContextData *), ContextData *ctx_ptr, void **evicted_item_out)
 {
 	if (unlikely(IS_EMPTY(hasht_ptr))) return NULL;
 

@@ -34,7 +34,7 @@
  * @return true if literal is correctly formatted in conformance with unsigned long number
  */
 bool
-is_unsigned_long_format(const char * _Nonnull unsigned_long_str)
+__attribute__((nonnull(1))) is_unsigned_long_format(const char *unsigned_long_str)
 {
 #define UNSIGNED_LONG_REGEX_PATTERN "^[1-9][[:digit:]]{1,19}$"
   regex_t regex;
@@ -406,7 +406,7 @@ char *mystrdup(const char *s)
  * @return              Number of characters counted. if 0 is returned, check the value of 'is_valid'
  */
 size_t
-DefensiveStrlenUtf8(const char *_Nonnull str, size_t max_bytes, size_t *_Nullable bytes_read, bool *_Nullable is_valid)
+__attribute__((nonnull(1))) DefensiveStrlenUtf8(const char *str, size_t max_bytes, size_t *bytes_read, bool *is_valid)
 {
   if (str == NULL || max_bytes == 0 ) {
     if (bytes_read) *bytes_read = 0;
@@ -547,7 +547,7 @@ IsUtf8Valid(const char *str, size_t max_bytes)
  * @return true if string is properly null-terminated within max_sz, false otherwise
  */
 bool
-DefensiveStrlen(const char * _Nonnull str, size_t max_sz, size_t * _Nullable out_len)
+__attribute__((nonnull(1))) DefensiveStrlen(const char *str, size_t max_sz, size_t *out_len)
 {
   if (IS_PRESENT(out_len)) {
     if (max_sz == 0)  {
@@ -597,7 +597,7 @@ DefensiveStrlen(const char * _Nonnull str, size_t max_sz, size_t * _Nullable out
  * @return true if string meets all criteria (length between min_sz and max_sz, properly null-terminated, ASCII), false otherwise.
  */
 bool
-DefensiveStrlenWithMinMax(const char * _Nonnull str, size_t min_sz, size_t max_sz, size_t * _Nullable out_len)
+__attribute__((nonnull(1))) DefensiveStrlenWithMinMax(const char *str, size_t min_sz, size_t max_sz, size_t *out_len)
 {
   if (IS_PRESENT(out_len)) {
     if (max_sz == 0 || min_sz > max_sz) {

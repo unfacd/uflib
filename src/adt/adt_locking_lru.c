@@ -114,7 +114,7 @@ LockingLru *InitLockingLru(LockingLru *lru_ptr_in, const char *lru_name, size_t 
  * 	@WARNING must deal with the returned evicted item where returned value != client_data_ptr
  */
 void *
-LockingLruSet(LockingLru * _Nonnull lru_ptr, LruClientData *client_data_ptr)
+__attribute__((nonnull(1))) LockingLruSet(LockingLru *lru_ptr, LruClientData *client_data_ptr)
 {
 	return (LockingLruPromote(lru_ptr, NULL, client_data_ptr));//technically not a promotion. NULL indicates a new item
 
@@ -131,7 +131,7 @@ LockingLruSet(LockingLru * _Nonnull lru_ptr, LruClientData *client_data_ptr)
  *
  * 	@return LruClientData * for promoted item, or NULL if \p item_key was not in cache.
  */
-void * _Nullable
+void *
 LockingLruGet(LockingLru *lru_ptr, const void *item_key, LruClientData **client_data_ptr_evicted)
 {
 	LruClientData  *client_data_ptr = (LruClientData *)HashLookup(lru_ptr->hashtable, (void *)item_key, true);
@@ -187,8 +187,8 @@ _DefaultLruItemPrinter(LruClientData *client_data_ptr, size_t index)
  * 	@locks LockingLru
  * 	@unlocks  LockingLru
  */
-void * _Nullable
-LockingLruPromote(LockingLru *lru_ptr, const void * _Nullable item_key, LruClientData *client_data_ptr)
+void *
+LockingLruPromote(LockingLru *lru_ptr, const void *item_key, LruClientData *client_data_ptr)
 {
 	LruClientData *client_data_ptr_returned = NULL;
 
@@ -224,8 +224,8 @@ LockingLruPromote(LockingLru *lru_ptr, const void * _Nullable item_key, LruClien
  * 	@return LruClientData * which maybe an evicted item, in which case caller must deal with memory management.
  * 	@locked LockingLru
  */
-static LruClientData * _Nullable
-_LockingLruResolveItemInsertion(LockingLru * _Nonnull lru_ptr, const void * _Nullable item_key, LruClientData *client_data_ptr)
+static LruClientData *
+__attribute__((nonnull(1))) _LockingLruResolveItemInsertion(LockingLru *lru_ptr, const void *item_key, LruClientData *client_data_ptr)
 {
 	LruClientData *evicted_item_ptr = NULL;
 
@@ -307,7 +307,7 @@ LockingLruAddToRear(LockingLru *lru_ptr, LruClientData *data, LockingLruItem *lr
  * 	@return Client data stored in removed cache item. NULL indicates item was not cached or cache empty.
  * 	@dynamic_memory DEALLOCATES list item 'LockingLruItem *'
  */
-static LruClientData * _Nullable
+static LruClientData *
 _LockingLruRemoveListNode(LockingLru *lru_ptr, DoublyListNode *list_node_ptr)
 {
 	DoublyListDelNode(&(lru_ptr->list), list_node_ptr, false/*self_destruct*/);//we don't free list_node_ptr because it is statically allocated in the lru_item container
@@ -402,7 +402,7 @@ LockingLruDescribeItems(LockingLru *lru_ptr)
  * @unlocks LockingLru *
  */
 __unused LockingLruItem *
-FindLruItemWithMatcher(LockingLru *lru_ptr, lru_item_matcher _Nonnull matcher, LruClientData *client_data_ptr_provided)
+__attribute__((nonnull(2))) FindLruItemWithMatcher(LockingLru *lru_ptr, lru_item_matcher matcher, LruClientData *client_data_ptr_provided)
 {
   DoublyListIterator iter = {0};
   DoublyListNode *list_node;
@@ -432,8 +432,8 @@ FindLruItemWithMatcher(LockingLru *lru_ptr, lru_item_matcher _Nonnull matcher, L
  * @locks LockingLru *
  * @unlocks LockingLru *
  */
-LruClientData * _Nullable
-FindLruItemWithMatcherAndDelink(LockingLru * _Nonnull lru_ptr, lru_item_matcher _Nonnull matcher_callback, LruClientData * _Nonnull client_data_ptr_provided)
+LruClientData *
+__attribute__((nonnull(1, 2, 3))) FindLruItemWithMatcherAndDelink(LockingLru *lru_ptr, lru_item_matcher matcher_callback, LruClientData *client_data_ptr_provided)
 {
   DoublyListIterator iter = {0};
   DoublyListNode *list_node;
