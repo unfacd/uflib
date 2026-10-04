@@ -4,36 +4,36 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Wed, 30 Sep 2026 11:20:05 +0000
+Date: Sun, 04 Oct 2026 09:59:25 +0000
 Description: unfacd apt repository
 Label: unfacd
 Origin: unfacd
 Suite: stable
 MD5Sum:
- 417b9637fabd0b938a1c5cbf23361a89             1851 main/binary-amd64/Packages
- ac0a878167c3c841b86c94b2ba50421f              835 main/binary-amd64/Packages.gz
+ 3ade4338a7a1a855a4b75ca0bd5d870c             2465 main/binary-amd64/Packages
+ 2df0d7493f49d1d8e9b7b0310780218d             1014 main/binary-amd64/Packages.gz
 SHA1:
- 4a5a7088b8fb9a0c4597496cca1a88c4a05fa9dd             1851 main/binary-amd64/Packages
- e2ce5ebe8cb08c514b39ff96e0da7aaa5decf5d4              835 main/binary-amd64/Packages.gz
+ b2d52e2fe6194beecaa67d742dadad2b42b327e4             2465 main/binary-amd64/Packages
+ 16a2c5925c2b259114b2e6897551b1561340a3fe             1014 main/binary-amd64/Packages.gz
 SHA256:
- 4db5ca1989ffcc885ed6fda43210118e0eae398be659ac1968c22e35aab04926             1851 main/binary-amd64/Packages
- 288a206489af4a55e61fc0f2c2c4bd62e41f921c40606c406ea5abd57e83cff4              835 main/binary-amd64/Packages.gz
+ 9d794df579192c2bd19f9a1d54f47299a520ee6670797e61b6864d971b81e165             2465 main/binary-amd64/Packages
+ ec5a458cbd653b9079ebd27a114ba872b825d4e2e761e629b333349ea94dd6f0             1014 main/binary-amd64/Packages.gz
 SHA512:
- 0b6176252278e54e5905da5742d87a3ef6ce8f2878a281d21465f9aa3e4c00fe592e54ddc844fc7d59fc2bc0e62dd17cd8e455383f9ba267c21d770202dfd5c3             1851 main/binary-amd64/Packages
- 0c1adf57d9f6be9d031d4ebff62c271d61c9c20a69f61312b8a808d159574457fa9dddb9a8acdac91611c03980b9b21e9a1a92555c4955933f91a7c818cdb5db              835 main/binary-amd64/Packages.gz
+ 6e4f7003f68e848e48a2fa5b8b6213967bd98c886219331df710cfdc72225df21b4e96161012fdff9eebf3cef5bda2926f225a5cd50867661a5b61bf480e9824             2465 main/binary-amd64/Packages
+ 78e47397f3924f93e2402ba96d85dba114f6ac764c0ea5733c640d20e9ed9a5e23eff03a86b8e46bbb768f87bfffedee5367547c1cf20e6f4c8cd7c38fac8e74             1014 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEE2AjuQUfMQZUsnLp7YXhJYEDZfgYFAmq88GUACgkQYXhJYEDZ
-fgYZRQ//ST3dL+Oyr0F1oAZ46uOuo3OD7LuQn1ymGkJ6WpPtXASWsgWGQUixtJ6D
-Ur/XiapG5TskOM/pPqRJUzlqgVeoeMBlWyWuvOWbUUNgfnxE5udOjOWUYl9bkdj0
-YU0GA6JwvYD027dzCZYx6/RXDhYozIedALMf1n/wGoWbiCc3wxgLGN81IYJAyLlh
-0W7lNMJDhuN8/J5bDepJ/iXL/vzCHDocWOa6Ichu2ok2JVrIQZ9RTQt0/hBTFvTD
-pjjsKtI0XdYbn4WSdmvGTZBxn+VgeRkL3l93TcM2w1FGICjlcB3b2rsOeoeKcO4I
-eH6byZtgX8oVQHREXdsTSeb9A3YnueXBlnHebOe+fUkrttFt5fBkPPCg9hSCIwht
-lcpZP7lNAhGKR0SRXRvB4SjAIMVZ65k03m2uuSk9Ux4+S70HMgaFps8gY36ZA6EU
-YudVeHprQloonFF8nyw/MKiMczXRgRSuRu4eRMEJY4uqCWsNdfCReiZOjGbmIBXR
-eQN28t76MPYSP7wpGl9oAi0v9e4lsEx1/J8mgAuWVbhewTCWFL+19JCAwWYCSOB2
-7YGTnyy5jzbsQKMKVg/IUUMKwYDRscB3FypkeQMlmQ021bIT4iog1AIvrf8z1cBS
-BkkezHiXxPhtUyQZkUt97JBhErK4I2s1N1UgSZX6eV2P9h/7PYQ=
-=tPgl
+iQIzBAEBCgAdFiEE2AjuQUfMQZUsnLp7YXhJYEDZfgYFAmrCI30ACgkQYXhJYEDZ
+fgY4lBAAh2je9OKPNkCzXySUL1FSAUc9mD0dJyHk1f/xXm0ZulEx1EvTH9cTl/NZ
+1Kv+Ak1wLfpUTtnaeMPKommRQO+Tasv7AImF/AModIGS8pc+DNFwI/8Qw9pMhkfo
+4eA7eM+P6+1LNXGyV9XHnPibZnjHZj2874XKJ/xOS47PqzDbvjF8IiZiFvr7EE3I
+/kaSI1Q2vZHx6G0L1Y+XVqUv/NiNwyEC+SypNW3A+P2K0S3K5fyqn6U/95xPhz39
+SC8CszkQ6r+jTzM5CW6Oh1P2hEoFXOJAen4UDrVU5b67tiuq9abFrD1CC2V2S/D8
+yJoWt/7WMNhguB89+xa9nq0TfcN3+478MWbPohpTBqzu3JjMFwncgn6UKoMtlap0
+nI2/WzLv8nNekiPNB0tc/gIPvPpJwvBsRXJ8ntXBVh57GixMvO1tNtsilNJBjVQv
+s4/+O4EnA/yIdZQI6sluFrGOCvZz/+a8irUs7oCZA/2raQfiSaIb5DPvHivQn9sc
+mww6qNfduRxGotEPGPpGSVAgPz8TqASVkiuAIbdS2kTiaROWve0TkRCc0EYL2Ypq
+4FgPX30R2nqG3peetYNhqxO7xgfvP1Yy/78I7YcYZsHhiauXj0T9jdmLeWzpYPw8
+GWY+Uj+4csRhtbS30Xiq0goqAmBexTz7oNMJCXdCNZ+yJ8As0N0=
+=qsDq
 -----END PGP SIGNATURE-----

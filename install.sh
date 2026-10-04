@@ -15,7 +15,7 @@ set -euo pipefail
 REPO_URL="https://unfacd.github.io/uflib"
 KEY_URL="$REPO_URL/apt-unfacd.pub.asc"
 KEYRING="/etc/apt/keyrings/unfacd-apt.asc"
-SOURCES="/etc/apt/sources.list.d/unfacd.sources"
+SOURCES="/etc/apt/sources.list.d/unfacd-uflib.sources"
 PACKAGE="${PACKAGE:-uflib-dev}"
 SUITE="${SUITE:-stable}"
 
