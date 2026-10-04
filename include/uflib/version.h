@@ -20,8 +20,8 @@
 
 #define UFLIB_MAJOR     4
 #define UFLIB_MINOR     0
-#define UFLIB_PATCH     0
-#define UFLIB_INTERNAL  9
+#define UFLIB_PATCH     1
+#define UFLIB_INTERNAL  0
 
 const char *UfsrvUfLibVersion()      __attribute__((const));
 const char *UfsrvUfLibVersionMajor() __attribute__((const));

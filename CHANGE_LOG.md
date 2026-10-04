@@ -1,7 +1,23 @@
 # Change Log — uflib
 
-## Unreleased — since `2a9cbfbf` (Release-260912), 2026-09-12 → 2026-09-29
-uflib v4.0.0.8
+## Release-261004 — 4.0.1
+`f8a4728d` → `7cc243b5` · 2026-10-01 → 2026-10-03
+
+### New
+- `lockless_treiber_stack` gains a closed-state protocol: `steal_all_and_close()` closes the stack as it takes the list, so a push that loses the race is refused with its node still caller-owned; `node_retain()` is added; and `push()` returns `bool` instead of `void`, so callers must handle the result
+
+### Fixes
+- Subproject builds: the registry include is `EXISTS`-guarded and defaults to `SYSTEM`, and the CDT source's `<config.h>` — a header uflib neither defines nor generates — is corrected to `<config_uflib.h>`
+
+### Deprecated
+- (none)
+
+### Removed
+- (none)
+
+## Release-260930 — 4.0.0
+`2a9cbfbf` → `f8a4728d` · 2026-09-12 → 2026-09-29
+
 ### Capability model for conditional configuration and build of third-party in-source packages
 
 **What changed.** uflib now carries a number of opt-in capability flags, all defaulting

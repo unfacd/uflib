@@ -119,7 +119,7 @@ IsEmailAddressValid(const char *EM_Addr, size_t max_sz)
  * @return true if length is valid, false otherwise
  */
 bool
-IsEmailLengthValid(const char * _Nonnull email, size_t max_sz, bool is_basic_validate)
+__attribute__((nonnull(1))) IsEmailLengthValid(const char *email, size_t max_sz, bool is_basic_validate)
 {
   if (max_sz == 0) {
     return false;

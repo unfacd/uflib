@@ -123,7 +123,7 @@ typedef struct VerificationCode {
 #define EMAIL_BASIC_VALIDATION_FALSE false
 
 PUBLIC_API bool IsEmailAddressValid(const char *EM_Addr, size_t max_sz);
-PUBLIC_API bool IsEmailLengthValid(const char * _Nonnull email, size_t max_sz, bool is_basic_validate);
+PUBLIC_API bool IsEmailLengthValid(const char *email, size_t max_sz, bool is_basic_validate) __attribute__((nonnull(1)));
 
  //http://locklessinc.com/articles/next_pow2/
 __attribute__((noinline)) unsigned next_pow2(unsigned x);
