@@ -14,7 +14,7 @@ packages folder*
 
 Licensed under the GNU Affero General Public License, version 3 or later.
 
-This document describes **uflib 4.0.0.8** — as returned by `UfsrvUfLibVersion()`.
+This document describes **uflib 4.0.1.1** — as returned by `UfsrvUfLibVersion()`.
 
 ## Installing the packaged library
 
@@ -133,8 +133,8 @@ significant mods.
 
 | Dependency | How it is resolved |
 |---|---|
-| **OpenSSL** (`libssl`, `libcrypto`) | `find_package(OpenSSL REQUIRED)` in root mode; in embedded mode from the host repo's linked-libraries registry |
-| **MariaDB/MySQL client headers** | Required **unconditionally** to compile `src/db/`. Expected at `/opt/include/mariadb`; both `/opt/include` and `/opt/include/mariadb` are on the include path and are **not** interchangeable — `<mariadb/mysql.h>` and `<mysql.h>` each resolve against only one of them |
+| **OpenSSL** (`libssl`, `libcrypto`) | `find_package(OpenSSL REQUIRED)` in root mode; in embedded mode from the host repo's linked-libraries registry, which may name an OPT prefix instead |
+| **MariaDB/MySQL client headers** | Only when `UFLIB_CAPABILITY_SQL=ON`, which also gates `src/db/`. Located by `cmake/FindMariaDB.cmake`, which searches `MariaDB_ROOT` first and the default paths otherwise. Two include roots are returned and are **not** interchangeable — `<mariadb/mysql.h>` resolves against the include root and `<mysql.h>` against that root's `mariadb/` subdirectory; the second is derived from the first |
 | **libmariadb** (the library) | Not vendored and not linked by the default build. Resolved through `cmake/FindMariaDB.cmake` only when `UFLIB_CAPABILITY_SQL=ON`. The DB objects leave unresolved `mysql_*` symbols in `libuflib.a`, so a consumer that links them must supply the client |
 | **GoogleTest 1.12.0** | `FetchContent`, only when `_PACKAGE_TESTS=ON`. Cached under `build/_fetchcontent` so it is not re-cloned per build directory |
 | **libqrencode** | Only when `UFLIB_CAPABILITY_QRENCODE=ON`, found by `cmake/FindQREncode.cmake` |
@@ -146,7 +146,9 @@ hiredis — are carried in the tree and need nothing installed. Each is built on
 under its own capability, and hiredis is never folded into `libuflib.a`: the
 consumer links it.
 
-The hard dependency on libmariadb is expected to be resolved in an upcoming release.
+A private-prefix install is reached by setting `MariaDB_ROOT` or `UTF8PROC_ROOT`; with neither set,
+both modules fall through to the default search paths, so a distro package needs no hint and no
+include path is hardcoded to `/opt`.
 
 ### Quick start
 

@@ -207,6 +207,12 @@ def validate_leaf(path, d, file="schema"):
                 raise LuaSchemaError(f"{path}: {bound} truncated for integer field", file)
             if typ == "integer" and not isinstance(v, (int, float)):
                 raise LuaSchemaError(f"{path}: {bound} must be numeric", file)
+    if d.get("mutable") and "varsub" in _xf_names(d.get("transform")):
+        # Substitution is resolved at load, from the caller's callback; a set
+        # supplies a literal value and has no callback to resolve it with, so
+        # a settable field could never honour the declaration.
+        raise LuaSchemaError(
+            f"{path}: varsub cannot be mutable: substitution is resolved at load, not at set", file)
     for name in _xf_names(d.get("transform")):
         if name not in KNOWN_TRANSFORMS:
             raise LuaSchemaError(f"{path}: unknown transform {name!r}", file)
@@ -298,7 +304,58 @@ def c_str(s):
         return "NULL"
     return json.dumps(str(s))
 
-def emit(merged, sources, outdir: Path, report_only=False):
+def artefact_names(prefix):
+    """Every name written into the artefacts, from one prefix.
+
+    Without a prefix the generator emits the names it has always emitted: the
+    artefacts are one set per binary, and the table, its count and the lookup
+    are globals a consumer names directly.
+
+    With a prefix the set is namespaced -- file names, include guards, the enum
+    type, the two sentinels, the lookup and the table accessors -- and the table
+    and its count become static, reachable only through the two accessors. That
+    is what makes two schemas expressible in the same binary: nothing global
+    remains for the second set to collide with.
+    """
+    if prefix is None:
+        return {
+            "fields_h": "ufconfig_fields_generated.h",
+            "fielddesc_c": "ufconfig_fielddesc_generated.c",
+            "lookup_c": "ufconfig_lookup_generated.c",
+            "setters_h": "ufconfig_setters_stub_generated.h",
+            "setters_c": "ufconfig_setters_stub_generated.c",
+            "guard_h": "UFCONFIG_FIELDS_GENERATED_H",
+            "guard_setters_h": "UFCONFIG_SETTERS_STUB_GENERATED_H",
+            "enum_type": "UfConfigFieldId",
+            "enum_invalid": "UF_CONFIG_FIELD__INVALID",
+            "enum_count": "UF_CONFIG_FIELD__COUNT",
+            "fields": "g_ufconfig_fields",
+            "field_count": "g_ufconfig_field_count",
+            "lookup": "UfConfigLookupPath",
+            "fields_fn": None,
+            "field_count_fn": None,
+        }
+    up = prefix.upper()
+    return {
+        "fields_h": f"{prefix}_fields_generated.h",
+        "fielddesc_c": f"{prefix}_fielddesc_generated.c",
+        "lookup_c": f"{prefix}_lookup_generated.c",
+        "setters_h": f"{prefix}_setters_stub_generated.h",
+        "setters_c": f"{prefix}_setters_stub_generated.c",
+        "guard_h": f"{up}_FIELDS_GENERATED_H",
+        "guard_setters_h": f"{up}_SETTERS_STUB_GENERATED_H",
+        "enum_type": f"{ident(prefix)}FieldId",
+        "enum_invalid": f"{up}_FIELD__INVALID",
+        "enum_count": f"{up}_FIELD__COUNT",
+        "fields": "s_fields",
+        "field_count": "s_field_count",
+        "lookup": f"{ident(prefix)}LookupPath",
+        "fields_fn": f"{ident(prefix)}Fields",
+        "field_count_fn": f"{ident(prefix)}FieldCount",
+    }
+
+def emit(merged, sources, outdir: Path, report_only=False, prefix=None):
+    n = artefact_names(prefix)
     # One destination, flat.  Headers and sources land side by side: which of
     # them belongs on an include path, which in a source list, and where either
     # sits relative to the consumer's own tree is the consumer's arrangement.
@@ -322,19 +379,25 @@ def emit(merged, sources, outdir: Path, report_only=False):
             d = fields[p]
             print(f"{p}\ttype={d.get('type')}\trequired={d.get('required', False)}\tdefault={d.get('default', '')}\tdoc={d.get('doc','')}")
         return
-    h = [banner, "#ifndef UFCONFIG_FIELDS_GENERATED_H\n#define UFCONFIG_FIELDS_GENERATED_H\n",
+    h = [banner,
+         f"#ifndef {n['guard_h']}\n#define {n['guard_h']}\n",
          "#include <stdint.h>\n",
-         "typedef enum UfConfigFieldId {\n",
-         "    UF_CONFIG_FIELD__INVALID = -1,\n"]
+         f"typedef enum {n['enum_type']} {{\n",
+         f"    {n['enum_invalid']} = -1,\n"]
     for i, p in enumerate(order):
         h.append(f"    {enum_name(p)} = {i}, ///< {p}\n")
-    h.append("    UF_CONFIG_FIELD__COUNT\n} UfConfigFieldId;\n")
-    h.append("_Static_assert(sizeof(UfConfigFieldId) <= sizeof(int), \"UfConfigFieldId_is_int\");\n")
+    h.append(f"    {n['enum_count']}\n}} {n['enum_type']};\n")
+    h.append(f"_Static_assert(sizeof({n['enum_type']}) <= sizeof(int), \"{n['enum_type']}_is_int\");\n")
     h.append("struct UfConfig;\n")
     for p in order:
-        h.append(f"UfConfigStatus UfConfigGet{ident(p)}(const struct UfConfig *h, UfConfigValue *out);\n")
+        h.append(f"UfConfigOpStatus UfConfig{ident(p)}(const struct UfConfig *h, UfConfigValue *out);\n")
+    if n["fields_fn"]:
+        h.append("struct UfConfigFieldDesc;\n")
+        h.append(f"const struct UfConfigFieldDesc *{n['fields_fn']}(void);\n")
+        h.append(f"int {n['field_count_fn']}(void);\n")
+        h.append(f"int {n['lookup']}(const char *path);\n")
     h.append("#endif\n")
-    (outdir / "ufconfig_fields_generated.h").write_text("".join(h))
+    (outdir / n["fields_h"]).write_text("".join(h))
 
     def fnv(s):
         hval = 2166136261
@@ -360,7 +423,8 @@ def emit(merged, sources, outdir: Path, report_only=False):
     if not ok:
         raise SystemExit("perfect hash failed")
 
-    lk = [banner, '#include <uflib/ufconfig/ufconfig.h>\n#include <string.h>\n',
+    own_header = f'#include "{n["fields_h"]}"\n' if prefix else ''
+    lk = [banner, '#include <uflib/ufconfig/ufconfig.h>\n#include <string.h>\n', own_header,
           f"enum {{ UF_LOOKUP_SIZE = {size} }};\n",
           "static const struct { unsigned hash; int id; const char *path; } g_lookup[UF_LOOKUP_SIZE] = {\n"]
     slots = ["    {0, -1, 0}"] * size
@@ -368,28 +432,29 @@ def emit(merged, sources, outdir: Path, report_only=False):
         idx = fnv(p) & (size - 1)
         slots[idx] = f'    {{ {fnv(p)}u, {enum_name(p)}, "{p}" }}'
     lk.append(",\n".join(slots) + "\n};\n")
-    lk.append("""
-static unsigned sFnv(const char *s) {
+    lookup_name = n["lookup"]
+    lk.append(f"""
+static unsigned sFnv(const char *s) {{
     unsigned h = 2166136261u;
-    for (; *s; s++) { h ^= (unsigned char)*s; h *= 16777619u; }
+    for (; *s; s++) {{ h ^= (unsigned char)*s; h *= 16777619u; }}
     return h;
-}
-int UfConfigLookupPath(const char *path) {
+}}
+int {lookup_name}(const char *path) {{
     unsigned h = sFnv(path);
     unsigned i = h & (UF_LOOKUP_SIZE - 1);
     if (g_lookup[i].id >= 0 && g_lookup[i].hash == h && strcmp(g_lookup[i].path, path) == 0)
         return g_lookup[i].id;
     return -1;
-}
+}}
 """)
-    (outdir / "ufconfig_lookup_generated.c").write_text("".join(lk))
+    (outdir / n["lookup_c"]).write_text("".join(lk))
 
     # The descriptor table is the consumer's object, built against the public
     # contract only.  It must not reach for the library's private header: the
     # consumer does not have it, and needing it would make every generated
     # artefact depend on this library's internals rather than its interface.
-    fd = [banner, '#include <uflib/ufconfig/ufconfig.h>\n',
-          "const struct UfConfigFieldDesc g_ufconfig_fields[] = {\n"]
+    fd = [banner, '#include <uflib/ufconfig/ufconfig.h>\n', own_header,
+          f"{'static ' if n['fields_fn'] else ''}const struct UfConfigFieldDesc {n['fields']}[] = {{\n"]
     tmap = {"integer": "UF_FT_INT", "float": "UF_FT_FLOAT", "boolean": "UF_FT_BOOL",
             "string": "UF_FT_STR", "array": "UF_FT_ARR", "table": "UF_FT_TAB"}
     for p in order:
@@ -459,12 +524,15 @@ int UfConfigLookupPath(const char *path) {
         enc = 1 if d.get("encrypted") else 0
         fd.append(f'    {{ {enum_name(p)}, "{p}", {typ}, {req}, {mut}, {hasd}, {di}LL, {df}, {db}, {ds}, {has_min}, {has_max}, {vmin}LL, {vmax}LL, {xf_c}, {one_c}, {fmt_c}, {has_lmin}, {has_lmax}, {lnmin}LL, {lnmax}LL, {has_am}, {amv}LL, {doc_c}, {rx_c}, {enc} }},\n')
     fd.append("};\n")
-    fd.append(f"const int g_ufconfig_field_count = {len(order)};\n")
+    fd.append(f"{'static ' if n['fields_fn'] else ''}const int {n['field_count']} = {len(order)};\n")
+    if n["fields_fn"]:
+        fd.append(f"PUBLIC_API const struct UfConfigFieldDesc *{n['fields_fn']}(void) {{ return {n['fields']}; }}\n")
+        fd.append(f"PUBLIC_API int {n['field_count_fn']}(void) {{ return {n['field_count']}; }}\n")
     for p in order:
-        fd.append(f"PUBLIC_API UfConfigStatus UfConfigGet{ident(p)}(const UfConfig *h, UfConfigValue *out) {{\n")
+        fd.append(f"PUBLIC_API UfConfigOpStatus UfConfig{ident(p)}(const UfConfig *h, UfConfigValue *out) {{\n")
         fd.append(f"    return UfConfigGetFieldByIndex(h, {enum_name(p)}, out);\n}}\n")
-    (outdir / "ufconfig_fielddesc_generated.c").write_text("".join(fd))
-    proto = [banner, "#ifndef UFCONFIG_SETTERS_STUB_GENERATED_H\n#define UFCONFIG_SETTERS_STUB_GENERATED_H\n",
+    (outdir / n["fielddesc_c"]).write_text("".join(fd))
+    proto = [banner, f"#ifndef {n['guard_setters_h']}\n#define {n['guard_setters_h']}\n",
              "#include <uflib/ufconfig/ufconfig.h>\n"]
     setmap = {"integer": ("int64_t", "UfConfigSetInt"),
               "float": ("double", "UfConfigSetFloat"),
@@ -474,10 +542,10 @@ int UfConfigLookupPath(const char *path) {
         if not d.get("mutable"):
             continue
         ct, fn = setmap.get(d["type"], ("int64_t", "UfConfigSetInt"))
-        proto.append(f"UfConfigStatus UfConfigSet{ident(p)}(struct UfConfig *h, {ct} v);\n")
+        proto.append(f"UfConfigOpStatus UfConfigSet{ident(p)}(struct UfConfig *h, {ct} v);\n")
     proto.append("#endif\n")
-    (outdir / "ufconfig_setters_stub_generated.h").write_text("".join(proto))
-    ext_path = outdir / "ufconfig_setters_stub_generated.c"
+    (outdir / n["setters_h"]).write_text("".join(proto))
+    ext_path = outdir / n["setters_c"]
     preserved = ""
     marker = "/* <<< UFCFG-EXTENSION-POINT — developer code below is preserved by the generator */"
     if ext_path.exists():
@@ -492,12 +560,12 @@ int UfConfigLookupPath(const char *path) {
     # then emitted again beside the fresh copy.  The file doubles every time it
     # is regenerated, and the duplicate definitions only surface as a compile
     # error in whichever target happens to include it.
-    sc = [banner, '#include "ufconfig_setters_stub_generated.h"\n']
+    sc = [banner, f'#include "{n["setters_h"]}"\n']
     for p, d in fields.items():
         if not d.get("mutable"):
             continue
         ct, fn = setmap.get(d["type"], ("int64_t", "UfConfigSetInt"))
-        sc.append(f"PUBLIC_API UfConfigStatus UfConfigSet{ident(p)}(UfConfig *h, {ct} v) {{\n")
+        sc.append(f"PUBLIC_API UfConfigOpStatus UfConfigSet{ident(p)}(UfConfig *h, {ct} v) {{\n")
         sc.append(f'    return {fn}(h, "{p}", v);\n}}\n')
     sc.append("\n" + marker + "\n")
     if preserved.strip():
@@ -510,9 +578,17 @@ def main():
     ap.add_argument("-o", "--outdir", default="generated",
                     help="where every artefact is written; flat")
     ap.add_argument("--emit-schema-report", action="store_true")
+    ap.add_argument("--prefix", metavar="NAME", default=None,
+                    help="namespace the artefacts: file names, guards, enum type, "
+                         "sentinels, lookup, and the table accessors; the table and "
+                         "its count become static.  Without it the artefacts keep "
+                         "ufconfig-gen's global names -- one schema per binary.")
     args = ap.parse_args()
     if not args.schemas:
         return 2
+    if args.prefix is not None and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", args.prefix):
+        print(f"ufconfig-gen: --prefix {args.prefix!r} is not an identifier", file=sys.stderr)
+        return 1
     loaded = []
     for s in args.schemas:
         try:
@@ -532,7 +608,8 @@ def main():
         merged = merge_schemas(loaded)
         out = Path(args.outdir)
         out.mkdir(parents=True, exist_ok=True)
-        emit(merged, args.schemas, out, report_only=args.emit_schema_report)
+        emit(merged, args.schemas, out, report_only=args.emit_schema_report,
+             prefix=args.prefix)
     except LuaSchemaError as e:
         print(f"ufconfig-gen: {e}", file=sys.stderr)
         return 1

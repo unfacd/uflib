@@ -52,20 +52,18 @@ static const char *const kBase =
 
 /* Load `document` and require exactly `want`. */
 static void Expect(const char *what, const char *document,
-                   UfConfigStatus want, UfConfigLoadMode mode) {
+                   UfConfigOpStatus want, UfConfigLoadMode mode) {
     UfConfig *h = NULL;
     UfConfigCreate(&h, &(UfConfigDescriptor){ .fields = g_ufconfig_fields,
                                               .field_count = (size_t)g_ufconfig_field_count,
                                               .lookup = UfConfigLookupPath,
-                                              .kind = UF_CONFIG_BACKEND_FILE });
+                                              .backend = UF_CONFIG_BACKEND_FILE });
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = mode;
 
-    UfConfigStatus got = UfConfigLoadBuffer(h, document, strlen(document), &opt, NULL);
+    UfConfigOpStatus got = UfConfigLoadBuffer(h, document, strlen(document), &opt, NULL);
     const UfConfigError *e = UfConfigLastError();
 
     if (got == want) {
@@ -131,9 +129,8 @@ int main(void) {
         UfConfigCreate(&h, &(UfConfigDescriptor){ .fields = g_ufconfig_fields,
                                                   .field_count = (size_t)g_ufconfig_field_count,
                                                   .lookup = UfConfigLookupPath });
-        UfConfigLoadOptions opt = { .size = sizeof(opt), .version = 1,
-                                    .mode = UF_CONFIG_LOAD_LENIENT };
-        UfConfigStatus st = UfConfigLoadBuffer(h, kBase, strlen(kBase), &opt, NULL);
+        UfConfigLoadOptions opt = { .mode = UF_CONFIG_LOAD_LENIENT };
+        UfConfigOpStatus st = UfConfigLoadBuffer(h, kBase, strlen(kBase), &opt, NULL);
         printf("  %-6s %-34s %s\n", st == UF_CONFIG_OK ? "ok" : "FAIL",
                "baseline document loads", UfConfigStatusString(st));
         if (st != UF_CONFIG_OK) {

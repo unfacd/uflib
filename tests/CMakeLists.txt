@@ -97,18 +97,27 @@ add_subdirectory(recycler_v2)
 add_subdirectory(buffer_descriptor)
 add_subdirectory(optional)
 
+# Resource router: path-keyed route registry
+add_subdirectory(resource_router)
+
 # The vendored parser's extension, gated on the parser
 add_subdirectory(mjson)
 
+# Message framing: RFC 6455 WebSocket frame codec
+add_subdirectory(msg_framing/websocket)
+
 # ADT tests
 add_subdirectory(adt/distinct_array)
+add_subdirectory(adt/hashtable)
 add_subdirectory(adt/hashtable_v2)
 add_subdirectory(adt/hopscotch)
+add_subdirectory(adt/hopscotch_configurable)
 add_subdirectory(adt/hopscotch_hashtable_v2)
 add_subdirectory(adt/minheap)
 add_subdirectory(adt/logger_injection)
 
 # CDT tests
+add_subdirectory(cdt/alias_map)
 add_subdirectory(cdt/anderson_spinlock)
 add_subdirectory(cdt/chase_lev_stealing_queue)
 add_subdirectory(cdt/hashmap)
@@ -132,6 +141,9 @@ add_subdirectory(logger)
 
 # Config module tests
 add_subdirectory(ufconfig)
+
+# Config module — SQLite driver tests
+add_subdirectory(db)
 
 # Command module tests
 add_subdirectory(ufcommand)
@@ -166,6 +178,7 @@ add_subdirectory(ufconfig/validate)
 
 # Config module — serialiser golden-file tests
 add_subdirectory(ufconfig/serialise)
+add_subdirectory(ufconfig/subst)
 
 # Config module — encrypted values (`encrypted = true`), against its own schema
 add_subdirectory(ufconfig/secrets)

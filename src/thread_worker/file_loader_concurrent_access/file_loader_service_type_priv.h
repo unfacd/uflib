@@ -28,6 +28,8 @@
 
 #include <uflib/cdt/hashmap/lockless_fixed_width_hashmap_type.h>
 #include <uflib/cdt/cdt_mpsc_queue_type.h>
+#include <uflib/logger/logger_type.h>
+#include <uflib/file_loader_service_concurrent/file_loader_service_concurrent_type.h>
 
 /* ── Handle encoding ─────────────────────────────────────────────────────── */
 
@@ -99,6 +101,10 @@ typedef struct {
 
 typedef struct FileLoaderConcurrentAccess FileLoaderConcurrentAccess;
 
+typedef void (*FileLoaderConcurrentAccessLogFn)(FileLoaderConcurrentAccess *self,
+    UfLoggerLevel level, const char *file_ptr, int line, const char *function_ptr,
+    const char *format_ptr, ...) __attribute__((format(printf, 6, 7)));
+
 /* ── Eviction callback ────────────────────────────────────────────────────── */
 
 /*!
@@ -163,6 +169,10 @@ typedef struct IFileLoaderConcurrentAccess {
 
 /* ── Node flags ───────────────────────────────────────────────────────────── */
 
+#define FILELOADERCONCURRENTACCESS_NODE_FREE        0U
+#define FILELOADERCONCURRENTACCESS_NODE_INIT        1U
+#define FILELOADERCONCURRENTACCESS_NODE_PUBLISHED   2U
+
 #define FILELOADERCONCURRENTACCESS_FLAG_NEEDS_LOAD  0x01U
 #define FILELOADERCONCURRENTACCESS_FLAG_LOADING     0x02U
 #define FILELOADERCONCURRENTACCESS_FLAG_IN_CACHE    0x04U
@@ -190,7 +200,9 @@ typedef struct {
 
     /* ── Cache-line 1: buffer ptr (monitor publishes, consumers read) ─── */
     _Atomic uintptr_t             buffer;         ///< mmap'd buffer ptr (0 = not loaded)
-    char                          _pad1[56];
+    _Atomic size_t                size_bytes;
+    _Atomic uint32_t              publish_seq;    ///< seqlock over (buffer, size_bytes)
+    char                          _pad1[44];
 
     /* ── Cache-line 2: flags (monitor sets/clears, consumers read) ─── */
     _Atomic uint32_t              flags;          ///< NEEDS_LOAD | LOADING | IN_CACHE
@@ -207,7 +219,9 @@ typedef struct {
     /* ── Remaining fields (cold: accessed only during alloc/free/lookup) ─── */
     _Atomic uint64_t              generation;     ///< Seq-lock counter
     _Atomic bool                  is_active;
-    uint32_t                      next_free;       ///< Treiber stack link
+    _Atomic bool                  is_loaded;
+    _Atomic uint8_t               publish_state;  ///< FREE -> INIT -> PUBLISHED
+    _Atomic uint32_t              next_free;       ///< Treiber stack link
     int                           inotify_wd;
     char                          path[];         ///< FAM — sized at init (key_width bytes)
 } FileLoaderConcurrentAccessNode;
@@ -275,12 +289,14 @@ struct FileLoaderConcurrentAccess {
     _Atomic uint32_t                 cache_loaded_count;
 
     _Atomic uintptr_t               *hazptrs;
+    _Atomic bool                    *hazptr_reserved;
     uint32_t                         hazptr_slot_count;
 
     FileLoaderConcurrentAccessLimboEntry *limbo_ring;
     _Atomic uint32_t                 limbo_write_idx;
     _Atomic uint32_t                 limbo_read_idx;
     uint32_t                         limbo_capacity;
+    _Atomic bool                     limbo_lock;
 
     LocklessMpscQueue                work_queue;
 
@@ -295,11 +311,15 @@ struct FileLoaderConcurrentAccess {
     _Atomic bool                     running;
     _Atomic uint64_t                 monitor_heartbeat;
     pthread_t                        monitor_thread;
+    _Atomic bool                     monitor_reaped;
+    char                             proc_name[PRCTL_MAX_NAME_SZ + 1];
 
     uint32_t                         pool_capacity;
     uint32_t                         buffer_cache_capacity;
     uint32_t                         key_width;
     uint32_t                         default_buffer_timeout_ms;
+    UfLogger                        *uf_logger;
+    FileLoaderConcurrentAccessLogFn   log;
 };
 
 #endif /* UFLIB_FILE_LOADER_SERVICE_TYPE_PRIV_H */

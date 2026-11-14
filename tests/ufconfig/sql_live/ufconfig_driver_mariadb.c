@@ -102,7 +102,7 @@ static int sExec(MYSQL *db, const char *sql) { return mysql_query(db, sql) == 0;
    returns BACKEND and says nothing costs whoever runs the harness an hour of
    bisecting statements — which is exactly what happened the first time this
    was run. */
-static UfConfigStatus sBackendError(LiveCtx *c, const char *where) {
+static UfConfigOpStatus sBackendError(LiveCtx *c, const char *where) {
     fprintf(stderr, "    [sql-live] %s: %u: %s\n", where, mysql_errno(c->db), mysql_error(c->db));
     return UF_CONFIG_ERR_BACKEND;
 }
@@ -204,7 +204,7 @@ static int sEnsureConfig(LiveCtx *c, const UfConfigMeta *meta, unsigned long lon
     return *out_id != 0;
 }
 
-static UfConfigStatus sLiveOpen(void **ctx, const UfConfigBackendSpec *spec) {
+static UfConfigOpStatus sLiveOpen(void **ctx, const UfConfigBackendSpec *spec) {
     if (!ctx || !spec) return UF_CONFIG_ERR_INVALID_ARG;
     if (!spec->u.sql.dsn || !spec->u.sql.ns || !spec->u.sql.config_name)
         return UF_CONFIG_ERR_INVALID_ARG;
@@ -232,7 +232,7 @@ static UfConfigStatus sLiveOpen(void **ctx, const UfConfigBackendSpec *spec) {
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
+static UfConfigOpStatus sLiveReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
                                    UfConfigMeta *meta) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c || !out || !n) return UF_CONFIG_ERR_INVALID_ARG;
@@ -299,7 +299,7 @@ static UfConfigStatus sLiveReadAll(void *ctx, UfConfigFieldPair **out, size_t *n
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n,
+static UfConfigOpStatus sLiveWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n,
                                     const UfConfigMeta *meta) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c) return UF_CONFIG_ERR_INVALID_ARG;
@@ -368,7 +368,7 @@ static UfConfigStatus sLiveWriteAll(void *ctx, const UfConfigFieldPair *in, size
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
+static UfConfigOpStatus sLiveReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c || !path || !out) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -402,7 +402,7 @@ static UfConfigStatus sLiveReadOne(void *ctx, const char *path, UfConfigFieldPai
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
+static UfConfigOpStatus sLiveWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c || !path || !in) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -436,7 +436,7 @@ static UfConfigStatus sLiveWriteOne(void *ctx, const char *path, const UfConfigF
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveStat(void *ctx, UfConfigStamp *out) {
+static UfConfigOpStatus sLiveStat(void *ctx, UfConfigStamp *out) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c || !out) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -459,7 +459,7 @@ static void sLiveClose(void *ctx) {
 const UfConfigDriver g_ufconfig_driver_mariadb = {
     .caps = {
         .api_version       = UF_CONFIG_DRIVER_API_VERSION,
-        .kind              = UF_CONFIG_BACKEND_SQL,
+        .backend_store              = UF_CONFIG_BACKEND_SQL,
         .atomic_write_all  = true,
         .atomic_write_one  = true,
         .per_field_read    = true,

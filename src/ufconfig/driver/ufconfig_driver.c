@@ -44,7 +44,7 @@ static int g_ndrv;
 
 static void sEnsureBuiltin(void);
 
-PUBLIC_API UfConfigStatus UfConfigRegisterDriver(const UfConfigDriver *drv) {
+PUBLIC_API UfConfigOpStatus UfConfigRegisterDriver(const UfConfigDriver *drv) {
     if (!drv || !drv->caps.name) return UF_CONFIG_ERR_INVALID_ARG;
     if (drv->caps.api_version != UF_CONFIG_DRIVER_API_VERSION)
         return UF_CONFIG_ERR_UNIMPLEMENTED;
@@ -62,7 +62,7 @@ PUBLIC_API UfConfigStatus UfConfigRegisterDriver(const UfConfigDriver *drv) {
        built-ins would be unreachable-around, and the interface would advertise
        an extensibility it did not have. */
     for (int i = 0; i < g_ndrv; i++) {
-        if (g_drv[i]->caps.kind == drv->caps.kind) {
+        if (g_drv[i]->caps.backend_store == drv->caps.backend_store) {
             g_drv[i] = drv;
             return UF_CONFIG_OK;
         }
@@ -82,10 +82,10 @@ PUBLIC_API const UfConfigDriver *UfConfigDriverFindName(const char *name) {
     return NULL;
 }
 
-PUBLIC_API const UfConfigDriver *UfConfigDriverFindKind(UfConfigBackendKind kind) {
+PUBLIC_API const UfConfigDriver *UfConfigDriverFindKind(UfConfigBackendStore kind) {
     sEnsureBuiltin();
     for (int i = 0; i < g_ndrv; i++) {
-        if (g_drv[i]->caps.kind == kind) return g_drv[i];
+        if (g_drv[i]->caps.backend_store == kind) return g_drv[i];
     }
     return NULL;
 }

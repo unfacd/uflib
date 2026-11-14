@@ -397,9 +397,9 @@ UfCommandStatus UfCommandRegistryCreate(const UfCommandRegistryConfig *config, U
 void UfCommandRegistryDestroy(UfCommandRegistry *r)
 {
   if (!r) return;
-  for (size_t i = 0; i < r->command_capacity; ++i) sFreeCommandEntry(&r->commands[i]);
-  for (size_t i = 0; i < r->alias_capacity; ++i) sFreeAliasEntry(&r->aliases[i]);
-  for (size_t i = 0; i < r->binding_capacity; ++i) sFreeBindingEntry(&r->bindings[i]);
+  if (r->commands) for (size_t i = 0; i < r->command_capacity; ++i) sFreeCommandEntry(&r->commands[i]);
+  if (r->aliases) for (size_t i = 0; i < r->alias_capacity; ++i) sFreeAliasEntry(&r->aliases[i]);
+  if (r->bindings) for (size_t i = 0; i < r->binding_capacity; ++i) sFreeBindingEntry(&r->bindings[i]);
   UFCOMMAND_LOG_INFO(r, "registry destroyed: %zu command(s), %zu alias(es), %zu binding(s)", r->command_count,
                      r->alias_count, r->binding_count);
   if (r->telemetry_owned) UfCommandTelemetryDestroy(r->telemetry);

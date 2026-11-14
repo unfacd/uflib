@@ -113,7 +113,7 @@ GetTimeNowInMicros (void)
 		struct timespec ts = {0};
 
 		if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-			return (long long) (ts.tv_sec * 1000000L + ts.tv_nsec / 1000L);
+			return (long long) ts.tv_sec * 1000000L + ts.tv_nsec / 1000L;
 	}
 	else
 #endif

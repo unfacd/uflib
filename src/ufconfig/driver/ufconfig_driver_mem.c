@@ -44,7 +44,7 @@ static char *sDupstr(const char *s) {
     return d;
 }
 
-static UfConfigStatus sMemOpen(void **ctx, const UfConfigBackendSpec *spec) {
+static UfConfigOpStatus sMemOpen(void **ctx, const UfConfigBackendSpec *spec) {
     MemCtx *m = (MemCtx *)calloc(1, sizeof(*m));
     if (!m) return UF_CONFIG_ERR_NO_MEMORY;
     m->meta.fmt = 1;
@@ -53,7 +53,7 @@ static UfConfigStatus sMemOpen(void **ctx, const UfConfigBackendSpec *spec) {
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sMemReadAll(void *ctx, UfConfigFieldPair **out, size_t *n, UfConfigMeta *meta) {
+static UfConfigOpStatus sMemReadAll(void *ctx, UfConfigFieldPair **out, size_t *n, UfConfigMeta *meta) {
     MemCtx *m = (MemCtx *)ctx;
     if (!m->present) return UF_CONFIG_ERR_NOT_CONFIGURED;
     UfConfigFieldPair *a = (UfConfigFieldPair *)calloc(m->n ? m->n : 1, sizeof(*a));
@@ -68,7 +68,7 @@ static UfConfigStatus sMemReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sMemWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n, const UfConfigMeta *meta) {
+static UfConfigOpStatus sMemWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n, const UfConfigMeta *meta) {
     MemCtx *m = (MemCtx *)ctx;
     for (size_t i = 0; i < m->n; i++) { free(m->p[i].path); free(m->p[i].encoded); }
     free(m->p);
@@ -85,7 +85,7 @@ static UfConfigStatus sMemWriteAll(void *ctx, const UfConfigFieldPair *in, size_
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sMemReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
+static UfConfigOpStatus sMemReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
     MemCtx *m = (MemCtx *)ctx;
     if (!m->present) return UF_CONFIG_ERR_NOT_CONFIGURED;
     for (size_t i = 0; i < m->n; i++)
@@ -96,7 +96,7 @@ static UfConfigStatus sMemReadOne(void *ctx, const char *path, UfConfigFieldPair
     return UF_CONFIG_ERR_NOFIELD;
 }
 
-static UfConfigStatus sMemWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
+static UfConfigOpStatus sMemWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
     MemCtx *m = (MemCtx *)ctx;
     if (!m->present) return UF_CONFIG_ERR_NOT_CONFIGURED;
     for (size_t i = 0; i < m->n; i++)
@@ -110,7 +110,7 @@ static UfConfigStatus sMemWriteOne(void *ctx, const char *path, const UfConfigFi
     return UF_CONFIG_ERR_NOFIELD;
 }
 
-static UfConfigStatus sMemStat(void *ctx, UfConfigStamp *out) {
+static UfConfigOpStatus sMemStat(void *ctx, UfConfigStamp *out) {
     MemCtx *m = (MemCtx *)ctx;
     if (!m->present) return UF_CONFIG_ERR_NOT_CONFIGURED;
     out->token = m->meta.version;
@@ -127,7 +127,7 @@ static void sMemClose(void *ctx) {
 const UfConfigDriver ufconfig_driver_mem = {
     .caps = {
         .api_version = UF_CONFIG_DRIVER_API_VERSION,
-        .kind        = UF_CONFIG_BACKEND_MEM,
+        .backend_store        = UF_CONFIG_BACKEND_MEM,
         .atomic_write_all = true, .atomic_write_one = true,
         .per_field_read = true, .native_version = true,
         .enumeration = true, .multi_config_txn = true,

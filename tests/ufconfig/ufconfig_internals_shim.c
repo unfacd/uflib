@@ -21,11 +21,11 @@ int ufconfigShimTransformRoundTrip(const char *op, const char *in, size_t inlen)
     size_t back_len = 0;
     int verdict;
 
-    UfConfigStatus forward = ConfigTransformApplyNamed(&arena, op, in, inlen, &mid, &mid_len);
+    UfConfigOpStatus forward = ConfigTransformApplyNamed(&arena, op, in, inlen, &mid, &mid_len);
     if (forward != UF_CONFIG_OK) {
         verdict = 1;
     } else {
-        UfConfigStatus reverse = ConfigTransformRevertNamed(&arena, op, mid, mid_len, &back, &back_len);
+        UfConfigOpStatus reverse = ConfigTransformRevertNamed(&arena, op, mid, mid_len, &back, &back_len);
         if (reverse != UF_CONFIG_OK) {
             verdict = 1;
         } else if (back_len != inlen || memcmp(back, in, inlen) != 0) {
@@ -44,13 +44,13 @@ int ufconfigShimDecodeRejected(const char *op, const char *in, size_t inlen) {
     char *out = NULL;
     size_t out_len = 0;
 
-    UfConfigStatus st = ConfigTransformRevertNamed(&arena, op, in, inlen, &out, &out_len);
+    UfConfigOpStatus st = ConfigTransformRevertNamed(&arena, op, in, inlen, &out, &out_len);
     ConfigArenaFree(arena);
     return st != UF_CONFIG_OK;
 }
 
 int ufconfigShimValid(const char *validator, const char *value) {
-    UfConfigStatus st;
+    UfConfigOpStatus st;
 
     if (strcmp(validator, "date") == 0) {
         st = ConfigValidateDate(value);

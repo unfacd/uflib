@@ -48,7 +48,8 @@ typedef struct HashTable
 
   pthread_rwlock_t hashtable_rwlock;
   unsigned  flag_locking:1,
-            flag_resizable:1;
+            flag_resizable:1,
+            flag_unique_keys:1;
 } HashTable;
 
 #endif //UFSRV_ADT_HASHTABLE_TYPE_H

@@ -216,7 +216,8 @@ __attribute__((noinline, unused)) unsigned next_pow2(unsigned x)
   register char *s,
                 *p;
 
-    if ((!str)||(!*str))  return *str="";
+    if (!str) return NULL;
+    if (!*str)  return *str="";
 
    s=*str;
 
@@ -947,8 +948,8 @@ do_hash(unsigned long m, size_t table_sz)
 }
 
 //http://web.archive.org/web/20071223173210/http://www.concentric.net/~Ttwang/tech/inthash.htm
-__attribute__((const))  uint64_t
-inthash_u64(uint64_t key, size_t key_len)
+static inline uint64_t
+sAvalancheU64(uint64_t key)
 {
 	key = ~key + (key << 21);
 	key = key ^ (key >> 24);
@@ -959,5 +960,32 @@ inthash_u64(uint64_t key, size_t key_len)
 	key = key + (key << 31);
 
 	return key;
+}
+
+uint64_t
+inthash_u64(uint64_t key, size_t key_len)
+{
+	(void)key_len;
+
+	return sAvalancheU64(key);
+}
+
+/**
+ * @brief Hash key_len bytes, for tables whose keys are content rather than a scalar.
+ *
+ * FNV-1a over the bytes, finished with the same avalanche mixer inthash_u64()
+ * uses, so a byte-keyed table and a scalar-keyed one spread comparably.
+ */
+__attribute__((pure))  uint64_t
+hash_bytes_u64(const uint8_t *key_bytes, size_t key_len)
+{
+	uint64_t key = 0xcbf29ce484222325ULL;
+
+	for (size_t i = 0; i < key_len; i++) {
+		key ^= key_bytes[i];
+		key *= 0x100000001b3ULL;
+	}
+
+	return sAvalancheU64(key);
 }
 

@@ -6,9 +6,13 @@ include(CMakeFindDependencyMacro)
 
 find_dependency(OpenSSL)
 
+if(@UFLIB_CAPABILITY_SQLITE@)
+    find_dependency(SQLite3)
+endif()
+
 # Valgrind is optional — standard_valgrind_includes.h conditionally includes it.
 find_path(VALGRIND_INCLUDE_DIR valgrind/valgrind.h
-    HINTS /opt/include /usr/include /usr/local/include
+    HINTS ${VALGRIND_ROOT}/include /usr/include /usr/local/include
 )
 
 list(APPEND CMAKE_MODULE_PATH ${uflib_CMAKE_DIR})

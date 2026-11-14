@@ -35,14 +35,15 @@ struct hopscotch_bucket_keyed {
 struct HopscotchHashtable {
   size_t pfactor;//changes per resize
   void *buckets;//changes per resize
+  size_t count; //items stored; maintained by the table, not by the caller
 };
 typedef struct HopscotchHashtable HopscotchHashtable;
 
 typedef struct  HopscotchHashtableConfigurable {
   HopscotchHashtable hashtable;
-  size_t keylen;
-  size_t key_offset;
-  uint64_t (*hash_func)(uint8_t *, size_t);
+  size_t keylen;      ///> key length in bytes; 0 keys on the item pointer itself
+  size_t key_offset;  ///> offset of the key inside the item when keylen is non-zero
+  uint64_t (*hash_func)(const uint8_t *key_bytes, size_t key_len); ///> hashes the key the store hands it
   void * (*buckets_allocator_func)(size_t, size_t); //unit size * multiples (a la cmalloc)
 } HopscotchHashtableConfigurable;
 

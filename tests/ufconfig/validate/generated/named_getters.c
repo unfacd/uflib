@@ -11,7 +11,7 @@
 typedef struct {
   const char *path;   /*!< the field this accessor reads */
   const char *name;   /*!< the accessor itself, for diagnostics */
-  UfConfigStatus (*get)(const UfConfig *h, UfConfigValue *out);
+  UfConfigOpStatus (*get)(const UfConfig *h, UfConfigValue *out);
 } UfConfigNamedGetter;
 
 /*!
@@ -27,39 +27,39 @@ int UfConfigCallAllNamedGetters(UfConfig *h)
   int           ok = 0;
   memset(&v, 0, sizeof(v));
 
-  if (UfConfigGetReqMust(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetReqTypedInt(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetReqTypedBool(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetReqTypedStr(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfHex(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfB64(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfB64url(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfB32(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfUpper(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfLower(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfSub(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfComp(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfRx(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetXfBoth(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVIp4(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVIp6(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVEmail(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVUrl(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVFqdn(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVDate(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVSize(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVCidr(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVNetmask(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVEnum(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVPattern(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVRanged(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVSized(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetVList(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetSharedTimeoutsConnected(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetSharedTimeoutsSuspended(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetNestDeepLeaf(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetNestSharedConnected(h, &v) == UF_CONFIG_OK) ok++;
-  if (UfConfigGetNestSharedSuspended(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigReqMust(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigReqTypedInt(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigReqTypedBool(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigReqTypedStr(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfHex(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfB64(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfB64url(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfB32(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfUpper(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfLower(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfSub(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfComp(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfRx(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigXfBoth(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVIp4(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVIp6(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVEmail(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVUrl(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVFqdn(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVDate(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVSize(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVCidr(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVNetmask(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVEnum(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVPattern(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVRanged(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVSized(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigVList(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigSharedTimeoutsConnected(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigSharedTimeoutsSuspended(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigNestDeepLeaf(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigNestSharedConnected(h, &v) == UF_CONFIG_OK) ok++;
+  if (UfConfigNestSharedSuspended(h, &v) == UF_CONFIG_OK) ok++;
 
   return ok;  /* of 33 accessors */
 }
@@ -69,39 +69,39 @@ int UfConfigCallAllNamedGetters(UfConfig *h)
  * reached by path and by generated id.
  */
 const UfConfigNamedGetter g_ufconfig_named_getters[] = {
-  { "req.must", "UfConfigGetReqMust", UfConfigGetReqMust },
-  { "req.typed_int", "UfConfigGetReqTypedInt", UfConfigGetReqTypedInt },
-  { "req.typed_bool", "UfConfigGetReqTypedBool", UfConfigGetReqTypedBool },
-  { "req.typed_str", "UfConfigGetReqTypedStr", UfConfigGetReqTypedStr },
-  { "xf.hex", "UfConfigGetXfHex", UfConfigGetXfHex },
-  { "xf.b64", "UfConfigGetXfB64", UfConfigGetXfB64 },
-  { "xf.b64url", "UfConfigGetXfB64url", UfConfigGetXfB64url },
-  { "xf.b32", "UfConfigGetXfB32", UfConfigGetXfB32 },
-  { "xf.upper", "UfConfigGetXfUpper", UfConfigGetXfUpper },
-  { "xf.lower", "UfConfigGetXfLower", UfConfigGetXfLower },
-  { "xf.sub", "UfConfigGetXfSub", UfConfigGetXfSub },
-  { "xf.comp", "UfConfigGetXfComp", UfConfigGetXfComp },
-  { "xf.rx", "UfConfigGetXfRx", UfConfigGetXfRx },
-  { "xf.both", "UfConfigGetXfBoth", UfConfigGetXfBoth },
-  { "v.ip4", "UfConfigGetVIp4", UfConfigGetVIp4 },
-  { "v.ip6", "UfConfigGetVIp6", UfConfigGetVIp6 },
-  { "v.email", "UfConfigGetVEmail", UfConfigGetVEmail },
-  { "v.url", "UfConfigGetVUrl", UfConfigGetVUrl },
-  { "v.fqdn", "UfConfigGetVFqdn", UfConfigGetVFqdn },
-  { "v.date", "UfConfigGetVDate", UfConfigGetVDate },
-  { "v.size", "UfConfigGetVSize", UfConfigGetVSize },
-  { "v.cidr", "UfConfigGetVCidr", UfConfigGetVCidr },
-  { "v.netmask", "UfConfigGetVNetmask", UfConfigGetVNetmask },
-  { "v.enum", "UfConfigGetVEnum", UfConfigGetVEnum },
-  { "v.pattern", "UfConfigGetVPattern", UfConfigGetVPattern },
-  { "v.ranged", "UfConfigGetVRanged", UfConfigGetVRanged },
-  { "v.sized", "UfConfigGetVSized", UfConfigGetVSized },
-  { "v.list", "UfConfigGetVList", UfConfigGetVList },
-  { "shared_timeouts.connected", "UfConfigGetSharedTimeoutsConnected", UfConfigGetSharedTimeoutsConnected },
-  { "shared_timeouts.suspended", "UfConfigGetSharedTimeoutsSuspended", UfConfigGetSharedTimeoutsSuspended },
-  { "nest.deep.leaf", "UfConfigGetNestDeepLeaf", UfConfigGetNestDeepLeaf },
-  { "nest.shared.connected", "UfConfigGetNestSharedConnected", UfConfigGetNestSharedConnected },
-  { "nest.shared.suspended", "UfConfigGetNestSharedSuspended", UfConfigGetNestSharedSuspended },
+  { "req.must", "UfConfigReqMust", UfConfigReqMust },
+  { "req.typed_int", "UfConfigReqTypedInt", UfConfigReqTypedInt },
+  { "req.typed_bool", "UfConfigReqTypedBool", UfConfigReqTypedBool },
+  { "req.typed_str", "UfConfigReqTypedStr", UfConfigReqTypedStr },
+  { "xf.hex", "UfConfigXfHex", UfConfigXfHex },
+  { "xf.b64", "UfConfigXfB64", UfConfigXfB64 },
+  { "xf.b64url", "UfConfigXfB64url", UfConfigXfB64url },
+  { "xf.b32", "UfConfigXfB32", UfConfigXfB32 },
+  { "xf.upper", "UfConfigXfUpper", UfConfigXfUpper },
+  { "xf.lower", "UfConfigXfLower", UfConfigXfLower },
+  { "xf.sub", "UfConfigXfSub", UfConfigXfSub },
+  { "xf.comp", "UfConfigXfComp", UfConfigXfComp },
+  { "xf.rx", "UfConfigXfRx", UfConfigXfRx },
+  { "xf.both", "UfConfigXfBoth", UfConfigXfBoth },
+  { "v.ip4", "UfConfigVIp4", UfConfigVIp4 },
+  { "v.ip6", "UfConfigVIp6", UfConfigVIp6 },
+  { "v.email", "UfConfigVEmail", UfConfigVEmail },
+  { "v.url", "UfConfigVUrl", UfConfigVUrl },
+  { "v.fqdn", "UfConfigVFqdn", UfConfigVFqdn },
+  { "v.date", "UfConfigVDate", UfConfigVDate },
+  { "v.size", "UfConfigVSize", UfConfigVSize },
+  { "v.cidr", "UfConfigVCidr", UfConfigVCidr },
+  { "v.netmask", "UfConfigVNetmask", UfConfigVNetmask },
+  { "v.enum", "UfConfigVEnum", UfConfigVEnum },
+  { "v.pattern", "UfConfigVPattern", UfConfigVPattern },
+  { "v.ranged", "UfConfigVRanged", UfConfigVRanged },
+  { "v.sized", "UfConfigVSized", UfConfigVSized },
+  { "v.list", "UfConfigVList", UfConfigVList },
+  { "shared_timeouts.connected", "UfConfigSharedTimeoutsConnected", UfConfigSharedTimeoutsConnected },
+  { "shared_timeouts.suspended", "UfConfigSharedTimeoutsSuspended", UfConfigSharedTimeoutsSuspended },
+  { "nest.deep.leaf", "UfConfigNestDeepLeaf", UfConfigNestDeepLeaf },
+  { "nest.shared.connected", "UfConfigNestSharedConnected", UfConfigNestSharedConnected },
+  { "nest.shared.suspended", "UfConfigNestSharedSuspended", UfConfigNestSharedSuspended },
 };
 
 const int g_ufconfig_named_getter_count = 33;

@@ -1,4 +1,4 @@
-.TH UFLIB 7 "October 2026" "uflib 4.0.1" "UFSRV Programmer's Manual"
+.TH UFLIB 7 "November 2026" "uflib 4.1.0" "UFSRV Programmer's Manual"
 .\" ---------------------------------------------------------------------------
 .SH NAME
 uflib \- foundational C library for the ufsrv messaging-server platform
@@ -10,12 +10,18 @@ uflib \- foundational C library for the ufsrv messaging-server platform
 .B #include <uflib/adt/adt_hashtable.h>
 .B #include <uflib/cdt/cdt_mpsc_queue.h>
 .B #include <uflib/cdt/lockless_ringbuffer/cdt_lockless_ringbuffer.h>
+.B #include <uflib/cdt/alias_map/alias_map.h>
 .B #include <uflib/recycler_v2/recycler_v2.h>
 .B #include <uflib/logger/logger.h>
 .B #include <uflib/ufconfig/ufconfig.h>
 .B #include <uflib/ufcommand/ufcommand.h>
 .B #include <uflib/buffer_descriptor/buffer_descriptor.h>
+.B #include <uflib/resource_router/resource_router.h>
 .B #include <uflib/optional/ufoptional.h>
+.B #include <uflib/msg_framing/websocket/ws_frame.h>
+.B #include <uflib/msg_framing/websocket/ws_message.h>
+.B #include <uflib/msg_framing/websocket/ws_close.h>
+.B #include <uflib/msg_framing/websocket/ws_handshake.h>
 .fi
 .sp
 Link with
@@ -27,8 +33,10 @@ is the bottom layer of the ufsrv development stack.  It provides the
 general-purpose software primitives every higher layer builds on: abstract
 data types, lock-free concurrent data structures, an object recycler,
 crypto and DB abstractions, networking helpers, an owning optional
-container, a command registry, compression, JSON, protobuf, UUID generation,
-a backend-agnostic logging interface, and utility routines.  Dependencies flow
+container, a path-keyed route registry, a command registry, a
+schema-driven configuration loader,
+compression, JSON, protobuf, UUID generation, a backend-agnostic logging
+interface, an RFC 6455 WebSocket codec, and utility routines.  Dependencies flow
 strictly downward \(em uflib has no visibility of ufsrvcorelib, ufnetcorelib,
 or any application server.
 .PP
@@ -43,10 +51,10 @@ The library is written in C17 with GNU extensions, requires Clang, and is
 licensed under the GNU Affero General Public License, version 3 or later.
 .PP
 This page describes version
-.BR 4.0.0.8 " of "
+.BR 4.1.0 " of "
 .BR uflib ,
 that being
-.BR MAJOR.MINOR.PATCH.INTERNAL
+.BR MAJOR.MINOR.PATCH
 as defined in the installed
 .BR version.h .
 .\" ---------------------------------------------------------------------------
@@ -57,7 +65,50 @@ Classical single-threaded containers.
 .PP
 .TP
 .B hashtable_v2
-Open-addressing hash table.
+Open-addressing hash table (linear probing), growable or fixed, optionally
+locked, optionally unique-keyed.
+.BR HashTableInstantiate ()
+and
+.BR HashTableLockingInstantiate ()
+fix the key configuration, which cannot change afterwards:
+.I offset
+is
+.IR offsetof (Item, key_field)
+within the extracted item;
+.I key_size
+is the field width for a fixed-width key
+.RB ( sizeof(unsigned long))
+or
+.B KEY_SIZE_ZERO
+for a NUL-terminated string;
+.I key_is_ptr
+is
+.B HASHTABLE_KEY_IS_PTR
+when that field holds a pointer to the key
+.RB ( "char *name" )
+and
+.B HASHTABLE_KEY_IS_INLINE
+when the key is stored inline
+.RB ( "char name[N]" ", " "unsigned long id" ).
+Extraction is a separate dimension: pass
+.IR item_extractor_callback
+when callers hold containers
+.RB ( "InstanceHolder *" )
+rather than items, and the table maps container to item on every operation.
+.PP
+Insertion returns the container that became resident; with unique keys it also
+reports whether this call claimed the key and, when not, who holds it
+.RB ( AddToHashUniquely ).
+.PP
+Pitfalls: the legacy names
+.B HASH_ITEM_IS_PTR_TYPE
+and
+.B HASH_ITEM_NOT_PTR_TYPE
+describe the key, not the container. Give the API exactly one level of
+indirection \(em containers to a table with an extractor, extracted items to one
+without; the wrong level makes every key read address the wrong object.  A
+unique-key table compares key values, so a resident item's key must not be
+mutated.
 .TP
 .B hopscotch_hashtable_v2
 Hopscotch hash table (bounded probe sequences).
@@ -126,6 +177,60 @@ Anderson and MCS locks, with the spin-pause definitions they share in
 .B LocklessTreiberStack
 Shared ABA-protected intrusive LIFO free-list (used by the recycler and
 hash map).
+.TP
+.B AliasMap
+Thread-safe many-to-one map from alias strings to one shared value.  Alias
+groups are the unit of mutation: aliases can be added, moved between groups
+and removed without disturbing their siblings, and a group exists exactly
+while it holds at least one alias.  Lookups either allocate a copy
+.RB ( AliasMapGetCopy )
+or write into a caller buffer
+.RB ( AliasMapGetInto ,
+which distinguishes absent, too-small and invalid through
+.BR errno );
+.B AliasMapAliasesOf
+returns a group snapshot in one allocation,
+.B AliasMapSnapshotCreate
+copies every group and alias into one immutable snapshot the caller walks with
+.BR AliasMapSnapshotGroupCount (),
+.BR AliasMapSnapshotValueAt (),
+.BR AliasMapSnapshotAliasCountAt ()
+and
+.BR AliasMapSnapshotAliasAt ()
+before
+.BR AliasMapSnapshotDestroy (),
+.B AliasMapForEach
+streams the same groups through a caller visitor without allocating,
+and
+.B AliasMapDescribe
+emits JSON metadata.
+.PP
+Maps are created empty
+.RB ( AliasMapCreate ,
+.BR AliasMapCreateWithLogger ),
+from a collector descriptor
+.RB ( AliasMapCreateWithDescriptor )
+or from a JSON document
+.RB ( AliasMapCreateWithJsonDescriptor ).
+A logger is bound once at construction and never changed; bulk construction
+takes no lock because the map is private until the call returns, rejects
+duplicate aliases, pre-sizes the bucket table and either publishes a complete
+map or returns NULL with the reason and coordinates in
+.BR AliasMapCreateResult .
+The JSON form is an array of
+.B {"value": string, "keys": [string, ...]}
+objects, parsed strictly by uflib itself with no external JSON dependency and
+with byte offsets reported for malformed input.
+.PP
+Every alias and value is copied, so a map never retains caller memory.  The
+construction origin (incremental, descriptor or JSON) is fixed at creation and
+reported by
+.BR AliasMapGetOrigin ().
+.BR AliasMapDescribe ( AliasMap ", " BufferDescriptor )
+emits origin, bulk flag, group and alias counts, key and value byte totals,
+bucket geometry, load factor, group-size statistics, maximum chain length,
+logger state and a bounded group listing, appending to a caller-supplied
+descriptor when one is passed.
 .\" ===================================================
 .SS Recycler \&(recycler, recycler_v2)
 Object pooling with optional persistence.  A recycler allocates objects in
@@ -252,6 +357,93 @@ What the module does not do: it is not thread-safe.  A container is
 single-owner, and if one is shared between threads synchronization belongs at
 that boundary, outside this API.
 .\" ===================================================
+.SS Resource router \&(resource_router)
+A path-keyed registry: a tree of route paths, each carrying per-method
+callbacks.  A consumer declares its routes in a table instead of hand-writing a
+parser, then hands one path through the registry to get the handler and the
+unparsed tail back.
+.sp
+The registry is
+.B an ADT only
+\(em no threads, no locks, no logging, no global state.  Every registry is a
+separate heap handle, so one process may hold several.  Registration completes
+before matching starts; concurrent matching on a frozen registry is safe,
+registration racing a match is a caller error.
+.sp
+Paths are
+.B '/'-separated segments
+in a sorted trie, so sibling lookup is a binary search and a route may be the
+prefix of another.  A path registered with
+.B RESOURCE_ROUTE_STEMMED
+short-circuits the walk: the handler receives everything after the stem's last
+segment and does its own parsing.  A registered node shadowing the nodes below
+it is intentional.
+.sp
+A match answers in three states, so an unknown path and an unsupported method
+are never confused:
+.BR RESOURCE_ROUTE_MATCH ,
+.B RESOURCE_ROUTE_METHOD_NOT_ALLOWED ,
+.BR RESOURCE_ROUTE_NO_MATCH .
+.sp
+.TP
+.B ResourceRouteRegistryCreate() / ResourceRouteRegistryDestroy(registry)
+Allocate and release a registry.  Destroying NULL is a no-op.
+.TP
+.B ResourceRouteRegister(registry, path, description, handler, flags)
+Register one route.  The handler descriptor and description are copied, so both
+may live on the caller's stack.  Malformed paths, an empty method mask, unknown
+bits and duplicate paths are refused without touching the registry.
+.TP
+.B ResourceRouteRegisterTable(registry, table, n)
+Register every row of a static
+.B ResourceRouteEntry
+table.  Every row is validated before any is registered, so a bad row leaves
+the registry untouched; the return value is the 1-based index of the failing
+row.
+.TP
+.B ResourceRouteMatch(registry, method, path, handler, remainder)
+Resolve one path under one method.  On
+.B RESOURCE_ROUTE_MATCH
+the callback is returned through
+.I handler
+and, for a stemmed route, the unparsed tail through
+.IR remainder .
+The tail points into the caller's path and is valid only for the call; it is
+NULL for an exact, non-stemmed match.  No allocation takes place.
+.TP
+.B ResourceRouteRegistryDescribe(registry, buffer)
+Write a JSON description of the registry into an initialised
+.BR BufferDescriptor :
+one object per level keyed by segment, with
+.BR name ,
+.BR description ,
+.B methods
+and
+.B stemmed
+per route, and a
+.B children
+object where a route has descendants.  Returns NULL rather than truncated JSON.
+.sp
+.B Example
+.nf
+ResourceRouteRegistry *routes = ResourceRouteRegistryCreate();
+ResourceRouteHandler   handler = { .on_get = onGet, .methods = RESOURCE_ROUTE_METHOD_GET };
+static const ResourceRouteEntry table[] = {
+    { "suspend",        "suspend work",    &handler, 0 },
+    { "suspend/thread1", "one thread",     &handler, 0 },
+};
+
+ResourceRouteRegisterTable(routes, table, 2);
+
+const ResourceRouteHandler *hit;
+const char                 *remainder;
+switch (ResourceRouteMatch(routes, RESOURCE_ROUTE_METHOD_GET, "suspend/thread1", &hit, &remainder)) {
+case RESOURCE_ROUTE_MATCH:              /* hit->on_get(ctx) */            break;
+case RESOURCE_ROUTE_METHOD_NOT_ALLOWED: /* 405 */                          break;
+case RESOURCE_ROUTE_NO_MATCH:           /* 404 */                          break;
+}
+.fi
+.sp
 .SS Utilities \&(utils*.h)
 String, file, crypto, time, thread, and encoding helpers:
 .BR utils_str ,
@@ -282,11 +474,136 @@ material and plaintext.  It is usable on its own by anything that needs an
 envelope rather than only by the configuration module.
 .\" ===================================================
 .SS Persistence and networking \&(db, net)
-.B db/
-is a MariaDB/MySQL abstraction;
 .B net/
-provides networking helpers.  Both resolve OpenSSL through
+provides networking helpers and resolves OpenSSL through
 .BR find_package(OpenSSL) .
+.PP
+.B db/
+is a backend-agnostic SQL abstraction.  Its dispatcher,
+.IR db_abstraction.c ,
+is compiled when either driver is, and each driver is opt-in:
+.TP
+.B UFLIB_CAPABILITY_SQL
+The MariaDB/MySQL driver,
+.IR db_mysql.c .
+.TP
+.B UFLIB_CAPABILITY_SQLITE
+The SQLite driver,
+.IR db_sqlite.c ,
+which defines
+.B _HOEL_SQLITE
+for every consumer of
+.BR db_sql.h .
+.PP
+A backend is chosen by the constructor called, not by a type argument.
+.TP
+.B h_connect_mariadb(host, user, passwd, db, port, socket) / h_connect_sqlite(path)
+Return a
+.B "struct _h_connection *"
+whose
+.B type
+is
+.B HOEL_DB_TYPE_MARIADB
+or
+.BR HOEL_DB_TYPE_SQLITE .
+Every later call dispatches on that field, so the rest of an application is
+backend-blind.
+.TP
+.B h_execute_query(conn, sql, result, options)
+The single entry point for both directions:
+.B H_OPTION_SELECT
+fills
+.IR result ,
+.B H_OPTION_EXEC
+does not.
+.TP
+.B h_query_select / h_query_insert / h_query_update / h_query_delete
+Conveniences over that call, each rejecting a string that does not contain its
+own verb.  DDL therefore goes through
+.BR h_execute_query " with " H_OPTION_EXEC .
+.TP
+.B h_query_last_insert_id(conn) / h_escape_string(conn, value)
+The last row id, and a caller-freed escaped copy of a value.
+.TP
+.B h_clean_result(&result) / h_close_db(conn) / h_clean_connection(conn)
+Release a result, close a handle, release the handle itself.  The three are
+distinct: closing does not free the descriptor.
+.PP
+A result is a row-major array of type-tagged cells:
+.B _h_result
+holds
+.B nb_rows
+and
+.BR nb_columns ,
+and each cell's
+.B _h_data.type
+is one of
+.BR HOEL_COL_TYPE_INT ,
+.BR DOUBLE ,
+.BR TEXT ,
+.BR BLOB ,
+.B DATE
+or
+.BR NULL ,
+with the payload behind
+.BR t_data .
+Integer payloads are signed 64-bit, matching the storage they come from.
+.PP
+A string may hold several statements, and every verb runs all of them.  A
+batch is atomic by default: it is wrapped in a transaction and rolled back if
+any statement fails.
+.B h_execute_query_ex
+and
+.B h_execute_query_collect_ex
+take an
+.B is_atomic
+argument, false restoring partial application.  A batch that issues its own
+.B BEGIN
+or
+.B COMMIT
+needs that false, since a transaction cannot be nested.
+.PP
+Where several statements return rows,
+.B h_execute_query_collect
+returns one
+.B _h_result
+per statement in a
+.BR CollectionDescriptor ,
+indexed by statement ordinal, and reports the failing ordinal in
+.IR failed_index .
+Statements producing no columns still occupy an entry, with
+.B nb_rows
+and
+.B nb_columns
+zero.
+.B h_clean_results
+owns the teardown.
+.PP
+Values are not to be pasted into SQL.
+.B UfDbStatementPrepare
+prepares a single statement and refuses a string holding a second, so a value
+can never extend the statement it belongs to; the bind verbs take it out of
+the SQL text altogether.
+.TP
+.B UfDbStatementBindInt / BindDouble / BindText / BindBlob / BindNull
+Bind by parameter index, counting from one.
+.TP
+.B UfDbStatementStep(statement, &has_row) / UfDbStatementColumn(statement, index)
+Step one row at a time, and read a cell of the current row as
+.BR _h_data ,
+freed with
+.BR h_clean_data_full .
+.TP
+.B UfDbStatementReset / UfDbStatementClearBindings / UfDbStatementFinalize
+Reuse a prepared statement, drop its bindings, or release it.
+.PP
+The statement surface is SQLite only.  MariaDB statements remain reachable
+through
+.BR h_statement_prepare ,
+which returns the driver's own statement type.
+.PP
+The JSON queries the abstraction once carried are not built: their
+declarations are disabled and no driver implements them.
 .\" ===================================================
 .SS Ufsrv identifier \&(ufsrvuid)
 The ufsrv-native user identifier: a timestamp, instance and sequence tuple
@@ -313,28 +630,61 @@ The reserved system-user range.
 Scheduled task execution.
 .\" ===================================================
 .SS File loader \&(file_loader, thread_worker)
-Caching a file's contents and reloading it when it changes, and a service that
-loads files concurrently across registered threads.
+Caching a file's contents and reloading it when it changes, plus a concurrent
+service that keeps a bounded registry of files mapped and watches each one for
+modification.
 .PP
 .TP
 .B FileLoaderLoadIfModified(loader, path) / FileLoaderReset(loader)
-Load on change; drop the cached copy.
+Load on change; drop the cached copy (synchronous, per-caller loader).
 .TP
 .B FileLoaderCompareHashes(a, b)
 Detect change by content digest rather than by timestamp.
+.PP
+The concurrent service is configured through
+.B FileLoaderServiceConcurrent
+(registry size, hot-loaded size, blacklist, process name) and identified by an
+opaque
+.B FileLoaderService
+handle:
 .TP
-.B FileLoaderServiceInit(svc, ...) / FileLoaderServiceDestroy(svc)
-Start and stop the concurrent loading service.
+.B FileLoaderServiceInit / FileLoaderServiceInitWithLogger / FileLoaderServiceDestroy
+Start the service and its monitor thread, or stop it.
+.B FileLoaderServiceInitWithLogger
+binds a caller-owned
+.B UfLogger
+for diagnostics.
 .TP
-.B FileLoaderServiceRegisterThread(svc, ...) / FileLoaderServiceGetThread(svc)
-Attach a worker; retrieve its handle.
+.B FileLoaderServiceAddFile / FileLoaderServiceRemoveFile
+Register a path (idempotent \(em a second add returns the existing handle) or
+drop it.  A blacklisted path is refused with handle 0.
 .TP
-.B FileLoaderServiceAddFile(svc, path) / FileLoaderServiceGetFileContent(svc, ...)
-Submit a file and read back its contents.
+.B FileLoaderServiceGetFileInfo
+Snapshot of one path's state: registered, loaded, recently accessed, size and
+state (active, deleted, blacklisted, too_large, load_error, evicted).
 .TP
-.B FileLoaderServiceGetFileInfo(svc, ...) / FileLoaderServiceCapacity(svc) / FileLoaderServiceHeartbeat(svc)
-Per-file state, and the service's own health.
-.\" ===================================================
+.B FileLoaderServiceGetFileContent / FileLoaderServiceGetFileContentByPath
+Fetch a published buffer by handle or by registered path.  The buffer remains
+valid until returned; the path form refuses blacklisted files with
+.B EACCES
+and unknown paths with
+.BR ENOENT .
+.TP
+.B FileLoaderServiceReturnFile
+Release a buffer obtained from either content getter.  At most one buffer may
+be pinned per thread at a time.
+.TP
+.B FileLoaderServiceSize / FileLoaderServiceCapacity / FileLoaderServiceHeartbeat
+Registered entry count, usable registry slots and monitor-thread liveness.
+.TP
+.BR FileLoaderServiceDescribe ( svc ", " bd )
+Emit the service state as JSON: configuration, counters and per-file state.
+.TP
+.B FileLoaderServiceStop
+Signal and reap the monitor thread without tearing the service down.
+.TP
+.B FileLoaderServiceGetThread / FileLoaderServiceRegisterThread / FileLoaderServiceUnregisterThread
+Monitor-thread handle, and per-consumer-thread attachment for buffer pinning.
 .SS Logging \&(logger) \(em \fBlogger/\fP
 Records are emitted at eight ordered severity ranks through an opaque
 .B UfLogger
@@ -399,20 +749,63 @@ business.  It is generated from the application's own files by a separate
 pipeline, compiled into the application, and injected at
 .BR UfConfigCreate .
 .sp
+.B Substitution.
+A document may name a value the running process supplies rather than holding
+it: \fB$$name\fR or \fB$${name}\fR is resolved by
+.BR UfConfigLoadOptions.subst_get ,
+which receives
+.B subst_ctx
+and returns the value or NULL, and a reference preceded by a backslash is the
+literal text.  What the value means is the caller's business \- a secrets file,
+a hostname, a path prefix, a feature flag, a test fixture \- and the module
+never inspects it.
+.sp
+The resolved text becomes the effective value while the document's own text
+stays in
+.BR UfConfigValue.raw ,
+which is what serialised forms and the digest read: two hosts running the same
+document digest the same however their callbacks answer, and a persisted
+document keeps the reference rather than one process's answer.  A callback that
+answers differently on a later load changes the effective configuration without
+changing the digest, so a reload reports no drift for it.
+.sp
+A name the callback does not know refuses the load with
+.B UF_CONFIG_ERR_SUBST_UNRESOLVED
+rather than substituting an empty string.
+.B subst_recursive
+re-runs the pass over what the callback produced, at most eight times, stopping
+at the first pass that changes nothing, which is also the cycle guard.  The
+callback runs during the build with the handle's build lock held and no
+exclusion of readers, and must not call back into the same handle.
+.B Generating a schema.
+.BR ufconfig-gen ,
+a build-time Python tool in the source tree, reads one or more schema files in
+merge order and writes five artefacts: the field identifiers and one accessor
+per field, a setter prototype per mutable field, the descriptor table and its
+count, the path lookup, and the setter bodies.  They are compiled into the
+consumer; none of them goes into the library, and the tool is neither part of
+the library's build nor installed by it.
+.sp
+One invocation yields one field table per binary, under fixed names.  A
+consumer owning two independent schemas passes
+.B \-\-prefix \fINAME\fP
+to each invocation, which namespaces the file names, include guards,
+enumeration type and lookup, and makes the table and its count static behind
+two accessors named after the prefix.
+.sp
 .nf
 UfConfigDescriptor d = {
     .fields      = g_ufconfig_fields,     \"* generated from the schema *\"
     .field_count = (size_t)g_ufconfig_field_count,
     .lookup      = UfConfigLookupPath,    \"* generated index *\"
     .uf_logger   = app_logger,            \"* optional; NULL logs nothing *\"
-    .kind        = UF_CONFIG_BACKEND_FILE,
+    .backend     = UF_CONFIG_BACKEND_FILE,
 };
 
 UfConfig *h = NULL;
 UfConfigCreate(&h, &d);
 
-UfConfigLoadOptions opt = { .size = sizeof(opt), .version = 1,
-                            .mode = UF_CONFIG_LOAD_STRICT };
+UfConfigLoadOptions opt = { .mode = UF_CONFIG_LOAD_STRICT };
 UfConfigLoadFile(h, "etc/ufsrvwebsock.config.lua", &opt, NULL);
 
 UfConfigValue v;
@@ -429,16 +822,16 @@ and
 name it, with the endpoint beside it:
 .sp
 .nf
-\&.kind   = UF_CONFIG_BACKEND_REDIS,
+\&.backend = UF_CONFIG_BACKEND_REDIS,
 \&.redis  = { .address = "10.0.0.5", .port = 6379,
-            .namespace = "alice", .config_name = "ufsrvwebsock" },
+            .ns      = "alice", .config_name = "ufsrvwebsock" },
 .fi
 .sp
 and for SQL the address carries the connection string rather than a host and
 port pair:
 .sp
 .nf
-\&.kind   = UF_CONFIG_BACKEND_SQL,
+\&.backend = UF_CONFIG_BACKEND_SQL,
 \&.sql    = { .address = "host=10.0.0.6;port=3306;user=ufsrv;password=...;database=ufsrv",
             .ns = "alice", .config_name = "ufsrvwebsock" },
 .fi
@@ -547,6 +940,80 @@ wipe the arena, so a decrypted plaintext remains in arena memory until the
 handle is destroyed.  Envelopes are produced by
 .BR UflibSecretEncrypt .
 \" ===================================================
+.SS WebSocket message framing \&(msg_framing/websocket)
+An RFC 6455 implementation in four layers, with no dependency past libc and no
+allocation: frames, messages, the closing handshake and the opening-handshake
+primitives. Nothing in the module logs; every failure is a return value.
+.PP
+.B Frames
+are encoded with
+.BR WsFrameEncode " and decoded with " WsFrameDecode .
+Direction is a parameter, not a mode: a NULL mask produces a server frame, a
+four-byte key a masked client frame, and the decoder enforces the expected
+direction through
+.B WS_FRAME_REQUIRE_MASKED
+or
+.BR WS_FRAME_REQUIRE_UNMASKED .
+The 7-bit, 16-bit and 64-bit length forms are all supported, so payloads are
+not limited to 64 KiB. A decoded frame is reported through a
+.BR WsFrameInfo :
+opcode, FIN, masking direction, RSV1, header length and payload length.
+.sp
+The decoder refuses reserved bits, unknown opcodes, control frames above 125
+bytes or fragmented control frames, and 64-bit lengths with the high bit set.
+RSV1 is reported separately as
+.BR WS_FRAME_ERR_RESERVED ,
+because it is the bit a compression extension would claim: a frame that sets it
+carries a message this endpoint cannot read.
+An oversized frame is refused before the caller is asked for more bytes, and
+the descriptor is filled on that path so the caller can size a buffer
+deliberately and answer with close code 1009.
+.sp
+.B WsFrameControlReply
+derives the reply a received control frame mandates: PONG for PING carrying the
+same application data, a CLOSE echoing the received status code for CLOSE, a
+1002 CLOSE for a malformed close payload, and nothing for PONG or data frames.
+Close payloads themselves are built and parsed by
+.BR WsClosePayloadEncode " and " WsClosePayloadDecode ,
+which validate the status-code ranges of RFC 6455 section 7.4 and require the reason to
+be valid UTF-8.
+.PP
+.B Messages
+are reassembled from fragments by a
+.BR WsMessageAssembler ,
+initialised with
+.BR WsMessageAssemblerInit " and fed with " WsMessageAssemblerConsume .
+The assembler applies the continuation rules of section 5.4: a continuation with no message open, or a new data
+frame during a fragmented message, is a protocol error, and a failure is sticky
+because the connection must be closed rather than resynchronised. The
+.B limit
+field is the maximum message size; exceeding it is
+.BR WS_MESSAGE_ERR_CAPACITY " (close 1009), while a message buffer smaller than
+the limit allows is a caller error. TEXT messages are validated as UTF-8
+incrementally, across fragment boundaries; a violation is
+.BR WS_MESSAGE_ERR_ENCODING " (close 1007)."
+.sp
+.B The closing handshake
+is explicit state in a
+.BR WsCloseHandshake :
+one CLOSE each way, no data after either side closed, and
+.B WsCloseCodeForError
+as the single mapping from a codec result to the code to send (1002, 1007,
+1009, 1011).
+.PP
+.B The opening handshake
+is covered by
+.BR WsHandshakeKey ,
+.BR WsHandshakeAcceptKey " and " WsHandshakeValidateReply :
+16 random bytes base64-encoded for the key,
+.B base64(SHA1(key + GUID))
+for the accept value, and a reply validator that checks 101, the Upgrade and
+Connection tokens, the accept value, the absence of negotiated extensions, and
+that any selected subprotocol was offered. The request itself stays with the
+host, because its headers are host policy.
+.PP
+All four layers are documented in
+.IR dev/technical_designs/UFLIB_MODULE_WEBSOCKET_DESIGN.md .
 .SS Command registry \&(ufcommand)
 A registry of named commands with alias expansion and keyboard bindings, and
 the parser that dispatches against it.  This is what a console, a dispatcher
@@ -688,6 +1155,14 @@ library.  That driver is built only under
 .BR UFLIB_CAPABILITY_HIREDIS ;
 hiredis itself is never built or folded in here, and is the consumer's to link.
 Its asynchronous and TLS transports are not carried.
+.PP
+The SQL clients follow the same rule: neither
+.B libmariadb
+nor
+.B libsqlite3
+is carried here, and neither is linked by the library.  A capability
+publishes the include directories its driver needs and leaves the client for
+the consumer to name.
 .PP
 Two further third-party originals \(em a UUID v4 generator and Amazon's
 backoff algorithm \(em are compiled into the library rather than carried here.

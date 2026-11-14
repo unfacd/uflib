@@ -1,0 +1,27 @@
+---
+product: codechecker_uflib
+repository: uflib
+
+analyzers:
+  - clangsa
+  - clang-tidy
+
+report_hash: context-free-v2
+
+build:
+  system: cmake
+  compile_db: build/compile_commands.json
+
+ctu:
+  pull_request: false
+  main: true
+  nightly: true
+
+paths:
+  skip:
+    - third_party
+    - extern
+    - build
+    - tests
+    - generated
+    - _vendor

@@ -43,6 +43,11 @@
 #define PRIV_CONFIG_DEFAULT_CDS_HASHMAP_MAX_PROBE    512
 #define PRIV_CONFIG_DEFAULT_CDS_HASHMAP_RETIRE_BATCH 64
 
+/* ── AliasMap defaults ─────────────────────────────────────────────────── */
+
+#define PRIV_CONFIG_DEFAULT_ALIASMAP_INITIAL_BUCKET_COUNT  16U
+#define PRIV_CONFIG_DEFAULT_ALIASMAP_DESCRIBE_MAX_ALIASES  256U
+
 /* ── FileLoaderConcurrentAccess defaults ──────────────────────────────────── */
 
 #define CONFIG_DEFAULT_FILELOADERCONCURRENTACCESS_POOL_CAPACITY          4096U

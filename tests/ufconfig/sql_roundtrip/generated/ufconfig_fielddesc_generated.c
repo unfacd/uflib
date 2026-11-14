@@ -81,237 +81,237 @@ const struct UfConfigFieldDesc g_ufconfig_fields[] = {
     { UF_CONFIG_FIELD_TESTHARN_KNOB_F, "testharn.knob_f", UF_FT_FLOAT, 0, 1, 1, 0LL, 1.5, 0, NULL, 0, 0, 0LL, 0LL, NULL, NULL, NULL, 0, 0, 0LL, 0LL, 0, 0LL, NULL, NULL, 0 },
 };
 const int g_ufconfig_field_count = 78;
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvServerId(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvServerId(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SERVER_ID, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvServerIdByUser(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvServerIdByUser(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SERVER_ID_BY_USER, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvServerRunMode(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvServerRunMode(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SERVER_RUN_MODE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvServerCpuAffinity(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvServerCpuAffinity(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SERVER_CPU_AFFINITY, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvIntraUfsrvClassname(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvIntraUfsrvClassname(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_INTRA_UFSRV_CLASSNAME, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvProtocolId(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvProtocolId(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_PROTOCOL_ID, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvUfsrvGeogroup(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvUfsrvGeogroup(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_UFSRV_GEOGROUP, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvMainListenerPort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvMainListenerPort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_MAIN_LISTENER_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvMainListenerAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvMainListenerAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_MAIN_LISTENER_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvMainListenerProtocolId(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvMainListenerProtocolId(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_MAIN_LISTENER_PROTOCOL_ID, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvCommandConsolePort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvCommandConsolePort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_COMMAND_CONSOLE_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvCommandConsoleAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvCommandConsoleAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_COMMAND_CONSOLE_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSessionWorkersThreadPool(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSessionWorkersThreadPool(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SESSION_WORKERS_THREAD_POOL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvUfsrvWorkersThreadPool(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvUfsrvWorkersThreadPool(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_UFSRV_WORKERS_THREAD_POOL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvListenerWorkersThreadPool(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvListenerWorkersThreadPool(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_LISTENER_WORKERS_THREAD_POOL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleCertificateFile(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleCertificateFile(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_CERTIFICATE_FILE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleKeyFile(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleKeyFile(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_KEY_FILE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleIsEnabled(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleIsEnabled(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_IS_ENABLED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleIsClientCertificateRequired(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleIsClientCertificateRequired(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_IS_CLIENT_CERTIFICATE_REQUIRED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleAllowListGod(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleAllowListGod(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_ALLOW_LIST_GOD, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleAllowListBrowser(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleAllowListBrowser(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_ALLOW_LIST_BROWSER, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleDenyList(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleDenyList(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_DENY_LIST, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleClientCertificateFile(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleClientCertificateFile(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_CLIENT_CERTIFICATE_FILE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleClientKeyFile(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleClientKeyFile(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_CLIENT_KEY_FILE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSslCommandConsoleClientIsEnabled(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSslCommandConsoleClientIsEnabled(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SSL_COMMAND_CONSOLE_CLIENT_IS_ENABLED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvStatsBackendAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvStatsBackendAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_STATS_BACKEND_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvStatsBackendPort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvStatsBackendPort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_STATS_BACKEND_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvUserTimeoutsUnauthenticatedTimeout(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvUserTimeoutsUnauthenticatedTimeout(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_USER_TIMEOUTS_UNAUTHENTICATED_TIMEOUT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvUserTimeoutsConnectedTimeout(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvUserTimeoutsConnectedTimeout(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_USER_TIMEOUTS_CONNECTED_TIMEOUT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvUserTimeoutsSuspendedTimeout(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvUserTimeoutsSuspendedTimeout(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_USER_TIMEOUTS_SUSPENDED_TIMEOUT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvUserTimeoutsLocationlessTimeout(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvUserTimeoutsLocationlessTimeout(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_USER_TIMEOUTS_LOCATIONLESS_TIMEOUT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvBufferSizesIncomingBufferSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvBufferSizesIncomingBufferSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_BUFFER_SIZES_INCOMING_BUFFER_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvBufferSizesIncomingBufferMaxsize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvBufferSizesIncomingBufferMaxsize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_BUFFER_SIZES_INCOMING_BUFFER_MAXSIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvBufferSizesOutgoingBufferSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvBufferSizesOutgoingBufferSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_BUFFER_SIZES_OUTGOING_BUFFER_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvBufferSizesHoldingBufferSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvBufferSizesHoldingBufferSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_BUFFER_SIZES_HOLDING_BUFFER_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvMemorySpecsForSessionSessionsPerAllocationGroup(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvMemorySpecsForSessionSessionsPerAllocationGroup(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_MEMORY_SPECS_FOR_SESSION_SESSIONS_PER_ALLOCATION_GROUP, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvMemorySpecsForSessionAllocationGroups(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvMemorySpecsForSessionAllocationGroups(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_MEMORY_SPECS_FOR_SESSION_ALLOCATION_GROUPS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvMemorySpecsForSessionAllocationThresholdTrigger(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvMemorySpecsForSessionAllocationThresholdTrigger(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_MEMORY_SPECS_FOR_SESSION_ALLOCATION_THRESHOLD_TRIGGER, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvFileloaderIsEnabled(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvFileloaderIsEnabled(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_FILELOADER_IS_ENABLED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvFileloaderRegistrySize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvFileloaderRegistrySize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_FILELOADER_REGISTRY_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvFileloaderRegistryHotLoadedSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvFileloaderRegistryHotLoadedSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_FILELOADER_REGISTRY_HOT_LOADED_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvFileloaderBlackListedFilesRegistry(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvFileloaderBlackListedFilesRegistry(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_FILELOADER_BLACK_LISTED_FILES_REGISTRY, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSysRuntimeRunAsUser(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSysRuntimeRunAsUser(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SYS_RUNTIME_RUN_AS_USER, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvSysRuntimeChroot(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvSysRuntimeChroot(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_SYS_RUNTIME_CHROOT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetGeoipServiceAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetGeoipServiceAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_GEOIP_SERVICE_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetGeoipServicePort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetGeoipServicePort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_GEOIP_SERVICE_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetMsgqueueIsEnabled(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetMsgqueueIsEnabled(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_MSGQUEUE_IS_ENABLED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetMsgqueueAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetMsgqueueAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_MSGQUEUE_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetMsgqueuePort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetMsgqueuePort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_MSGQUEUE_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetDbBackendPort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetDbBackendPort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_DB_BACKEND_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetDbBackendAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetDbBackendAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_DB_BACKEND_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetDbBackendUsername(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetDbBackendUsername(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_DB_BACKEND_USERNAME, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetDbBackendPassword(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetDbBackendPassword(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_DB_BACKEND_PASSWORD, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetPersistenceBackendAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetPersistenceBackendAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_PERSISTENCE_BACKEND_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetPersistenceBackendPort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetPersistenceBackendPort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_PERSISTENCE_BACKEND_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetPersistenceBackendMode(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetPersistenceBackendMode(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_PERSISTENCE_BACKEND_MODE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetPersistenceBackendTimeout(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetPersistenceBackendTimeout(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_PERSISTENCE_BACKEND_TIMEOUT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendUsrmsgAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendUsrmsgAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_USRMSG_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendUsrmsgPort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendUsrmsgPort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_USRMSG_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendUsrmsgMode(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendUsrmsgMode(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_USRMSG_MODE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendUsrmsgTimeout(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendUsrmsgTimeout(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_USRMSG_TIMEOUT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendFenceAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendFenceAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_FENCE_ADDRESS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendFencePort(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendFencePort(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_FENCE_PORT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendFenceMode(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendFenceMode(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_FENCE_MODE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfnetCacheBackendFenceTimeout(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfnetCacheBackendFenceTimeout(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFNET_CACHE_BACKEND_FENCE_TIMEOUT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvwebsockUfsrvwebsockVar1(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvwebsockUfsrvwebsockVar1(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRVWEBSOCK_UFSRVWEBSOCK_VAR1, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvwebsockMaxFrameSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvwebsockMaxFrameSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRVWEBSOCK_MAX_FRAME_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvwebsockMaxMessageSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvwebsockMaxMessageSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRVWEBSOCK_MAX_MESSAGE_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvwebsockHeartbeatIntervalSecs(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvwebsockHeartbeatIntervalSecs(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRVWEBSOCK_HEARTBEAT_INTERVAL_SECS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvwebsockCloseTimeoutSecs(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvwebsockCloseTimeoutSecs(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRVWEBSOCK_CLOSE_TIMEOUT_SECS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfsrvwebsockMaxConnectionsPerSession(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfsrvwebsockMaxConnectionsPerSession(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRVWEBSOCK_MAX_CONNECTIONS_PER_SESSION, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfprobeCidr(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfprobeCidr(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFPROBE_CIDR, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfprobeTag(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfprobeTag(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFPROBE_TAG, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetUfprobeItems(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigUfprobeItems(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFPROBE_ITEMS, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetTestharnKnobA(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigTestharnKnobA(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_TESTHARN_KNOB_A, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetTestharnKnobB(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigTestharnKnobB(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_TESTHARN_KNOB_B, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetTestharnKnobC(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigTestharnKnobC(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_TESTHARN_KNOB_C, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetTestharnKnobF(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigTestharnKnobF(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_TESTHARN_KNOB_F, out);
 }

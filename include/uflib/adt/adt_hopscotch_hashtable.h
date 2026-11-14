@@ -67,6 +67,78 @@ typedef void(*CallbackFinaliser)(ClientContextData *);
 PUBLIC_API struct HopscotchHashtable *hopscotch_init_with_offset(HopscotchHashtable *ht, size_t pfactor);
 PUBLIC_API void hopscotch_release(HopscotchHashtable *);
 PUBLIC_API void *hopscotch_lookup_with_offset(HopscotchHashtable *ht, ItemExtractor extractor_ptr, uint8_t *key, size_t key_offset);
+/*
+ *  A HopscotchHashtableConfigurable does not decide how its keys are formed; the
+ *  consumer does, through three fields it must set before the first insert:
+ *
+ *      htc->keylen       key length IN BYTES, or 0 for pointer identity
+ *      htc->key_offset   where inside the item the key bytes start (content mode)
+ *      htc->hash_func    hashes exactly the bytes this store hands it
+ *
+ *  ----------------------------------------------------------------------------
+ *  keylen > 0   CONTENT KEY   — the key is the bytes that live inside the item
+ *  ----------------------------------------------------------------------------
+ *      key material : keylen bytes starting at (uint8_t *)item + key_offset
+ *      hash         : hash_func(item + key_offset, keylen)
+ *      equality     : memcmp(key, stored, keylen) == 0
+ *
+ *      Requirement: those keylen bytes must be IMMUTABLE for as long as the item
+ *      resides in the table.
+ *
+ *      This is the correct mode for records whose leading field is a stable
+ *      identifier (an id, a hash, a fixed name) and the wrong mode for objects
+ *      whose leading fields are mutable state.  If the "key" you have in mind
+ *      is the object's identity, use identity mode.
+ *
+ *  ----------------------------------------------------------------------------
+ *  keylen == 0  IDENTITY KEY  — the item pointer IS the key
+ *  ----------------------------------------------------------------------------
+ *      key material : the bytes of the item pointer itself (sizeof(void *))
+ *      hash         : hash_func(&item, sizeof(item))
+ *      equality     : key == stored   (pointer comparison)
+ *
+ *      Use this for object sets ("which objects does this thread hold", "which
+ *      entities are registered") where membership is a property of the object's
+ *      identity, not of its contents.  Nothing inside the object is read, so no
+ *      amount of mutation can invalidate the key.  key_offset is ignored.
+ *
+ *  ----------------------------------------------------------------------------
+ *  Choosing hash_func
+ *  ----------------------------------------------------------------------------
+ *      The store calls  hash_func(bytes, length)  in BOTH modes, and a correct
+ *      hash must consume exactly `length` bytes:
+ *
+ *        content mode  hash_bytes_u64(item + key_offset, keylen)   — any length
+ *        identity mode hash_bytes_u64(&item, sizeof(item))         — 8 bytes
+ *
+ *      hash_bytes_u64() (FNV-1a over all bytes, avalanche-finished) is the right
+ *      choice in both modes.
+ *
+ *      WARNING: do not install a scalar hash that ignores its length argument,
+ *      such as inthash_u64(uint64_t key, size_t key_len).  Its signature makes
+ *      the first parameter a value, while this store passes a POINTER TO the
+ *      bytes; through this function-pointer type it would hash the address of
+ *      the caller's local variable, giving a different key on every call.
+ *
+ *  ----------------------------------------------------------------------------
+ *  Worked examples
+ *  ----------------------------------------------------------------------------
+ *      Content key on a stable identifier at the head of the record:
+ *
+ *          htc->keylen     = sizeof(((MyRecord *)0)->id);
+ *          htc->key_offset = offsetof(MyRecord, id);
+ *          htc->hash_func  = hash_bytes_u64;
+ *
+ *      Identity key on the object pointer:
+ *
+ *          htc->keylen     = 0;
+ *          htc->key_offset = 0;               // ignored
+ *          htc->hash_func  = hash_bytes_u64;  // hashes the pointer's bytes
+ *
+ *  The offset-based API above (hopscotch_*_with_offset) is a different contract:
+ *  it hashes with a fixed internal hash over an externally supplied key, and it
+ *  is not affected by keylen.  The two APIs must not be mixed on one table.
+ */
 PUBLIC_API void *hopscotch_lookup_configurable(HopscotchHashtableConfigurable *htc, uint8_t *key);
 PUBLIC_API int hopscotch_insert_with_offset(HopscotchHashtable *ht, ItemExtractor extractor_ptr, void *data, size_t key_offset);
 PUBLIC_API int hopscotch_insert_configurable(HopscotchHashtableConfigurable *htc, uint8_t *data);

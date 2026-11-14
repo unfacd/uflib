@@ -68,8 +68,8 @@ static void *reader_thread(void *arg) {
          */
         UfConfigPin(g_cfg);
         memset(&value, 0, sizeof(value));
-        UfConfigStatus st = UfConfigGetField(g_cfg, "ufsrv.main_listener_address", &value);
-        if (st == UF_CONFIG_OK && value.kind == UF_CONFIG_KIND_STRING &&
+        UfConfigOpStatus st = UfConfigGetField(g_cfg, "ufsrv.main_listener_address", &value);
+        if (st == UF_CONFIG_OK && value.value_type == UF_CONFIG_VALUE_TYPE_STRING &&
             value.as.str.ptr != NULL) {
             /* Touch every byte.  A pointer into memory that was freed under us
                faults here, or is caught by ASan; merely reading the length
@@ -137,7 +137,7 @@ static void *reloader_thread(void *arg) {
     while (!atomic_load(&g_stop)) {
         UfConfigReloadReport report;
         memset(&report, 0, sizeof(report));
-        UfConfigStatus st = UfConfigReload(g_cfg, &report);
+        UfConfigOpStatus st = UfConfigReload(g_cfg, &report);
         if (st != UF_CONFIG_OK && st != UF_CONFIG_NO_CHANGE) {
             atomic_fetch_add(&g_reload_errors, 1);
         }
@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
     descriptor.fields      = g_ufconfig_fields;
     descriptor.field_count = (size_t)g_ufconfig_field_count;
     descriptor.lookup      = UfConfigLookupPath;
-    descriptor.kind        = UF_CONFIG_BACKEND_FILE;
+    descriptor.backend        = UF_CONFIG_BACKEND_FILE;
 
     if (UfConfigCreate(&g_cfg, &descriptor) != UF_CONFIG_OK) {
         fprintf(stderr, "UfConfigCreate failed — the descriptor is incomplete\n");
@@ -189,8 +189,6 @@ int main(int argc, char **argv) {
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_LENIENT;
 
     if (UfConfigLoadFile(g_cfg, g_source, &opt, NULL) != UF_CONFIG_OK) {

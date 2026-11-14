@@ -18,48 +18,48 @@ const struct UfConfigFieldDesc g_ufconfig_fields[] = {
     { UF_CONFIG_FIELD_N_FROZEN, "n.frozen", UF_FT_INT, 0, 0, 1, 1LL, 0.0, 0, NULL, 0, 0, 0LL, 0LL, NULL, NULL, NULL, 0, 0, 0LL, 0LL, 0, 0LL, NULL, NULL, 0 },
 };
 const int g_ufconfig_field_count = 15;
-PUBLIC_API UfConfigStatus UfConfigGetNMust(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNMust(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_MUST, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNTypedInt(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNTypedInt(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_TYPED_INT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNTypedBool(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNTypedBool(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_TYPED_BOOL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNRanged(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNRanged(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_RANGED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNSized(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNSized(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_SIZED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNEnum(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNEnum(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_ENUM, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNPattern(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNPattern(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_PATTERN, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNIp4(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNIp4(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_IP4, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNIp6(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNIp6(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_IP6, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNFqdn(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNFqdn(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_FQDN, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNDate(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNDate(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_DATE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNCidr(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNCidr(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_CIDR, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNList(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNList(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_LIST, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNFrozen(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNFrozen(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_N_FROZEN, out);
 }

@@ -149,20 +149,20 @@ static int sCanonNode(const UfNode *n, Buf *b)
   if (!n) return sBputs(b, "{}");
   if (n->kind == UF_NODE_ARRAY) return sCanonArray(n, b);
   if (n->kind == UF_NODE_ALIAS || n->kind == UF_NODE_SCOPE) return sCanonScope(n, b);
-  switch (n->vkind) {
-  case UF_CONFIG_KIND_INT: {
+  switch (n->value_type) {
+  case UF_CONFIG_VALUE_TYPE_INT: {
     char t[64];
     snprintf(t, sizeof(t), "%lld", (long long)n->v.i.raw);
     return sBputs(b, t);
   }
-  case UF_CONFIG_KIND_FLOAT: {
+  case UF_CONFIG_VALUE_TYPE_FLOAT: {
     char t[64];
     snprintf(t, sizeof(t), "%.17g", n->v.f.raw);
     if (!strchr(t, '.') && !strchr(t, 'e') && !strchr(t, 'E')) strcat(t, ".0");
     return sBputs(b, t);
   }
-  case UF_CONFIG_KIND_BOOL: return sBputs(b, n->v.b.raw ? "true" : "false");
-  case UF_CONFIG_KIND_STRING: return sEmitStr(b, n->v.s.raw ? n->v.s.raw : "", n->v.s.raw_len);
+  case UF_CONFIG_VALUE_TYPE_BOOL: return sBputs(b, n->v.b.raw ? "true" : "false");
+  case UF_CONFIG_VALUE_TYPE_STRING: return sEmitStr(b, n->v.s.raw ? n->v.s.raw : "", n->v.s.raw_len);
   default: return sBputs(b, "null");
   }
 }
@@ -176,14 +176,14 @@ static void sDigestTree(UfNode *n)
   for (UfNode *c = n->first_child; c; c = c->next_sibling) sDigestTree(c);
 }
 
-UfConfigStatus ConfigCanonAndDigest(UfNode *n, unsigned char out[32])
+UfConfigOpStatus ConfigCanonAndDigest(UfNode *n, unsigned char out[32])
 {
   Buf b = {0};
   if (sCanonNode(n, &b)) {
     free(b.b);
     return UF_CONFIG_ERR_NO_MEMORY;
   }
-  UfConfigStatus st = ConfigSha256(b.b, b.n, out);
+  UfConfigOpStatus st = ConfigSha256(b.b, b.n, out);
   if (st == UF_CONFIG_OK && n) {
     memcpy(n->digest, out, 32);
     for (UfNode *c = n->first_child; c; c = c->next_sibling) sDigestTree(c);
@@ -192,7 +192,7 @@ UfConfigStatus ConfigCanonAndDigest(UfNode *n, unsigned char out[32])
   return st;
 }
 
-static UfConfigStatus sFillOrNeed(char *buf, size_t cap, size_t *needed, const char *s, size_t n)
+static UfConfigOpStatus sFillOrNeed(char *buf, size_t cap, size_t *needed, const char *s, size_t n)
 {
   *needed = n + 1;
   if (!buf || cap == 0) return UF_CONFIG_OK;
@@ -204,7 +204,7 @@ static UfConfigStatus sFillOrNeed(char *buf, size_t cap, size_t *needed, const c
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigEmitJson(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty, bool expand)
+UfConfigOpStatus ConfigEmitJson(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty, bool expand)
 {
   (void)pretty;
   (void)expand;
@@ -213,7 +213,7 @@ UfConfigStatus ConfigEmitJson(const UfNode *n, char *buf, size_t cap, size_t *ne
     free(b.b);
     return UF_CONFIG_ERR_NO_MEMORY;
   }
-  UfConfigStatus st = sFillOrNeed(buf, cap, needed, b.b, b.n);
+  UfConfigOpStatus st = sFillOrNeed(buf, cap, needed, b.b, b.n);
   free(b.b);
   return st;
 }
@@ -232,21 +232,21 @@ static int sYamlNeedQuote(const char *s)
 static void sYamlScalar(const UfNode *n, Buf *b)
 {
   char t[64];
-  switch (n->vkind) {
-  case UF_CONFIG_KIND_INT:
+  switch (n->value_type) {
+  case UF_CONFIG_VALUE_TYPE_INT:
     snprintf(t, sizeof(t), "%lld", (long long)n->v.i.raw);
     sBputs(b, t);
     break;
-  case UF_CONFIG_KIND_FLOAT:
+  case UF_CONFIG_VALUE_TYPE_FLOAT:
     /* Was reaching the null fallback: a float has no integer form and no
        quotes, so nothing claimed it and every float serialised as null. */
     snprintf(t, sizeof(t), "%.17g", n->v.f.raw);
     sBputs(b, t);
     break;
-  case UF_CONFIG_KIND_BOOL:
+  case UF_CONFIG_VALUE_TYPE_BOOL:
     sBputs(b, n->v.b.raw ? "true" : "false");
     break;
-  case UF_CONFIG_KIND_STRING: {
+  case UF_CONFIG_VALUE_TYPE_STRING: {
     const char *v = n->v.s.raw ? n->v.s.raw : "";
     if (sYamlNeedQuote(v) || strchr(v, ' ')) sEmitStr(b, v, n->v.s.raw_len);
     else sBputs(b, v);
@@ -290,12 +290,12 @@ static int sYamlScope(const UfNode *n, Buf *b, int indent)
   return 0;
 }
 
-UfConfigStatus ConfigEmitYaml(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty)
+UfConfigOpStatus ConfigEmitYaml(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty)
 {
   (void)pretty;
   Buf b = {0};
   sYamlScope(n, &b, 0);
-  UfConfigStatus st = sFillOrNeed(buf, cap, needed, b.b ? b.b : "", b.n);
+  UfConfigOpStatus st = sFillOrNeed(buf, cap, needed, b.b ? b.b : "", b.n);
   free(b.b);
   return st;
 }
@@ -306,14 +306,14 @@ static int sIniWalk(const UfNode *n, const char *pfx, Buf *b)
   if (n->kind == UF_NODE_LEAF) {
     sBputs(b, pfx);
     sBputs(b, " = ");
-    if (n->vkind == UF_CONFIG_KIND_STRING) sEmitStr(b, n->v.s.raw ? n->v.s.raw : "", n->v.s.raw_len);
-    else if (n->vkind == UF_CONFIG_KIND_INT) {
+    if (n->value_type == UF_CONFIG_VALUE_TYPE_STRING) sEmitStr(b, n->v.s.raw ? n->v.s.raw : "", n->v.s.raw_len);
+    else if (n->value_type == UF_CONFIG_VALUE_TYPE_INT) {
       char t[64];
       snprintf(t, sizeof(t), "%lld", (long long)n->v.i.raw);
       sBputs(b, t);
     }
-    else if (n->vkind == UF_CONFIG_KIND_BOOL) sBputs(b, n->v.b.raw ? "true" : "false");
-    else if (n->vkind == UF_CONFIG_KIND_FLOAT) {
+    else if (n->value_type == UF_CONFIG_VALUE_TYPE_BOOL) sBputs(b, n->v.b.raw ? "true" : "false");
+    else if (n->value_type == UF_CONFIG_VALUE_TYPE_FLOAT) {
       /* Was emitting nothing after the ' = ', so the line read as an empty
          string value rather than as absent. */
       char t[64];
@@ -333,11 +333,11 @@ static int sIniWalk(const UfNode *n, const char *pfx, Buf *b)
   return 0;
 }
 
-UfConfigStatus ConfigEmitIni(const UfNode *n, char *buf, size_t cap, size_t *needed)
+UfConfigOpStatus ConfigEmitIni(const UfNode *n, char *buf, size_t cap, size_t *needed)
 {
   Buf b = {0};
   sIniWalk(n, "", &b);
-  UfConfigStatus st = sFillOrNeed(buf, cap, needed, b.b ? b.b : "", b.n);
+  UfConfigOpStatus st = sFillOrNeed(buf, cap, needed, b.b ? b.b : "", b.n);
   free(b.b);
   return st;
 }
@@ -385,26 +385,26 @@ static int sLuaVal(const UfNode *n, Buf *b, int indent)
     }
     return sBputc(b, '}');
   }
-  switch (n->vkind) {
-  case UF_CONFIG_KIND_INT: {
+  switch (n->value_type) {
+  case UF_CONFIG_VALUE_TYPE_INT: {
     char t[64];
     snprintf(t, sizeof(t), "%lld", (long long)n->v.i.raw);
     return sBputs(b, t);
   }
-  case UF_CONFIG_KIND_FLOAT: {
+  case UF_CONFIG_VALUE_TYPE_FLOAT: {
     /* Was reaching the nil default, so every float round-tripped as absent. */
     char t[64];
     snprintf(t, sizeof(t), "%.17g", n->v.f.raw);
     if (!strchr(t, '.') && !strchr(t, 'e') && !strchr(t, 'E')) strcat(t, ".0");
     return sBputs(b, t);
   }
-  case UF_CONFIG_KIND_BOOL: return sBputs(b, n->v.b.raw ? "true" : "false");
-  case UF_CONFIG_KIND_STRING: return sEmitStr(b, n->v.s.raw ? n->v.s.raw : "", n->v.s.raw_len);
+  case UF_CONFIG_VALUE_TYPE_BOOL: return sBputs(b, n->v.b.raw ? "true" : "false");
+  case UF_CONFIG_VALUE_TYPE_STRING: return sEmitStr(b, n->v.s.raw ? n->v.s.raw : "", n->v.s.raw_len);
   default: return sBputs(b, "nil");
   }
 }
 
-UfConfigStatus ConfigEmitLua(const UfNode *n, char *buf, size_t cap, size_t *needed)
+UfConfigOpStatus ConfigEmitLua(const UfNode *n, char *buf, size_t cap, size_t *needed)
 {
   Buf     b    = {0};
   UfNode *hold = NULL;
@@ -424,7 +424,7 @@ UfConfigStatus ConfigEmitLua(const UfNode *n, char *buf, size_t cap, size_t *nee
     sLuaScope(n, &b, 0);
     sBputc(&b, '\n');
   }
-  UfConfigStatus st = sFillOrNeed(buf, cap, needed, b.b ? b.b : "", b.n);
+  UfConfigOpStatus st = sFillOrNeed(buf, cap, needed, b.b ? b.b : "", b.n);
   free(b.b);
   return st;
 }
@@ -441,28 +441,28 @@ UfConfigStatus ConfigEmitLua(const UfNode *n, char *buf, size_t cap, size_t *nee
  * with no lock at all, a reload could release the arena underneath the walk,
  * which is a use-after-free on a path the header advertises as thread-safe.
  */
-static UfConfigStatus sToJson(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+static UfConfigOpStatus sToJson(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h->root) return UF_CONFIG_ERR_NOFIELD;
   return ConfigEmitJson(h->root, buf, cap, needed, false, true);
 }
 
-PUBLIC_API UfConfigStatus UfConfigToJson(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+PUBLIC_API UfConfigOpStatus UfConfigToJson(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h || !needed) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
-  UfConfigStatus st = sToJson(h, buf, cap, needed);
+  UfConfigOpStatus st = sToJson(h, buf, cap, needed);
   pthread_rwlock_unlock((pthread_rwlock_t*)&h->lock);
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigToJsonAlloc(const UfConfig *h, char **out)
+PUBLIC_API UfConfigOpStatus UfConfigToJsonAlloc(const UfConfig *h, char **out)
 {
   if (!h || !out) return UF_CONFIG_ERR_INVALID_ARG;
   *out = NULL;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
   size_t         n  = 0;
-  UfConfigStatus st = sToJson(h, NULL, 0, &n);
+  UfConfigOpStatus st = sToJson(h, NULL, 0, &n);
   char *         p  = NULL;
   if (st == UF_CONFIG_OK) {
     p = (char*)malloc(n ? n : 1);
@@ -491,28 +491,28 @@ PUBLIC_API UfConfigStatus UfConfigToJsonAlloc(const UfConfig *h, char **out)
  * with no lock at all, a reload could release the arena underneath the walk,
  * which is a use-after-free on a path the header advertises as thread-safe.
  */
-static UfConfigStatus sToYaml(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+static UfConfigOpStatus sToYaml(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h->root) return UF_CONFIG_ERR_NOFIELD;
   return ConfigEmitYaml(h->root, buf, cap, needed, true);
 }
 
-PUBLIC_API UfConfigStatus UfConfigToYaml(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+PUBLIC_API UfConfigOpStatus UfConfigToYaml(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h || !needed) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
-  UfConfigStatus st = sToYaml(h, buf, cap, needed);
+  UfConfigOpStatus st = sToYaml(h, buf, cap, needed);
   pthread_rwlock_unlock((pthread_rwlock_t*)&h->lock);
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigToYamlAlloc(const UfConfig *h, char **out)
+PUBLIC_API UfConfigOpStatus UfConfigToYamlAlloc(const UfConfig *h, char **out)
 {
   if (!h || !out) return UF_CONFIG_ERR_INVALID_ARG;
   *out = NULL;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
   size_t         n  = 0;
-  UfConfigStatus st = sToYaml(h, NULL, 0, &n);
+  UfConfigOpStatus st = sToYaml(h, NULL, 0, &n);
   char *         p  = NULL;
   if (st == UF_CONFIG_OK) {
     p = (char*)malloc(n ? n : 1);
@@ -541,28 +541,28 @@ PUBLIC_API UfConfigStatus UfConfigToYamlAlloc(const UfConfig *h, char **out)
  * with no lock at all, a reload could release the arena underneath the walk,
  * which is a use-after-free on a path the header advertises as thread-safe.
  */
-static UfConfigStatus sToIni(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+static UfConfigOpStatus sToIni(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h->root) return UF_CONFIG_ERR_NOFIELD;
   return ConfigEmitIni(h->root, buf, cap, needed);
 }
 
-PUBLIC_API UfConfigStatus UfConfigToIni(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+PUBLIC_API UfConfigOpStatus UfConfigToIni(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h || !needed) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
-  UfConfigStatus st = sToIni(h, buf, cap, needed);
+  UfConfigOpStatus st = sToIni(h, buf, cap, needed);
   pthread_rwlock_unlock((pthread_rwlock_t*)&h->lock);
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigToIniAlloc(const UfConfig *h, char **out)
+PUBLIC_API UfConfigOpStatus UfConfigToIniAlloc(const UfConfig *h, char **out)
 {
   if (!h || !out) return UF_CONFIG_ERR_INVALID_ARG;
   *out = NULL;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
   size_t         n  = 0;
-  UfConfigStatus st = sToIni(h, NULL, 0, &n);
+  UfConfigOpStatus st = sToIni(h, NULL, 0, &n);
   char *         p  = NULL;
   if (st == UF_CONFIG_OK) {
     p = (char*)malloc(n ? n : 1);
@@ -591,28 +591,28 @@ PUBLIC_API UfConfigStatus UfConfigToIniAlloc(const UfConfig *h, char **out)
  * with no lock at all, a reload could release the arena underneath the walk,
  * which is a use-after-free on a path the header advertises as thread-safe.
  */
-static UfConfigStatus sToLuaStyle(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+static UfConfigOpStatus sToLuaStyle(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h->root) return UF_CONFIG_ERR_NOFIELD;
   return ConfigEmitLua(h->root, buf, cap, needed);
 }
 
-PUBLIC_API UfConfigStatus UfConfigToLuaStyle(const UfConfig *h, char *buf, size_t cap, size_t *needed)
+PUBLIC_API UfConfigOpStatus UfConfigToLuaStyle(const UfConfig *h, char *buf, size_t cap, size_t *needed)
 {
   if (!h || !needed) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
-  UfConfigStatus st = sToLuaStyle(h, buf, cap, needed);
+  UfConfigOpStatus st = sToLuaStyle(h, buf, cap, needed);
   pthread_rwlock_unlock((pthread_rwlock_t*)&h->lock);
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigToLuaStyleAlloc(const UfConfig *h, char **out)
+PUBLIC_API UfConfigOpStatus UfConfigToLuaStyleAlloc(const UfConfig *h, char **out)
 {
   if (!h || !out) return UF_CONFIG_ERR_INVALID_ARG;
   *out = NULL;
   pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
   size_t         n  = 0;
-  UfConfigStatus st = sToLuaStyle(h, NULL, 0, &n);
+  UfConfigOpStatus st = sToLuaStyle(h, NULL, 0, &n);
   char *         p  = NULL;
   if (st == UF_CONFIG_OK) {
     p = (char*)malloc(n ? n : 1);

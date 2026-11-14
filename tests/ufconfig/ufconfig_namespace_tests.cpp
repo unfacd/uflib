@@ -30,16 +30,12 @@ std::string SamplePath(const char *leaf) {
 
 UfConfigLoadOptions Lenient() {
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_LENIENT;
     return opt;
 }
 
 UfConfigLoadOptions Strict() {
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_STRICT;
     return opt;
 }

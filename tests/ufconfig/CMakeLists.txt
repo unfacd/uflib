@@ -251,7 +251,7 @@ target_link_libraries(ufconfig_bench PRIVATE pthread m)
 # above just took — see the note there.  After add_executable, because a target
 # has to exist before it can be given anything.
 if(UFLIB_CAPABILITY_SQL)
-    target_include_directories(ufconfig_bench PRIVATE /opt/include)
+    target_include_directories(ufconfig_bench PRIVATE ${MariaDB_INCLUDE_DIRS})
     target_link_libraries(ufconfig_bench PRIVATE ${MariaDB_LIBRARIES})
 endif()
 if(UFLIB_CAPABILITY_HIREDIS)

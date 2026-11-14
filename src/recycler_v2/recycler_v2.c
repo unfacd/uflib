@@ -34,6 +34,7 @@
 #include <uflib/recycler_v2/recycler_v2.h>
 #include <uflib/cdt/cdt_treiber_stack.h>
 #include <uflib/buffer_descriptor/buffer_descriptor.h>
+#include <uflib/utils_json.h>
 #include <uflib/standard_c_includes.h>
 
 #include <stdio.h>
@@ -321,6 +322,7 @@ RecyclerV2InitTypePool(const RecyclerV2PoolConfig *config_ptr)
      * operates normally but marshalling is unavailable. */
     RecyclerV2StorageInit(pool_ptr, pool_ptr->storage_init_policy);
 
+    // codechecker_false_positive [bugprone-sizeof-expression] allocation_groups is a directory of pointers; the element size is the pointer size
     pool_ptr->allocation_groups = calloc(pool_ptr->group_allocation_sz, sizeof(*pool_ptr->allocation_groups));
     pool_ptr->pool_memory2 = calloc(pool_ptr->group_allocation_sz, sizeof(*pool_ptr->pool_memory2));
     if (!pool_ptr->allocation_groups || !pool_ptr->pool_memory2) {
@@ -1680,30 +1682,6 @@ RecyclerV2DumpStateToBuffer(void)
 
 /* ── Describe (JSON, no json-c) ──────────────────────────────────────────── */
 
-/*
- * Append @p str to the BufferDescriptor as a JSON string literal, escaping
- * the characters that would otherwise break the document.
- */
-static void
-sDescribeJsonString(BufferDescriptor *bd, const char *str)
-{
-    if (!str) {
-        BufferDescriptorAppendFormatted(bd, "null");
-        return;
-    }
-    BufferDescriptorAppendFormatted(bd, "\"");
-    for (const char *p = str; *p; p++) {
-        switch (*p) {
-        case '"':  BufferDescriptorAppendFormatted(bd, "\\\""); break;
-        case '\\': BufferDescriptorAppendFormatted(bd, "\\\\"); break;
-        case '\n': BufferDescriptorAppendFormatted(bd, "\\n");  break;
-        case '\t': BufferDescriptorAppendFormatted(bd, "\\t");  break;
-        default:   BufferDescriptorAppendFormatted(bd, "%c", *p); break;
-        }
-    }
-    BufferDescriptorAppendFormatted(bd, "\"");
-}
-
 static const char *
 sDescribeStoragePolicyLabel(RecyclerV2StorageInitPolicy policy)
 {
@@ -1752,7 +1730,7 @@ sDescribePool(BufferDescriptor *bd, RecyclerV2PoolDefinition *pool_ptr)
     BufferDescriptorAppendFormatted(bd,
         "\n    {\"type_index\":%u,\"type_name\":",
         pool_ptr->pool_handle.type);
-    sDescribeJsonString(bd, pool_ptr->pool_handle.type_name);
+    JsonEscapeString(bd, pool_ptr->pool_handle.type_name);
     BufferDescriptorAppendFormatted(bd, ",\"blocksz\":%zu", pool_ptr->pool_handle.blocksz);
     BufferDescriptorAppendFormatted(bd, ",\"group_allocation_sz\":%u", pool_ptr->group_allocation_sz);
     BufferDescriptorAppendFormatted(bd, ",\"allocated_groups\":%u", groups);
@@ -1760,18 +1738,18 @@ sDescribePool(BufferDescriptor *bd, RecyclerV2PoolDefinition *pool_ptr)
     BufferDescriptorAppendFormatted(bd, ",\"marshal_watermark\":%.2f", (double)pool_ptr->marshal_watermark);
     BufferDescriptorAppendFormatted(bd, ",\"marshal_blob_max_sz\":%zu", pool_ptr->marshal_blob_max_sz);
     BufferDescriptorAppendFormatted(bd, ",\"storage_root\":");
-    sDescribeJsonString(bd, pool_ptr->storage_root_ptr);
+    JsonEscapeString(bd, pool_ptr->storage_root_ptr);
     BufferDescriptorAppendFormatted(bd, ",\"ufsrv_class\":");
-    sDescribeJsonString(bd, pool_ptr->ufsrv_class_ptr);
+    JsonEscapeString(bd, pool_ptr->ufsrv_class_ptr);
     BufferDescriptorAppendFormatted(bd, ",\"instance_id\":");
-    sDescribeJsonString(bd, pool_ptr->instance_id_ptr);
+    JsonEscapeString(bd, pool_ptr->instance_id_ptr);
     /* Whether this pool was configured to report.  Emitted beside the other
        caller-supplied deployment context, because "no diagnostics appeared" and
        "no logger was configured" call for different fixes. */
     BufferDescriptorAppendFormatted(bd, ",\"logger\":\"%s\"",
         pool_ptr->uf_logger != NULL ? "enabled" : "none");
     BufferDescriptorAppendFormatted(bd, ",\"storage_path\":");
-    sDescribeJsonString(bd, pool_ptr->storage_path);
+    JsonEscapeString(bd, pool_ptr->storage_path);
     BufferDescriptorAppendFormatted(bd, ",\"storage_init_policy\":\"%s\"",
         sDescribeStoragePolicyLabel(pool_ptr->storage_init_policy));
     BufferDescriptorAppendFormatted(bd, ",\"next_marshaller_id\":%" PRIu64,

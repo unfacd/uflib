@@ -36,102 +36,102 @@ const struct UfConfigFieldDesc g_ufconfig_fields[] = {
     { UF_CONFIG_FIELD_NEST_SHARED_SUSPENDED, "nest.shared.suspended", UF_FT_INT, 0, 0, 1, 0LL, 0.0, 0, NULL, 0, 0, 0LL, 0LL, NULL, NULL, NULL, 0, 0, 0LL, 0LL, 0, 0LL, NULL, NULL, 0 },
 };
 const int g_ufconfig_field_count = 33;
-PUBLIC_API UfConfigStatus UfConfigGetReqMust(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigReqMust(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_REQ_MUST, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetReqTypedInt(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigReqTypedInt(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_REQ_TYPED_INT, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetReqTypedBool(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigReqTypedBool(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_REQ_TYPED_BOOL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetReqTypedStr(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigReqTypedStr(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_REQ_TYPED_STR, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfHex(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfHex(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_HEX, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfB64(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfB64(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_B64, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfB64url(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfB64url(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_B64URL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfB32(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfB32(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_B32, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfUpper(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfUpper(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_UPPER, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfLower(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfLower(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_LOWER, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfSub(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfSub(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_SUB, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfComp(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfComp(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_COMP, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfRx(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfRx(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_RX, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetXfBoth(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigXfBoth(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_XF_BOTH, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVIp4(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVIp4(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_IP4, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVIp6(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVIp6(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_IP6, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVEmail(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVEmail(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_EMAIL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVUrl(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVUrl(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_URL, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVFqdn(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVFqdn(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_FQDN, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVDate(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVDate(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_DATE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVSize(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVSize(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_SIZE, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVCidr(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVCidr(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_CIDR, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVNetmask(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVNetmask(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_NETMASK, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVEnum(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVEnum(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_ENUM, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVPattern(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVPattern(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_PATTERN, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVRanged(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVRanged(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_RANGED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVSized(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVSized(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_SIZED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetVList(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigVList(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_V_LIST, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetSharedTimeoutsConnected(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSharedTimeoutsConnected(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_SHARED_TIMEOUTS_CONNECTED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetSharedTimeoutsSuspended(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSharedTimeoutsSuspended(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_SHARED_TIMEOUTS_SUSPENDED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNestDeepLeaf(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNestDeepLeaf(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_NEST_DEEP_LEAF, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNestSharedConnected(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNestSharedConnected(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_NEST_SHARED_CONNECTED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetNestSharedSuspended(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigNestSharedSuspended(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_NEST_SHARED_SUSPENDED, out);
 }

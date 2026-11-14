@@ -56,6 +56,15 @@ PUBLIC_API int RecyclerDestroyInstance(InstanceHolder *instance_holder_ptr);
 PUBLIC_API ClientContextData *RecyclerGetClientContextData(InstanceHolder *);
 #define GetClientContextData RecyclerGetClientContextData
 
+/**
+ * @brief Same extraction, for containers that hold their items behind a generic ItemContainer.
+ *
+ * The ADTs declare their extractor with an ItemContainer * parameter, so a table that stores
+ * recycler-managed objects needs an extractor whose declared type is the container's contract
+ * rather than InstanceHolder *.  This is that boundary; the conversion happens here once.
+ */
+PUBLIC_API ClientContextData *RecyclerGetClientContextDataFromItemContainer(ItemContainer *);
+
 PUBLIC_API InstanceHolder *InstanceHolderFromClientContext(ContextData *ctx_ptr);
 
 PUBLIC_API void RecyclerTypeReferenced(unsigned type, InstanceHolder *client_data, int);

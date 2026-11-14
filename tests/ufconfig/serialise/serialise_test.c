@@ -117,18 +117,16 @@ int main(int argc, char **argv) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_FILE;
+    d.backend        = UF_CONFIG_BACKEND_FILE;
 
     UfConfig *h = NULL;
     if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) return 2;
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size    = sizeof(opt);
-    opt.version = 1;
     opt.mode    = UF_CONFIG_LOAD_LENIENT;
 
-    UfConfigStatus st = UfConfigLoadFile(h, input, &opt, NULL);
+    UfConfigOpStatus st = UfConfigLoadFile(h, input, &opt, NULL);
     if (st != UF_CONFIG_OK) {
         const UfConfigError *e = UfConfigLastError();
         fprintf(stderr, "cannot load %s — %s: %s\n", input,
@@ -143,7 +141,7 @@ int main(int argc, char **argv) {
     struct {
         const char *name;
         const char *file;
-        UfConfigStatus (*fn)(const UfConfig *h, char **out);
+        UfConfigOpStatus (*fn)(const UfConfig *h, char **out);
     } ser[] = {
         { "json", "expected.json", UfConfigToJsonAlloc },
         { "yaml", "expected.yaml", UfConfigToYamlAlloc },
@@ -153,7 +151,7 @@ int main(int argc, char **argv) {
 
     for (size_t i = 0; i < sizeof(ser) / sizeof(ser[0]); i++) {
         char *out = NULL;
-        UfConfigStatus gs = ser[i].fn(h, &out);
+        UfConfigOpStatus gs = ser[i].fn(h, &out);
         if (gs != UF_CONFIG_OK || !out) {
             printf("  FAIL  %-16s %s\n", ser[i].name, UfConfigStatusString(gs));
             g_fail++;

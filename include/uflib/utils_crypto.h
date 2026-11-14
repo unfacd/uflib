@@ -107,6 +107,23 @@ PUBLIC_API int ComputeSHA1 (const unsigned char *input, size_t input_len, char *
  */
 PUBLIC_API void ComputeHmacSha256(const unsigned char *text, int text_len, const unsigned char *key, int key_len, void *digest) __attribute__((nonnull));
 
+/*! Derive a PKCE code challenge from its verifier (RFC 7636 §4.2).
+ *
+ * "S256" writes base64url(SHA-256(verifier)) — 43 characters, unpadded — and
+ * "plain" copies the verifier through unchanged.  The challenge is what travels
+ * to the authorization server; the verifier stays with whoever will redeem the
+ * code, which is why derivation and verification must agree on one definition.
+ *
+ * @param[in]  verifier  Code verifier, 43–128 unreserved characters.
+ * @param[in]  method    "S256" or "plain".
+ * @param[out] out       Buffer receiving the NUL-terminated challenge.
+ * @param[in]  out_sz    Capacity of @p out, terminator included.
+ *
+ * @return true when the challenge was written; false for an unknown method, a
+ *         missing argument, or a challenge that does not fit @p out.
+ */
+PUBLIC_API bool GeneratePkceCodeChallenge(const char *verifier, const char *method, char *out, size_t out_sz);
+
 /**
  * @brief Encrypt a cleartext with a signalling key (AES-256-CBC + HMAC).
  *

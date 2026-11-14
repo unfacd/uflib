@@ -32,13 +32,13 @@ extern int                     UfConfigLookupPath(const char *path);
 #endif
 
 /*! Create a handle bound to the test schema. */
-static inline UfConfigStatus UfConfigTestCreate(UfConfig **out) {
+static inline UfConfigOpStatus UfConfigTestCreate(UfConfig **out) {
     UfConfigDescriptor descriptor;
     memset(&descriptor, 0, sizeof(descriptor));
     descriptor.fields      = g_ufconfig_fields;
     descriptor.field_count = (size_t)g_ufconfig_field_count;
     descriptor.lookup      = UfConfigLookupPath;
-    descriptor.kind        = UF_CONFIG_BACKEND_FILE;
+    descriptor.backend        = UF_CONFIG_BACKEND_FILE;
     return UfConfigCreate(out, &descriptor);
 }
 

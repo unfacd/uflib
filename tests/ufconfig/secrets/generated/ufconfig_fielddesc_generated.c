@@ -7,15 +7,15 @@ const struct UfConfigFieldDesc g_ufconfig_fields[] = {
     { UF_CONFIG_FIELD_APP_DB_ADDRESS, "app.db_address", UF_FT_STR, 0, 0, 1, 0LL, 0.0, 0, "127.0.0.1", 0, 0, 0LL, 0LL, NULL, NULL, NULL, 0, 0, 0LL, 0LL, 0, 0LL, NULL, NULL, 0 },
 };
 const int g_ufconfig_field_count = 4;
-PUBLIC_API UfConfigStatus UfConfigGetAppDbPassword(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigAppDbPassword(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_APP_DB_PASSWORD, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetAppApiToken(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigAppApiToken(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_APP_API_TOKEN, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetAppShortSecret(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigAppShortSecret(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_APP_SHORT_SECRET, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetAppDbAddress(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigAppDbAddress(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_APP_DB_ADDRESS, out);
 }

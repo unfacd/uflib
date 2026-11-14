@@ -39,8 +39,8 @@ typedef struct CDSHashMapNode {
     _Atomic uint64_t generation;   ///< Seq-lock version (odd = write in progress)
     _Atomic uint32_t next_free;    ///< Treiber-stack link when in free list
     /* ── key is a FAM whose actual size is set at map-init time ── */
-    uint32_t        value;        ///< Opaque user value
-    char            key[];        ///< Flexible array member — sized per-map
+    _Atomic uint32_t value;       ///< Opaque user value
+    _Atomic unsigned char key[];  ///< Flexible array member — sized per-map
 } CDSHashMapNode;
 
 /* ── Map ─────────────────────────────────────────────────────────────────── */

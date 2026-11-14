@@ -170,6 +170,41 @@ sNodeAt(LocklessFixedWidthHashMap *map, uint32_t idx)
  * @param out_gen  Receives the generation at which the read was valid.
  * @return true if the keys match and the read was consistent.
  */
+/*!
+ * Seq-lock compare of a pool node's key against @p key.
+ *
+ * Both sides access the payload with atomics: the comparison and the stores in
+ * Insert()/Remove() genuinely overlap when a node is recycled under a stale
+ * slot reference, and the generation re-check discards those results — atomic
+ * loads are what makes that overlap defined rather than merely harmless.
+ *
+ * @return true when the stored key equals @p key (strncmp semantics over
+ *         key_width bytes, i.e. comparison stops at a shared NUL).
+ */
+static bool
+sNodeKeyEquals(LocklessFixedWidthHashMap *map, CDSHashMapNode *node, const char *key)
+{
+    for (uint32_t i = 0; i < map->key_width; i++) {
+        unsigned char stored = atomic_load_explicit(&node->key[i], memory_order_relaxed);
+        if (stored != (unsigned char)key[i]) return false;
+        if (stored == '\0') return true;
+    }
+    return true;
+}
+
+/* Mirrors strncpy() + forced terminator: copies up to key_width-1 bytes and
+ * zero-fills the remainder. */
+static void
+sNodeKeyStore(LocklessFixedWidthHashMap *map, CDSHashMapNode *node, const char *key)
+{
+    uint32_t i = 0;
+
+    for (; i + 1 < map->key_width && key[i] != '\0'; i++)
+        atomic_store_explicit(&node->key[i], (unsigned char)key[i], memory_order_relaxed);
+    for (; i < map->key_width; i++)
+        atomic_store_explicit(&node->key[i], 0, memory_order_relaxed);
+}
+
 static bool
 sNodeKeyMatch(LocklessFixedWidthHashMap *map, CDSHashMapNode *node,
               const char *key, uint32_t *out_val, uint64_t *out_gen)
@@ -186,8 +221,8 @@ sNodeKeyMatch(LocklessFixedWidthHashMap *map, CDSHashMapNode *node,
 
     /* Read key and value.  The acquire on generation ensures these loads
      * see the writer's stores (on all memory models). */
-    int cmp = strncmp(node->key, key, map->key_width);
-    uint32_t val = node->value;
+    int      cmp = sNodeKeyEquals(map, node, key) ? 0 : 1;
+    uint32_t val = atomic_load_explicit(&node->value, memory_order_relaxed);
 
     /* Prevent compiler from reordering the strncmp/value reads around
      * the second generation load. */
@@ -329,9 +364,8 @@ LocklessFixedWidthHashMap_Insert(LocklessFixedWidthHashMap *map,
              * The non-atomic writes below are therefore safe — no reader
              * will inspect the payload until we publish via the CAS and
              * bump gen back to even. */
-            strncpy(new_node->key, key, map->key_width);
-            new_node->key[map->key_width - 1] = '\0';
-            new_node->value = value;
+            sNodeKeyStore(map, new_node, key);
+            atomic_store_explicit(&new_node->value, value, memory_order_relaxed);
 
             /* Fence: all non-atomic stores above must be visible before
              * the slot CAS publishes the node to other threads. */
@@ -489,7 +523,7 @@ LocklessFixedWidthHashMap_Remove(LocklessFixedWidthHashMap *map,
                                               memory_order_release);
                     /* Clear the key to prevent false matches if re-allocated
                      * before the generation bump is observed. */
-                    memset(node->key, 0, map->key_width);
+                    sNodeKeyStore(map, node, "");
                     sPoolFree(map, slot_val);
                     atomic_fetch_sub_explicit(&map->size, 1,
                                               memory_order_relaxed);

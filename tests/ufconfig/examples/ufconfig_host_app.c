@@ -67,16 +67,16 @@ static UfConfigDescriptor MakeDescriptor(void) {
 
        A file origin leaves these clear and uses UfConfigLoadFile(h, path).
        A networked origin is named by filling in the endpoint that applies: */
-    d.kind = UF_CONFIG_BACKEND_FILE;
+    d.backend = UF_CONFIG_BACKEND_FILE;
     if (getenv("UFCONFIG_DEMO_REDIS")) {
-        d.kind = UF_CONFIG_BACKEND_REDIS;
+        d.backend = UF_CONFIG_BACKEND_REDIS;
         d.redis.address   = "10.0.0.5";
         d.redis.port      = 6379;
         d.redis.username  = "ufsrv";
         d.redis.password  = getenv("UFCONFIG_DEMO_REDIS_PASSWORD");
         d.redis.ns = "alice";
     } else if (getenv("UFCONFIG_DEMO_SQL")) {
-        d.kind = UF_CONFIG_BACKEND_SQL;
+        d.backend = UF_CONFIG_BACKEND_SQL;
         d.sql.address   = "db.ufsrv.unfacd.com";
         d.sql.port      = 3306;
         d.sql.username  = "ufsrv_user";
@@ -86,7 +86,7 @@ static UfConfigDescriptor MakeDescriptor(void) {
     return d;
 }
 
-static void Report(const char *what, UfConfigStatus st) {
+static void Report(const char *what, UfConfigOpStatus st) {
     printf("  %-28s %s\n", what, UfConfigStatusString(st));
     if (st != UF_CONFIG_OK && st != UF_CONFIG_NO_CHANGE) {
         const UfConfigError *e = UfConfigLastError();
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
            descriptor.field_count, descriptor.lookup ? "present" : "MISSING");
     /* The enum starts at 1, so a switch rather than an array index. */
     const char *origin_name;
-    switch (descriptor.kind) {
+    switch (descriptor.backend) {
     case UF_CONFIG_BACKEND_FILE:  origin_name = "FILE";  break;
     case UF_CONFIG_BACKEND_MEM:   origin_name = "MEM";   break;
     case UF_CONFIG_BACKEND_REDIS: origin_name = "REDIS"; break;
@@ -117,18 +117,18 @@ int main(int argc, char **argv) {
     default:                      origin_name = "?";     break;
     }
     printf("  %-28s %s\n", "origin", origin_name);
-    if (descriptor.kind == UF_CONFIG_BACKEND_REDIS) {
+    if (descriptor.backend == UF_CONFIG_BACKEND_REDIS) {
         printf("  %-28s %s:%d ns=%s\n", "  redis",
                descriptor.redis.address, descriptor.redis.port,
                descriptor.redis.ns ? descriptor.redis.ns : "-");
-    } else if (descriptor.kind == UF_CONFIG_BACKEND_SQL) {
+    } else if (descriptor.backend == UF_CONFIG_BACKEND_SQL) {
         printf("  %-28s %s:%d ns=%s\n", "  sql",
                descriptor.sql.address, descriptor.sql.port,
                descriptor.sql.ns ? descriptor.sql.ns : "-");
     }
 
     UfConfig *config = NULL;
-    UfConfigStatus st = UfConfigCreate(&config, &descriptor);
+    UfConfigOpStatus st = UfConfigCreate(&config, &descriptor);
     Report("UfConfigCreate", st);
     if (st != UF_CONFIG_OK) return EXIT_FAILURE;
 
@@ -136,8 +136,6 @@ int main(int argc, char **argv) {
     printf("\nload\n");
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size    = sizeof(opt);
-    opt.version = 1;
     opt.mode    = UF_CONFIG_LOAD_STRICT;
 
     st = UfConfigLoadFile(config, document, &opt, NULL);
@@ -164,18 +162,18 @@ int main(int argc, char **argv) {
             printf("  %-34s %s\n", paths[i], UfConfigStatusString(st));
             continue;
         }
-        switch (v.kind) {
-        case UF_CONFIG_KIND_INT:
+        switch (v.value_type) {
+        case UF_CONFIG_VALUE_TYPE_INT:
             printf("  %-34s %lld\n", paths[i], (long long)v.as.i);
             break;
-        case UF_CONFIG_KIND_STRING:
+        case UF_CONFIG_VALUE_TYPE_STRING:
             printf("  %-34s \"%.*s\"\n", paths[i], (int)v.as.str.len, v.as.str.ptr);
             break;
-        case UF_CONFIG_KIND_BOOL:
+        case UF_CONFIG_VALUE_TYPE_BOOL:
             printf("  %-34s %s\n", paths[i], v.as.b ? "true" : "false");
             break;
         default:
-            printf("  %-34s (kind %d)\n", paths[i], (int)v.kind);
+            printf("  %-34s (kind %d)\n", paths[i], (int)v.value_type);
             break;
         }
     }
@@ -224,9 +222,9 @@ int main(int argc, char **argv) {
             case UF_CONFIG_NS_ARRAY:        k = "array"; break;
             }
             printf("  %-16s %-6s", e.name ? e.name : "-", k);
-            if (e.kind == UF_CONFIG_NS_VALUE && e.value.kind == UF_CONFIG_KIND_INT)
+            if (e.kind == UF_CONFIG_NS_VALUE && e.value.value_type == UF_CONFIG_VALUE_TYPE_INT)
                 printf(" = %lld", (long long)e.value.as.i);
-            else if (e.kind == UF_CONFIG_NS_VALUE && e.value.kind == UF_CONFIG_KIND_STRING)
+            else if (e.kind == UF_CONFIG_NS_VALUE && e.value.value_type == UF_CONFIG_VALUE_TYPE_STRING)
                 printf(" = \"%.*s\"", (int)e.value.as.str.len, e.value.as.str.ptr);
             printf("\n");
             if (e.table) free(e.table);
@@ -236,7 +234,7 @@ int main(int argc, char **argv) {
 
     /* ── 7. Every serialiser the module offers ────────────────────────────── */
     printf("\nserialisers\n");
-    struct { const char *name; UfConfigStatus (*fn)(const UfConfig *, char **); } ser[] = {
+    struct { const char *name; UfConfigOpStatus (*fn)(const UfConfig *, char **); } ser[] = {
         { "json",  UfConfigToJsonAlloc },
         { "yaml",  UfConfigToYamlAlloc },
         { "ini",   UfConfigToIniAlloc },

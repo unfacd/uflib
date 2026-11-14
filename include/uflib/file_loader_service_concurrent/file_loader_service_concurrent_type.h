@@ -15,6 +15,8 @@
 
 #include <stdint.h>
 
+#include <uflib/utils_threads.h>
+
 /* ── Opaque handle ────────────────────────────────────────────────────── */
 
 typedef void FileLoaderService;
@@ -28,6 +30,8 @@ typedef void FileLoaderService;
  */
 typedef struct {
     FileLoaderService *service_handle;       ///< opaque, set by Init()
+
+    char               proc_name[PRCTL_MAX_NAME_SZ + 1]; ///< optional monitor-thread label; empty = "ufFLoader"
 
     struct {
         uint32_t     registry_size;          ///< max files tracked (0 = default)

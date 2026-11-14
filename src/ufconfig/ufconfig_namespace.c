@@ -74,7 +74,7 @@ static int sNameSeenEarlier(const UfConfigNamespace *ns, const UfNode *target)
 }
 
 /*! @brief Fills @p out from one entry node. */
-static UfConfigStatus sFillEntry(const UfConfigNamespace *ns, UfNode *item, UfConfigNamespaceEntry *out)
+static UfConfigOpStatus sFillEntry(const UfConfigNamespace *ns, UfNode *item, UfConfigNamespaceEntry *out)
 {
   memset(out, 0, sizeof(*out));
   out->name = item->name;
@@ -99,7 +99,7 @@ static UfConfigStatus sFillEntry(const UfConfigNamespace *ns, UfNode *item, UfCo
 }
 
 
-PUBLIC_API UfConfigStatus UfConfigNamespaceGet(const UfConfig *h, const char *path, UfConfigNamespace **out)
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceGet(const UfConfig *h, const char *path, UfConfigNamespace **out)
 {
   if (!h || !out) return UF_CONFIG_ERR_INVALID_ARG;
   /* The resolve reads h->root and both indexes, and a reload swaps them under
@@ -137,7 +137,7 @@ PUBLIC_API UfConfigStatus UfConfigNamespaceGet(const UfConfig *h, const char *pa
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigRootGet(const UfConfig *h, UfConfigNamespace **out)
+PUBLIC_API UfConfigOpStatus UfConfigRootGet(const UfConfig *h, UfConfigNamespace **out)
 {
   return UfConfigNamespaceGet(h, "", out);
 }
@@ -159,7 +159,7 @@ PUBLIC_API size_t UfConfigNamespaceEntryCount(const UfConfigNamespace *ns)
   return k;
 }
 
-PUBLIC_API UfConfigStatus UfConfigNamespaceEntryAt(const UfConfigNamespace *ns, size_t idx, UfConfigNamespaceEntry *out)
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceEntryAt(const UfConfigNamespace *ns, size_t idx, UfConfigNamespaceEntry *out)
 {
   if (!ns || !out) return UF_CONFIG_ERR_INVALID_ARG;
   int    dedup = sHasBindings(ns);
@@ -180,7 +180,7 @@ PUBLIC_API UfConfigStatus UfConfigNamespaceEntryAt(const UfConfigNamespace *ns, 
   return UF_CONFIG_ERR_NOFIELD;
 }
 
-PUBLIC_API UfConfigStatus UfConfigNamespaceEntryByName(const UfConfigNamespace *ns, const char *name,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceEntryByName(const UfConfigNamespace *ns, const char *name,
                                                        UfConfigNamespaceEntry * out)
 {
   if (!ns || !name) return UF_CONFIG_ERR_INVALID_ARG;
@@ -198,7 +198,7 @@ PUBLIC_API UfConfigStatus UfConfigNamespaceEntryByName(const UfConfigNamespace *
   return UF_CONFIG_ERR_NOFIELD;
 }
 
-PUBLIC_API UfConfigStatus UfConfigNamespaceResolve(const UfConfigNamespace *ns, UfConfigNamespace **out)
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceResolve(const UfConfigNamespace *ns, UfConfigNamespace **out)
 {
   if (!ns || !out) return UF_CONFIG_ERR_INVALID_ARG;
   if (ns->node && ns->node->kind == UF_NODE_ALIAS && ns->node->resolved) return UfConfigNamespaceGet(
@@ -216,19 +216,19 @@ PUBLIC_API const char *UfConfigNamespacePathVia(const UfConfigNamespace *ns)
   return ns ? (ns->via_path ? ns->via_path : ns->path) : NULL;
 }
 
-PUBLIC_API UfConfigStatus UfConfigNamespaceToJson(const UfConfigNamespace *ns, char *buf, size_t cap, size_t *needed)
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceToJson(const UfConfigNamespace *ns, char *buf, size_t cap, size_t *needed)
 {
   if (!ns) return UF_CONFIG_ERR_INVALID_ARG;
   return ConfigEmitJson(ns->resolved ? ns->resolved : ns->node, buf, cap, needed, false, true);
 }
 
-PUBLIC_API UfConfigStatus UfConfigNamespaceToYaml(const UfConfigNamespace *ns, char *buf, size_t cap, size_t *needed)
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceToYaml(const UfConfigNamespace *ns, char *buf, size_t cap, size_t *needed)
 {
   if (!ns) return UF_CONFIG_ERR_INVALID_ARG;
   return ConfigEmitYaml(ns->node, buf, cap, needed, true);
 }
 
-PUBLIC_API UfConfigStatus UfConfigNamespaceToIni(const UfConfigNamespace *ns, char *buf, size_t cap, size_t *needed)
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceToIni(const UfConfigNamespace *ns, char *buf, size_t cap, size_t *needed)
 {
   if (!ns) return UF_CONFIG_ERR_INVALID_ARG;
   return ConfigEmitIni(ns->node, buf, cap, needed);

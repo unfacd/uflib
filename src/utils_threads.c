@@ -112,14 +112,12 @@ int ThreadSleepMs(long milliseconds) {
 int  __attribute__((nonnull(1), access(read_only, 1)))
 SetThreadName(const char *thread_name)
 {
-#define MAX_NAME_LEN 15
-  char proc_name [MAX_NAME_LEN + 1] = {0};	/* Name must be <= 15 characters + a null */
+  char proc_name [PRCTL_MAX_NAME_SZ + 1] = {0};	/* Name must be <= 15 characters + a null */
 
-  strncpy(proc_name, thread_name, MAX_NAME_LEN);
+  strncpy(proc_name, thread_name, PRCTL_MAX_NAME_SZ);
   int result = prctl(PR_SET_NAME, (unsigned long)&proc_name);
 
   return result;
-#undef MAX_NAME_LEN
 }
 
 char *

@@ -53,7 +53,7 @@
    reaches it -- UfConfigCreate is the only constructor they see, and it always
    binds a schema.  This exists for the internal paths that are schema-free by
    design, such as UfConfigPairsFromLua. */
-UfConfigStatus ConfigCreate(UfConfig **out);
+UfConfigOpStatus ConfigCreate(UfConfig **out);
 
 /* Arena. */
 void *ConfigArenaAlloc(UfArena **a, size_t n);
@@ -61,27 +61,31 @@ char *ConfigArenaStrndup(UfArena **a, const char *s, size_t n);
 void  ConfigArenaFree(UfArena *a);
 
 /* Error reporting, per thread. */
-void ConfigSetError(UfConfigStatus st, const char *path, const char *validator, int line, int col, const char *fmt,
+void ConfigSetError(UfConfigOpStatus st, const char *path, const char *validator, int line, int col, const char *fmt,
                     ...);
 void ConfigClearError(void);
 
 /* Pipeline stages, in the order a load runs them. */
-UfConfigStatus ConfigParseLuaStyle(UfConfig *h, const char *src, size_t len, UfNode **out_root);
-UfConfigStatus ConfigResolveAliases(UfConfig *h, UfNode *root);
-UfConfigStatus ConfigApplySchema(UfConfig *h, UfNode *root, UfConfigLoadMode mode, UfConfigLoadReport *report);
-UfConfigStatus ConfigCanonAndDigest(UfNode *n, unsigned char out[32]);
+UfConfigOpStatus ConfigParseLuaStyle(UfConfig *h, const char *src, size_t len, UfNode **out_root);
+UfConfigOpStatus ConfigResolveAliases(UfConfig *h, UfNode *root);
+/* Attaches the injected schema to the parsed tree: refuses undeclared paths, then validates, transforms and materialises every declared field's default. */
+UfConfigOpStatus ConfigApplySchema(UfConfig *h, UfNode *root, UfConfigLoadMode mode, UfConfigLoadReport *report,
+                                   const UfConfigLoadOptions *opt);
+UfConfigOpStatus ConfigCanonAndDigest(UfNode *n, unsigned char out[32]);
 
 /* Emitters. */
-UfConfigStatus ConfigEmitJson(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty, bool expand);
-UfConfigStatus ConfigEmitYaml(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty);
-UfConfigStatus ConfigEmitIni(const UfNode *n, char *buf, size_t cap, size_t *needed);
-UfConfigStatus ConfigEmitLua(const UfNode *n, char *buf, size_t cap, size_t *needed);
+UfConfigOpStatus ConfigEmitJson(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty, bool expand);
+UfConfigOpStatus ConfigEmitYaml(const UfNode *n, char *buf, size_t cap, size_t *needed, bool pretty);
+UfConfigOpStatus ConfigEmitIni(const UfNode *n, char *buf, size_t cap, size_t *needed);
+UfConfigOpStatus ConfigEmitLua(const UfNode *n, char *buf, size_t cap, size_t *needed);
 
 /* Tree access. */
 UfNode *       ConfigFindPath(UfNode *root, const char *path);
 UfNode *       ConfigResolvePath(const UfConfig *h, const char *path);
 void           ConfigRebuildIndexes(UfConfig *h);
-UfConfigStatus ConfigNodeToValue(const UfNode *n, UfConfigValue *out);
+UfConfigOpStatus ConfigNodeToValue(const UfNode *n, UfConfigValue *out);
+
+UfConfigOpStatus ConfigPairsToLuaStyle(const UfConfigFieldPair *pairs, size_t n, char **out);
 
 /* Character classification, locale-independent. */
 int ConfigAsciiIsDigit(int c);
@@ -90,28 +94,28 @@ int ConfigAsciiToUpper(int c);
 int ConfigAsciiToLower(int c);
 
 /* Hashing and file reads. */
-UfConfigStatus ConfigSha256(const void *data, size_t len, unsigned char out[32]);
-UfConfigStatus ConfigFileReadAll(const char *path, char **out, size_t *len);
+UfConfigOpStatus ConfigSha256(const void *data, size_t len, unsigned char out[32]);
+UfConfigOpStatus ConfigFileReadAll(const char *path, char **out, size_t *len);
 
 /* Transforms and their inverses. */
-UfConfigStatus ConfigTransformApplyNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
+UfConfigOpStatus ConfigTransformApplyNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
                                          size_t *  outlen);
-UfConfigStatus ConfigTransformRevertNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
+UfConfigOpStatus ConfigTransformRevertNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
                                           size_t *  outlen);
 
 /* Validators. */
-UfConfigStatus ConfigValidateString(const struct UfConfigFieldDesc *d, const char *s, size_t n, int line, int col);
-UfConfigStatus ConfigValidateCidr(const char *s);
-UfConfigStatus ConfigValidateFileSize(const char *s);
-UfConfigStatus ConfigValidateIp4(const char *s);
-UfConfigStatus ConfigValidateIp6(const char *s);
-UfConfigStatus ConfigValidateEmail(const char *s);
-UfConfigStatus ConfigValidateUrl(const char *s);
-UfConfigStatus ConfigValidateFqdn(const char *s);
-UfConfigStatus ConfigValidateDate(const char *s);
+UfConfigOpStatus ConfigValidateString(const struct UfConfigFieldDesc *d, const char *s, size_t n, int line, int col);
+UfConfigOpStatus ConfigValidateCidr(const char *s);
+UfConfigOpStatus ConfigValidateFileSize(const char *s);
+UfConfigOpStatus ConfigValidateIp4(const char *s);
+UfConfigOpStatus ConfigValidateIp6(const char *s);
+UfConfigOpStatus ConfigValidateEmail(const char *s);
+UfConfigOpStatus ConfigValidateUrl(const char *s);
+UfConfigOpStatus ConfigValidateFqdn(const char *s);
+UfConfigOpStatus ConfigValidateDate(const char *s);
 
 /* The superseded write-through backend defaults, still wired at create time. */
-UfConfigStatus ConfigFileReadAllDefault(void *ctx, const char *path, char **out, size_t *len);
-UfConfigStatus ConfigFileWriteAllDefault(void *ctx, const char *path, const char *buf, size_t len);
+UfConfigOpStatus ConfigFileReadAllDefault(void *ctx, const char *path, char **out, size_t *len);
+UfConfigOpStatus ConfigFileWriteAllDefault(void *ctx, const char *path, const char *buf, size_t len);
 
 #endif /* UFLIB_UFCONFIG_UFCONFIG_PRIV_H */

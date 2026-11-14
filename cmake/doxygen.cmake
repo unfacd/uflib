@@ -16,7 +16,7 @@ if (DOXYGEN_FOUND)
 
     # http://sourceforge.net/projects/plantuml/files/plantuml.1.2021.11.jar/download
     find_program(PLANT_UML_PATH plantuml.jar PATH_SUFFIXES PlantUML plantuml Plantuml
-            PATHS /opt/bin /usr/share /usr/local/share/ /usr/local/bin c/Program\ Files* )
+            PATHS /usr/share /usr/local/share/ /usr/local/bin c/Program\ Files* )
     if(NOT PLANT_UML_PATH)
         message(WARNING "Looking for PlantUML - not found, some UML diagrams will not be generated via doxygen.")
     else()

@@ -41,8 +41,8 @@ extern int                     UfConfigLookupPath(const char *path);
 static int g_pass, g_fail, g_total;
 
 /* The status a truth-table row names, or a value no status can take. */
-static UfConfigStatus StatusFromName(const char *name) {
-    static const struct { const char *name; UfConfigStatus st; } map[] = {
+static UfConfigOpStatus StatusFromName(const char *name) {
+    static const struct { const char *name; UfConfigOpStatus st; } map[] = {
         { "OK",             UF_CONFIG_OK },
         { "REQUIRED",       UF_CONFIG_ERR_REQUIRED },
         { "TYPE_MISMATCH",  UF_CONFIG_ERR_TYPE_MISMATCH },
@@ -58,18 +58,18 @@ static UfConfigStatus StatusFromName(const char *name) {
     for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
         if (strcmp(map[i].name, name) == 0) return map[i].st;
     }
-    return (UfConfigStatus)-1;
+    return (UfConfigOpStatus)-1;
 }
 
 /* Load one file and report.  Returns the status the library gave. */
-static UfConfigStatus RunOne(const char *path, UfConfigLoadMode mode,
+static UfConfigOpStatus RunOne(const char *path, UfConfigLoadMode mode,
                              int verbose, const char *expect_name) {
     UfConfigDescriptor d;
     memset(&d, 0, sizeof(d));
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_FILE;
+    d.backend        = UF_CONFIG_BACKEND_FILE;
 
     UfConfig *h = NULL;
     if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) {
@@ -79,20 +79,18 @@ static UfConfigStatus RunOne(const char *path, UfConfigLoadMode mode,
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size    = sizeof(opt);
-    opt.version = 1;
     opt.mode    = mode;
 
     UfConfigLoadReport report;
     memset(&report, 0, sizeof(report));
 
-    UfConfigStatus st = UfConfigLoadFile(h, path, &opt, &report);
+    UfConfigOpStatus st = UfConfigLoadFile(h, path, &opt, &report);
     const UfConfigError *e = UfConfigLastError();
 
     g_total++;
 
     if (expect_name) {
-        UfConfigStatus want = StatusFromName(expect_name);
+        UfConfigOpStatus want = StatusFromName(expect_name);
         if (st == want) {
             g_pass++;
             printf("  ok    %-38s %s\n", path, UfConfigStatusString(st));
@@ -125,12 +123,12 @@ static UfConfigStatus RunOne(const char *path, UfConfigLoadMode mode,
                 continue;
             const char *eff = "-";
             char buf[256];
-            switch (v.kind) {
-            case UF_CONFIG_KIND_INT:    snprintf(buf, sizeof(buf), "%lld", (long long)v.as.i); eff = buf; break;
-            case UF_CONFIG_KIND_FLOAT:  snprintf(buf, sizeof(buf), "%g", v.as.f); eff = buf; break;
-            case UF_CONFIG_KIND_BOOL:   eff = v.as.b ? "true" : "false"; break;
-            case UF_CONFIG_KIND_STRING: snprintf(buf, sizeof(buf), "\"%.*s\"", (int)v.as.str.len, v.as.str.ptr); eff = buf; break;
-            case UF_CONFIG_KIND_ARRAY:  snprintf(buf, sizeof(buf), "[%zu]", v.as.array.count); eff = buf; break;
+            switch (v.value_type) {
+            case UF_CONFIG_VALUE_TYPE_INT:    snprintf(buf, sizeof(buf), "%lld", (long long)v.as.i); eff = buf; break;
+            case UF_CONFIG_VALUE_TYPE_FLOAT:  snprintf(buf, sizeof(buf), "%g", v.as.f); eff = buf; break;
+            case UF_CONFIG_VALUE_TYPE_BOOL:   eff = v.as.b ? "true" : "false"; break;
+            case UF_CONFIG_VALUE_TYPE_STRING: snprintf(buf, sizeof(buf), "\"%.*s\"", (int)v.as.str.len, v.as.str.ptr); eff = buf; break;
+            case UF_CONFIG_VALUE_TYPE_ARRAY:  snprintf(buf, sizeof(buf), "[%zu]", v.as.array.count); eff = buf; break;
             default:                    eff = "(table)"; break;
             }
             printf("    %-42s %s\n", g_ufconfig_fields[i].path, eff);
@@ -153,18 +151,16 @@ static void PrintEnumGetters(const char *path, UfConfigLoadMode mode) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_FILE;
+    d.backend        = UF_CONFIG_BACKEND_FILE;
 
     UfConfig *h = NULL;
     if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) return;
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = mode;
 
-    UfConfigStatus st = UfConfigLoadFile(h, path, &opt, NULL);
+    UfConfigOpStatus st = UfConfigLoadFile(h, path, &opt, NULL);
     printf("file    %s\n", path);
     printf("status  %s\n", UfConfigStatusString(st));
     if (st != UF_CONFIG_OK) {
@@ -184,35 +180,35 @@ static void PrintEnumGetters(const char *path, UfConfigLoadMode mode) {
     for (int i = 0; i < g_ufconfig_field_count; i++) {
         UfConfigValue v;
         memset(&v, 0, sizeof(v));
-        UfConfigStatus gs = UfConfigGetFieldByIndex(h, (UfConfigFieldId)i, &v);
+        UfConfigOpStatus gs = UfConfigGetFieldByIndex(h, (UfConfigFieldId)i, &v);
 
         char eff[192] = "-", raw[192] = "-";
         if (gs == UF_CONFIG_OK && v.present) {
-            switch (v.kind) {
-            case UF_CONFIG_KIND_INT:
+            switch (v.value_type) {
+            case UF_CONFIG_VALUE_TYPE_INT:
                 snprintf(eff, sizeof(eff), "%lld", (long long)v.as.i);
                 if (v.raw.str.ptr == NULL && v.desc) snprintf(raw, sizeof(raw), "(default)");
                 else snprintf(raw, sizeof(raw), "%lld", (long long)v.raw.i);
                 break;
-            case UF_CONFIG_KIND_FLOAT:
+            case UF_CONFIG_VALUE_TYPE_FLOAT:
                 snprintf(eff, sizeof(eff), "%g", v.as.f);
                 snprintf(raw, sizeof(raw), "%g", v.raw.f);
                 break;
-            case UF_CONFIG_KIND_BOOL:
+            case UF_CONFIG_VALUE_TYPE_BOOL:
                 snprintf(eff, sizeof(eff), "%s", v.as.b ? "true" : "false");
                 snprintf(raw, sizeof(raw), "%s", v.raw.b ? "true" : "false");
                 break;
-            case UF_CONFIG_KIND_STRING:
+            case UF_CONFIG_VALUE_TYPE_STRING:
                 snprintf(eff, sizeof(eff), "\"%.*s\"", (int)v.as.str.len, v.as.str.ptr);
                 if (v.raw.str.ptr) snprintf(raw, sizeof(raw), "\"%.*s\"", (int)v.raw.str.len, v.raw.str.ptr);
                 else snprintf(raw, sizeof(raw), "(default)");
                 break;
-            case UF_CONFIG_KIND_ARRAY:
+            case UF_CONFIG_VALUE_TYPE_ARRAY:
                 snprintf(eff, sizeof(eff), "[%zu elements]", v.as.array.count);
                 snprintf(raw, sizeof(raw), "[%zu]", v.as.array.count);
                 break;
-            case UF_CONFIG_KIND_SCOPE: snprintf(eff, sizeof(eff), "{table}"); break;
-            default: snprintf(eff, sizeof(eff), "kind %d", (int)v.kind); break;
+            case UF_CONFIG_VALUE_TYPE_SCOPE: snprintf(eff, sizeof(eff), "{table}"); break;
+            default: snprintf(eff, sizeof(eff), "kind %d", (int)v.value_type); break;
             }
         }
         printf("  %-4d %-46s %-9s %-24.24s %s\n", i, g_ufconfig_fields[i].path,
@@ -239,18 +235,16 @@ static void PrintLoadedFields(const char *path, UfConfigLoadMode mode) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_FILE;
+    d.backend        = UF_CONFIG_BACKEND_FILE;
 
     UfConfig *h = NULL;
     if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) return;
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = mode;
 
-    UfConfigStatus st = UfConfigLoadFile(h, path, &opt, NULL);
+    UfConfigOpStatus st = UfConfigLoadFile(h, path, &opt, NULL);
     printf("file    %s\nstatus  %s\n", path, UfConfigStatusString(st));
     if (st != UF_CONFIG_OK) {
         const UfConfigError *e = UfConfigLastError();
@@ -283,14 +277,14 @@ static void PrintLoadedFields(const char *path, UfConfigLoadMode mode) {
         memset(&v, 0, sizeof(v));
         char eff[128] = "-";
         if (UfConfigGetField(h, pairs[i].path, &v) == UF_CONFIG_OK && v.present) {
-            switch (v.kind) {
-            case UF_CONFIG_KIND_INT:    snprintf(eff, sizeof(eff), "%lld", (long long)v.as.i); break;
-            case UF_CONFIG_KIND_FLOAT:  snprintf(eff, sizeof(eff), "%g", v.as.f); break;
-            case UF_CONFIG_KIND_BOOL:   snprintf(eff, sizeof(eff), "%s", v.as.b ? "true" : "false"); break;
-            case UF_CONFIG_KIND_STRING: snprintf(eff, sizeof(eff), "\"%.*s\"", (int)v.as.str.len, v.as.str.ptr); break;
-            case UF_CONFIG_KIND_ARRAY:  snprintf(eff, sizeof(eff), "[%zu]", v.as.array.count); break;
-            case UF_CONFIG_KIND_SCOPE:  snprintf(eff, sizeof(eff), "{table}"); break;
-            default:                    snprintf(eff, sizeof(eff), "kind %d", (int)v.kind); break;
+            switch (v.value_type) {
+            case UF_CONFIG_VALUE_TYPE_INT:    snprintf(eff, sizeof(eff), "%lld", (long long)v.as.i); break;
+            case UF_CONFIG_VALUE_TYPE_FLOAT:  snprintf(eff, sizeof(eff), "%g", v.as.f); break;
+            case UF_CONFIG_VALUE_TYPE_BOOL:   snprintf(eff, sizeof(eff), "%s", v.as.b ? "true" : "false"); break;
+            case UF_CONFIG_VALUE_TYPE_STRING: snprintf(eff, sizeof(eff), "\"%.*s\"", (int)v.as.str.len, v.as.str.ptr); break;
+            case UF_CONFIG_VALUE_TYPE_ARRAY:  snprintf(eff, sizeof(eff), "[%zu]", v.as.array.count); break;
+            case UF_CONFIG_VALUE_TYPE_SCOPE:  snprintf(eff, sizeof(eff), "{table}"); break;
+            default:                    snprintf(eff, sizeof(eff), "kind %d", (int)v.value_type); break;
             }
         }
         printf("  %-4zu %-42s %-22.22s %s\n", i, pairs[i].path,
@@ -310,7 +304,7 @@ extern const int g_ufconfig_named_getter_count;
 typedef struct {
     const char *path;
     const char *name;
-    UfConfigStatus (*get)(const UfConfig *h, UfConfigValue *out);
+    UfConfigOpStatus (*get)(const UfConfig *h, UfConfigValue *out);
 } UfConfigNamedGetter;
 extern const UfConfigNamedGetter g_ufconfig_named_getters[];
 
@@ -319,14 +313,14 @@ extern const UfConfigNamedGetter g_ufconfig_named_getters[];
    the values agree. */
 static void RenderValue(const UfConfigValue *v, char *out, size_t cap) {
     if (!v->present) { snprintf(out, cap, "(absent)"); return; }
-    switch (v->kind) {
-    case UF_CONFIG_KIND_INT:    snprintf(out, cap, "int:%lld", (long long)v->as.i); break;
-    case UF_CONFIG_KIND_FLOAT:  snprintf(out, cap, "float:%.17g", v->as.f); break;
-    case UF_CONFIG_KIND_BOOL:   snprintf(out, cap, "bool:%s", v->as.b ? "true" : "false"); break;
-    case UF_CONFIG_KIND_STRING: snprintf(out, cap, "str:%.*s", (int)v->as.str.len, v->as.str.ptr); break;
-    case UF_CONFIG_KIND_ARRAY:  snprintf(out, cap, "array:%zu", v->as.array.count); break;
-    case UF_CONFIG_KIND_SCOPE:  snprintf(out, cap, "table"); break;
-    default:                    snprintf(out, cap, "kind:%d", (int)v->kind); break;
+    switch (v->value_type) {
+    case UF_CONFIG_VALUE_TYPE_INT:    snprintf(out, cap, "int:%lld", (long long)v->as.i); break;
+    case UF_CONFIG_VALUE_TYPE_FLOAT:  snprintf(out, cap, "float:%.17g", v->as.f); break;
+    case UF_CONFIG_VALUE_TYPE_BOOL:   snprintf(out, cap, "bool:%s", v->as.b ? "true" : "false"); break;
+    case UF_CONFIG_VALUE_TYPE_STRING: snprintf(out, cap, "str:%.*s", (int)v->as.str.len, v->as.str.ptr); break;
+    case UF_CONFIG_VALUE_TYPE_ARRAY:  snprintf(out, cap, "array:%zu", v->as.array.count); break;
+    case UF_CONFIG_VALUE_TYPE_SCOPE:  snprintf(out, cap, "table"); break;
+    default:                    snprintf(out, cap, "kind:%d", (int)v->value_type); break;
     }
 }
 
@@ -347,18 +341,16 @@ static int CrossCheckRoutes(const char *path, UfConfigLoadMode mode) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_FILE;
+    d.backend        = UF_CONFIG_BACKEND_FILE;
 
     UfConfig *h = NULL;
     if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) return 1;
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = mode;
 
-    UfConfigStatus st = UfConfigLoadFile(h, path, &opt, NULL);
+    UfConfigOpStatus st = UfConfigLoadFile(h, path, &opt, NULL);
     printf("file    %s\nstatus  %s\n", path, UfConfigStatusString(st));
     if (st != UF_CONFIG_OK) {
         const UfConfigError *e = UfConfigLastError();
@@ -382,9 +374,9 @@ static int CrossCheckRoutes(const char *path, UfConfigLoadMode mode) {
         memset(&vi, 0, sizeof(vi));
         memset(&vp, 0, sizeof(vp));
 
-        UfConfigStatus sn = g_ufconfig_named_getters[i].get(h, &vn);
-        UfConfigStatus si = UfConfigGetFieldByIndex(h, i, &vi);
-        UfConfigStatus sp = UfConfigGetField(h, g_ufconfig_fields[i].path, &vp);
+        UfConfigOpStatus sn = g_ufconfig_named_getters[i].get(h, &vn);
+        UfConfigOpStatus si = UfConfigGetFieldByIndex(h, i, &vi);
+        UfConfigOpStatus sp = UfConfigGetField(h, g_ufconfig_fields[i].path, &vp);
 
         char rn[256], ri[256], rp[256];
         RenderValue(&vn, rn, sizeof(rn));
@@ -436,18 +428,16 @@ static void PrintNamedGetters(const char *path, UfConfigLoadMode mode) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_FILE;
+    d.backend        = UF_CONFIG_BACKEND_FILE;
 
     UfConfig *h = NULL;
     if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) return;
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = mode;
 
-    UfConfigStatus st = UfConfigLoadFile(h, path, &opt, NULL);
+    UfConfigOpStatus st = UfConfigLoadFile(h, path, &opt, NULL);
     printf("file    %s\nstatus  %s\n", path, UfConfigStatusString(st));
     if (st != UF_CONFIG_OK) {
         const UfConfigError *e = UfConfigLastError();

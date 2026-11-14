@@ -34,7 +34,7 @@ static int sHexval(int c)
   return -1;
 }
 
-static UfConfigStatus sHexEnc(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
+static UfConfigOpStatus sHexEnc(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
 {
   static const char *H = "0123456789abcdef";
   char *             o = (char*)ConfigArenaAlloc(a, n * 2 + 1);
@@ -49,7 +49,7 @@ static UfConfigStatus sHexEnc(UfArena **a, const char *in, size_t n, char **out,
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sHexDec(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
+static UfConfigOpStatus sHexDec(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
 {
   if (n % 2) {
     ConfigSetError(UF_CONFIG_ERR_VALIDATION, NULL, "hex", 0, 0, "odd hex length");
@@ -87,7 +87,7 @@ static int sB64val(char c, int url)
   return -1;
 }
 
-static UfConfigStatus sB64Enc(UfArena **a, const char *in, size_t n, char **out, size_t *olen, int url)
+static UfConfigOpStatus sB64Enc(UfArena **a, const char *in, size_t n, char **out, size_t *olen, int url)
 {
   const char *A      = url ? B64U : B64;
   size_t      groups = (n + 2) / 3;
@@ -112,7 +112,7 @@ static UfConfigStatus sB64Enc(UfArena **a, const char *in, size_t n, char **out,
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sB64Dec(UfArena **a, const char *in, size_t n, char **out, size_t *olen, int url)
+static UfConfigOpStatus sB64Dec(UfArena **a, const char *in, size_t n, char **out, size_t *olen, int url)
 {
   /* strip padding */
   while (n && in[n - 1] == '=') n--;
@@ -157,7 +157,7 @@ static int sB32val(char c)
   return -1;
 }
 
-static UfConfigStatus sB32Enc(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
+static UfConfigOpStatus sB32Enc(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
 {
   size_t cap = ((n + 4) / 5) * 8 + 1;
   char * o   = (char*)ConfigArenaAlloc(a, cap);
@@ -183,7 +183,7 @@ static UfConfigStatus sB32Enc(UfArena **a, const char *in, size_t n, char **out,
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sB32Dec(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
+static UfConfigOpStatus sB32Dec(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
 {
   while (n && in[n - 1] == '=') n--;
   for (size_t i = 0; i < n; i++) {
@@ -213,7 +213,7 @@ static UfConfigStatus sB32Dec(UfArena **a, const char *in, size_t n, char **out,
 }
 
 /* LZF with back-references for runs / repeats (still valid LZF). */
-static UfConfigStatus sLzfEnc(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
+static UfConfigOpStatus sLzfEnc(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
 {
   size_t         cap  = n + n / 8 + 64;
   unsigned char *outb = (unsigned char*)ConfigArenaAlloc(a, cap ? cap : 1);
@@ -271,7 +271,7 @@ static UfConfigStatus sLzfEnc(UfArena **a, const char *in, size_t n, char **out,
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLzfDec(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
+static UfConfigOpStatus sLzfDec(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
 {
   if (n == 0) {
     char *o = (char*)ConfigArenaAlloc(a, 1);
@@ -323,7 +323,7 @@ static UfConfigStatus sLzfDec(UfArena **a, const char *in, size_t n, char **out,
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sAsciiCase(UfArena **a, const char *in, size_t n, char **out, size_t *olen, int up)
+static UfConfigOpStatus sAsciiCase(UfArena **a, const char *in, size_t n, char **out, size_t *olen, int up)
 {
   char *o = (char*)ConfigArenaAlloc(a, n + 1);
   if (!o) return UF_CONFIG_ERR_NO_MEMORY;
@@ -335,55 +335,7 @@ static UfConfigStatus sAsciiCase(UfArena **a, const char *in, size_t n, char **o
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sVarsub(UfArena **a, const char *in, size_t n, char **out, size_t *olen)
-{
-  char *o = (char*)ConfigArenaAlloc(a, n * 4 + 64);
-  if (!o) return UF_CONFIG_ERR_NO_MEMORY;
-  size_t j = 0;
-  for (size_t i = 0; i < n;) {
-    if (in[i] == '\\' && i + 1 < n && in[i + 1] == '$' && i + 2 < n && in[i + 2] == '$') {
-      o[j++] = '$';
-      o[j++] = '$';
-      i      += 3;
-      continue;
-    }
-    if (in[i] == '\\' && i + 1 == n) {
-      ConfigSetError(UF_CONFIG_ERR_PARSE, NULL, "varsub", 0, 0, "trailing backslash");
-      return UF_CONFIG_ERR_PARSE;
-    }
-    if (in[i] == '$' && i + 1 < n && in[i + 1] == '$') {
-      i += 2;
-      char   name[64];
-      size_t nl = 0;
-      if (i < n && in[i] == '{') {
-        i++;
-        while (i < n && in[i] != '}' && nl + 1 < sizeof(name)) name[nl++] = in[i++];
-        if (i < n && in[i] == '}') i++;
-      }
-      else {
-        while (i < n && (ConfigAsciiIsAlpha((unsigned char)in[i]) || ConfigAsciiIsDigit((unsigned char)in[i]) || in[i]
-          == '_') && nl + 1 < sizeof(name)) name[nl++] = in[i++];
-      }
-      name[nl]        = 0;
-      const char *val = getenv(name);
-      if (!val) {
-        ConfigSetError(UF_CONFIG_ERR_SUBST_UNRESOLVED, name, "varsub", 0, 0, "unresolved $$%s", name);
-        return UF_CONFIG_ERR_SUBST_UNRESOLVED;
-      }
-      size_t vl = strlen(val);
-      memcpy(o + j, val, vl);
-      j += vl;
-      continue;
-    }
-    o[j++] = in[i++];
-  }
-  o[j]  = 0;
-  *out  = o;
-  *olen = j;
-  return UF_CONFIG_OK;
-}
-
-static UfConfigStatus sRegexSub(UfArena **a, const char *in, size_t n, char **out, size_t *olen, const char *spec)
+static UfConfigOpStatus sRegexSub(UfArena **a, const char *in, size_t n, char **out, size_t *olen, const char *spec)
 {
   /* spec: regex(pattern,repl) or regex/pattern/repl/ */
   const char *pat = NULL, *repl = "";
@@ -467,7 +419,7 @@ static const char *sBaseOp(const char *op)
   return op;
 }
 
-UfConfigStatus ConfigTransformApplyNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
+UfConfigOpStatus ConfigTransformApplyNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
                                          size_t *  outlen)
 {
   const char *b = sBaseOp(op);
@@ -477,14 +429,13 @@ UfConfigStatus ConfigTransformApplyNamed(UfArena **arena, const char *op, const 
   if (!strcmp(b, "base32")) return sB32Enc(arena, in, inlen, out, outlen);
   if (!strcmp(b, "toupper")) return sAsciiCase(arena, in, inlen, out, outlen, 1);
   if (!strcmp(b, "tolower")) return sAsciiCase(arena, in, inlen, out, outlen, 0);
-  if (!strcmp(b, "varsub")) return sVarsub(arena, in, inlen, out, outlen);
   if (!strcmp(b, "compress")) return sLzfEnc(arena, in, inlen, out, outlen);
   if (!strcmp(b, "regex")) return sRegexSub(arena, in, inlen, out, outlen, op);
   ConfigSetError(UF_CONFIG_ERR_VALIDATION, NULL, op, 0, 0, "unknown transform %s", op);
   return UF_CONFIG_ERR_VALIDATION;
 }
 
-UfConfigStatus ConfigTransformRevertNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
+UfConfigOpStatus ConfigTransformRevertNamed(UfArena **arena, const char *op, const char *in, size_t inlen, char **out,
                                           size_t *  outlen)
 {
   const char *b = sBaseOp(op);

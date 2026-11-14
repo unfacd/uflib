@@ -623,13 +623,16 @@ static bool sWriteConfig(FILE *f, const UfCommandRegistry *r)
   const UfCommandAliasPrivate **  aliases  = NULL;
   const UfCommandBindingPrivate **bindings = NULL;
   if (r->alias_count) {
+    // codechecker_false_positive [bugprone-sizeof-expression] aliases is an array of pointers; the element size is the pointer size
     aliases = malloc(r->alias_count * sizeof(*aliases));
     if (!aliases) return false;
     size_t n = 0;
     for (size_t i = 0; i < r->alias_capacity; ++i) if (r->aliases[i].occupied) aliases[n++] = &r->aliases[i];
+    // codechecker_false_positive [bugprone-sizeof-expression] aliases is an array of pointers; the element size is the pointer size
     qsort(aliases, n, sizeof(*aliases), sCmpAlias);
   }
   if (r->binding_count) {
+    // codechecker_false_positive [bugprone-sizeof-expression] bindings is an array of pointers; the element size is the pointer size
     bindings = malloc(r->binding_count * sizeof(*bindings));
     if (!bindings) {
       free(aliases);
@@ -637,6 +640,7 @@ static bool sWriteConfig(FILE *f, const UfCommandRegistry *r)
     }
     size_t n = 0;
     for (size_t i = 0; i < r->binding_capacity; ++i) if (r->bindings[i].occupied) bindings[n++] = &r->bindings[i];
+    // codechecker_false_positive [bugprone-sizeof-expression] bindings is an array of pointers; the element size is the pointer size
     qsort(bindings, n, sizeof(*bindings), sCmpBinding);
   }
   bool ok = fputs("-- UfCommand user configuration (Lua-compatible)\nreturn {\n  version = 1,\n", f) != EOF;

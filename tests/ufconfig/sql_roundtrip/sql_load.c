@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
     d.fields          = g_ufconfig_fields;
     d.field_count     = (size_t)g_ufconfig_field_count;
     d.lookup          = UfConfigLookupPath;
-    d.kind            = UF_CONFIG_BACKEND_SQL;
+    d.backend            = UF_CONFIG_BACKEND_SQL;
     d.sql.address     = dsn;
     d.sql.ns          = ns;
     d.sql.config_name = cfg;
@@ -140,8 +140,6 @@ int main(int argc, char **argv) {
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size    = sizeof(opt);
-    opt.version = 1;
     opt.mode    = UF_CONFIG_LOAD_STRICT;
 
     if (UfConfigLoadFile(h, doc, &opt, NULL) != UF_CONFIG_OK) {
@@ -166,14 +164,14 @@ int main(int argc, char **argv) {
 
     UfConfigBackendSpec spec;
     memset(&spec, 0, sizeof(spec));
-    spec.kind              = UF_CONFIG_BACKEND_SQL;
+    spec.backend_store              = UF_CONFIG_BACKEND_SQL;
     spec.u.sql.dsn         = dsn;
     spec.u.sql.ns          = ns;
     spec.u.sql.config_name = cfg;
 
     void *ctx = NULL;
     if (drv->open(&ctx, &spec) != UF_CONFIG_OK) { fprintf(stderr, "driver open failed\n"); return EXIT_FAILURE; }
-    UfConfigStatus st = drv->write_all(ctx, pairs, np, &meta);
+    UfConfigOpStatus st = drv->write_all(ctx, pairs, np, &meta);
     drv->close(ctx);
     if (st != UF_CONFIG_OK) {
         fprintf(stderr, "driver write_all: %s\n", UfConfigStatusString(st));

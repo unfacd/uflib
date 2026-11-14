@@ -1,0 +1,1 @@
+dev/scripts/build_install_verify.sh

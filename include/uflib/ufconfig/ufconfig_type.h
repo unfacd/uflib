@@ -12,19 +12,11 @@
  * A caller is given a handle it cannot look inside, a value union describing
  * what a field holds, and a report describing what a load or a reload did.  It
  * is not given the node representation, the arena, the index, the parsed tree,
- * or the schema descriptor's layout.  Those exist, but they are the module's
- * business.
- *
- * The test applied to every field below is: *is this the caller's, or the
- * implementation's?*  A field's value and type are the caller's.  The recorded
- * digest of a subtree is the caller's, because drift detection is built on it.
- * The arena a node was allocated from is not.
+ * or the schema descriptor's layout.
  *
  * ## What a backend is given
  *
- * The driver types are the one part of this header a caller does not use and a
- * backend implementor does.  They carry the whole of the storage contract: a
- * pair-set crosses the boundary and nothing else does.  Ordering, structural
+ * The driver types are used by backend implementor side;  they carry the whole of the storage contract.  Ordering, structural
  * inference and canonicalisation stay on this side of it, so a driver is never
  * asked to reproduce them — which is what makes a new backing store a matter of
  * implementing seven operations rather than of understanding this module.
@@ -66,7 +58,7 @@ extern "C" {
  * through @ref UfConfigLastError, so that a caller that only wants to branch on
  * success is not made to carry a struct around.
  */
-typedef enum UfConfigStatus {
+typedef enum UfConfigOpStatus {
     UF_CONFIG_OK = 0,                        ///< completed successfully
     UF_CONFIG_NO_CHANGE,                     ///< completed, nothing differed
     UF_CONFIG_ERR_NOFIELD,                   ///< no such field in this instance
@@ -101,7 +93,7 @@ typedef enum UfConfigStatus {
      * value, and the two want different responses.
      */
     UF_CONFIG_ERR_SECRET
-} UfConfigStatus;
+} UfConfigOpStatus;
 
 /*!
  * The type a field's value holds.
@@ -110,16 +102,16 @@ typedef enum UfConfigStatus {
  * the schema declares.  The pre-transform value is carried alongside in
  * @ref UfConfigValue.raw when a caller needs to see what the document said.
  */
-typedef enum UfConfigValueKind {
-    UF_CONFIG_KIND_INT = 0,   ///< signed 64-bit integer
-    UF_CONFIG_KIND_FLOAT,     ///< double
-    UF_CONFIG_KIND_BOOL,      ///< boolean
-    UF_CONFIG_KIND_STRING,    ///< UTF-8 text, not necessarily terminated
-    UF_CONFIG_KIND_BYTES,     ///< opaque bytes, possibly containing NUL
-    UF_CONFIG_KIND_ARRAY,     ///< ordered sequence, see @c as.array
-    UF_CONFIG_KIND_SCOPE,     ///< a table, read through the namespace API
-    UF_CONFIG_KIND_ABSENT     ///< no such field; @c present is false
-} UfConfigValueKind;
+typedef enum UfConfigValueType {
+    UF_CONFIG_VALUE_TYPE_INT = 0,   ///< signed 64-bit integer
+    UF_CONFIG_VALUE_TYPE_FLOAT,     ///< double
+    UF_CONFIG_VALUE_TYPE_BOOL,      ///< boolean
+    UF_CONFIG_VALUE_TYPE_STRING,    ///< UTF-8 text, not necessarily terminated
+    UF_CONFIG_VALUE_TYPE_BYTES,     ///< opaque bytes, possibly containing NUL
+    UF_CONFIG_VALUE_TYPE_ARRAY,     ///< ordered sequence, see @c as.array
+    UF_CONFIG_VALUE_TYPE_SCOPE,     ///< a table, read through the namespace API
+    UF_CONFIG_VALUE_TYPE_ABSENT     ///< no such field; @c present is false
+} UfConfigValueType;
 
 struct UfConfigFieldDesc;
 
@@ -132,14 +124,14 @@ struct UfConfigFieldDesc;
  * handle, or to survive an unrelated reload, must copy them.
  */
 typedef struct UfConfigValue {
-    UfConfigValueKind kind;      ///< which member of @c as is meaningful
+    UfConfigValueType value_type;
     bool              present;   ///< false when the field is absent
     union {
-        int64_t       i;         ///< KIND_INT
-        double        f;         ///< KIND_FLOAT
-        bool          b;         ///< KIND_BOOL
-        struct { const char *ptr; size_t len; } str;      ///< KIND_STRING
-        struct { const uint8_t *ptr; size_t len; } bytes; ///< KIND_BYTES
+        int64_t       i;         ///< INT
+        double        f;         ///< FLOAT
+        bool          b;         ///< BOOL
+        struct { const char *ptr; size_t len; } str;      ///< STRING
+        struct { const uint8_t *ptr; size_t len; } bytes; ///< BYTES
         struct { const struct UfConfigValue *elems; size_t count; } array; ///< KIND_ARRAY
     } as;
     const struct UfConfigFieldDesc *desc;  ///< schema descriptor; NULL if undeclared
@@ -182,7 +174,7 @@ typedef enum UfConfigReloadStatus {
  */
 typedef struct UfConfigReloadEntry {
     const char           *path;        ///< defining path of the field
-    UfConfigReloadStatus  status;      ///< what happened to it
+    UfConfigReloadStatus  reload_status;      ///< what happened to it
     unsigned char         old_digest[32]; ///< digest before, zero when added
     unsigned char         new_digest[32]; ///< digest after, zero when removed
     const char           *diagnostic;   ///< why, when rejected; may be NULL
@@ -210,10 +202,6 @@ typedef enum UfConfigLoadNoteKind {
 
 /*!
  * One non-fatal observation made during a load.
- *
- * A document may define a table and never reference it.  That is legal — the
- * root may be an explicit @c return block that does not mention it — but it is
- * usually a mistake, so it is reported rather than silently dropped.
  */
 typedef struct UfConfigLoadNote {
     UfConfigLoadNoteKind  kind;    ///< what was noted
@@ -239,7 +227,7 @@ typedef struct UfConfigLoadReport {
  * same thread, so a caller that wants to keep it must copy it.
  */
 typedef struct UfConfigError {
-    UfConfigStatus  status;      ///< mirrors the returned status
+    UfConfigOpStatus  status;      ///< mirrors the returned status
     const char     *field_path;  ///< offending field, or NULL
     const char     *validator;   ///< offending validator or transform, or NULL
     int             line;        ///< 1-based line, 0 when not applicable
@@ -293,35 +281,49 @@ typedef enum UfConfigLoadMode {
 
 /*!
  * A load's options.
- *
- * @c size must be set to @c sizeof(UfConfigLoadOptions) so that fields added in
- * a later version can be told apart from fields a caller left zero.
  */
 typedef struct UfConfigLoadOptions {
-    size_t             size;               ///< sizeof(UfConfigLoadOptions)
-    int                version;            ///< options version; use 1
     UfConfigLoadMode   mode;               ///< strict or lenient
-    const char *const *schema_files;       ///< additional schema files, or NULL
-    size_t             schema_file_count;  ///< number of entries in schema_files
     /*!
      * Resolves a substitution name to its value, or NULL when unknown.
      *
-     * Called with @c subst_ctx.  Supplying it enables the @c varsub transform;
-     * leaving it NULL makes a document using one fail with
-     * @c UF_CONFIG_ERR_SUBST_UNRESOLVED rather than substituting an empty
-     * string, because a silently blank value is harder to notice than a failure.
+     * The config document names values which the running process supplies — `$$name` or
+     * `$${name}`, with `\$$` a literal — and this is the only thing that can
+     * resolve them. What the value means is the caller's business: a path, a
+     * hostname, a flag, a secret; the module never inspects it and never
+     * treats it differently from any other value.
+     *
+     * The resolved text becomes the field's effective value; the document's own
+     * text stays in @ref UfConfigValue.raw, so a serialised form or a digest
+     * carries the reference rather than one process's answer.
+     *
+     * Returning NULL refuses the load with @c UF_CONFIG_ERR_SUBST_UNRESOLVED —
+     * deliberately not an empty string, because a silently blank value is
+     * harder to notice than a failure.
+     *
+     * Called during the build of a load, with the handle's build lock held and
+     * no exclusion of readers: it may take its time, but it must not call back
+     * into the same handle. The options are retained, so the callback and its
+     * context must stay valid for a later @ref UfConfigReload.
      */
     const char *(*subst_get)(void *ctx, const char *name);
-    void              *subst_ctx;          ///< passed to subst_get
-    bool               subst_recursive;    ///< whether substitutions recurse
+    void              *subst_ctx;          ///< passed to every subst_get call
+    /*!
+     * Whether a value the callback produced is itself searched for references.
+     *
+     * False resolves one pass. True re-runs the pass, at most eight times (practical safeguard), and
+     * stops at the first pass that changes nothing — which is both the natural
+     * end and the cycle guard, since a value referring to itself reproduces
+     * itself. Use it when a supplied value is itself a template; leave it off
+     * when a supplied value is data that may legitimately contain `$$`.
+     */
+    bool               subst_recursive;
 } UfConfigLoadOptions;
 
 /*!
  * Options for serialising a handle back out.
  */
 typedef struct UfConfigSerialiseOptions {
-    size_t size;        ///< sizeof(UfConfigSerialiseOptions)
-    int    version;     ///< options version; use 1
     bool   pretty;      ///< indent and break lines
     bool   expand;      ///< expand aliases to their contents
     bool   emit_defaults; ///< include fields that only carry a default
@@ -332,20 +334,20 @@ typedef struct UfConfigSerialiseOptions {
  *
  * The kind is an identity, not a capability: two drivers of the same kind may
  * declare different capabilities, and a caller choosing between them should
- * read @ref UfConfigDriverCaps rather than assume from the kind.
+ * read @ref UfConfigDriverCapabilities rather than assume from the kind.
  */
-typedef enum UfConfigBackendKind {
+typedef enum UfConfigBackendStore {
     UF_CONFIG_BACKEND_FILE = 1,  ///< a file on the local filesystem
     UF_CONFIG_BACKEND_MEM,       ///< process memory
     UF_CONFIG_BACKEND_REDIS,     ///< a Redis hash
     UF_CONFIG_BACKEND_SQL        ///< a relational table
-} UfConfigBackendKind;
+} UfConfigBackendStore;
 
 /*!
  * The type of one value in a pair.
  *
  * This is the type that crosses the driver boundary, which is why it is a
- * separate enumeration from @ref UfConfigValueKind: a store has to distinguish
+ * separate enumeration from @ref UfConfigValueType: a store has to distinguish
  * an empty table from an absent one, and has no use for the caller-facing
  * distinction between a table and a scope.
  */
@@ -359,10 +361,6 @@ typedef enum UfConfigPairType {
 
 /*!
  * One field, in the form that crosses the driver boundary.
- *
- * @c encoded is always the canonical-form scalar text, never a structure.  A
- * driver stores it verbatim and never interprets it, which is what keeps
- * canonicalisation on this side of the boundary.
  */
 typedef struct UfConfigFieldPair {
     const char      *path;     ///< full dotted path
@@ -403,7 +401,7 @@ typedef struct UfConfigStamp {
  * between a file and a server.  @c kind selects the member.
  */
 typedef struct UfConfigBackendSpec {
-    UfConfigBackendKind kind;  ///< selects the member of @c u
+    UfConfigBackendStore backend_store;  ///< selects the member of @c u
     union {
         struct {
             const char *path;      ///< file path
@@ -433,29 +431,11 @@ typedef struct UfConfigBackendSpec {
 } UfConfigBackendSpec;
 
 /*!
- * What a driver can do, declared rather than discovered.
- *
- * A driver states its capabilities up front so that the core can refuse an
- * operation the store cannot perform atomically, instead of attempting it and
- * leaving a half-written configuration behind.
- *
- * The declaration is also what makes a partial backend usable: a store offering
- * only bulk read and write is a legitimate driver and is used as one, rather
- * than being forced to emulate the operations it lacks.
+ * What a driver can do.
  */
-typedef struct UfConfigDriverCaps {
+typedef struct UfConfigDriverCapabilities {
     uint32_t    api_version;        ///< must equal UF_CONFIG_DRIVER_API_VERSION
-    /*!
-     * Which origin this driver serves.
-     *
-     * A property of the driver rather than a name the core matches against, so
-     * that a consumer can supply a driver for an origin the library already
-     * has a stand-in for.  Registering one for a kind already served replaces
-     * that driver — the later registration wins, which is what lets an
-     * application substitute a real store for a built-in placeholder without
-     * the library having to be rebuilt.
-     */
-    UfConfigBackendKind kind;
+    UfConfigBackendStore backend_store;  ///< which store this driver serves
     bool        atomic_write_all;   ///< write_all either lands wholly or not at all
     bool        atomic_write_one;   ///< write_one is atomic
     bool        per_field_read;     ///< read_one is supported
@@ -467,7 +447,7 @@ typedef struct UfConfigDriverCaps {
     uint32_t    max_value_bytes;    ///< largest value the store accepts, 0 if unbounded
     uint32_t    max_fields;         ///< most fields the store accepts, 0 if unbounded
     const char *name;               ///< stable name, for lookup and diagnostics
-} UfConfigDriverCaps;
+} UfConfigDriverCapabilities;
 
 /*!
  * The seven operations a backing store implements.
@@ -484,12 +464,12 @@ typedef struct UfConfigDriverCaps {
  * after a successful @c open.
  */
 typedef struct UfConfigDriver {
-    UfConfigDriverCaps caps;  ///< declared before any operation is attempted
+    UfConfigDriverCapabilities caps;  ///< declared before any operation is attempted
 
     /*!
      * Opens the store described by @c spec and stores its handle in @c *ctx.
      */
-    UfConfigStatus (*open)(void **ctx, const UfConfigBackendSpec *spec);
+    UfConfigOpStatus (*open)(void **ctx, const UfConfigBackendSpec *spec);
 
     /*!
      * Reads every pair in the configuration.
@@ -497,28 +477,28 @@ typedef struct UfConfigDriver {
      * The order pairs are returned in is not significant and is not required to
      * be stable; the core imposes an order of its own.
      */
-    UfConfigStatus (*read_all)(void *ctx, UfConfigFieldPair **out, size_t *n, UfConfigMeta *meta);
+    UfConfigOpStatus (*read_all)(void *ctx, UfConfigFieldPair **out, size_t *n, UfConfigMeta *meta);
 
     /*!
      * Replaces the configuration with @c in, atomically when the driver
      * declares @c atomic_write_all.
      */
-    UfConfigStatus (*write_all)(void *ctx, const UfConfigFieldPair *in, size_t n, const UfConfigMeta *meta);
+    UfConfigOpStatus (*write_all)(void *ctx, const UfConfigFieldPair *in, size_t n, const UfConfigMeta *meta);
 
     /*!
      * Reads a single pair.  Only called when @c per_field_read is declared.
      */
-    UfConfigStatus (*read_one)(void *ctx, const char *path, UfConfigFieldPair *out);
+    UfConfigOpStatus (*read_one)(void *ctx, const char *path, UfConfigFieldPair *out);
 
     /*!
      * Writes a single pair and bumps the store's version.
      */
-    UfConfigStatus (*write_one)(void *ctx, const char *path, const UfConfigFieldPair *in);
+    UfConfigOpStatus (*write_one)(void *ctx, const char *path, const UfConfigFieldPair *in);
 
     /*!
      * Reports a change token.  Only called when @c native_version is declared.
      */
-    UfConfigStatus (*stat)(void *ctx, UfConfigStamp *out);
+    UfConfigOpStatus (*stat)(void *ctx, UfConfigStamp *out);
 
     /*!
      * Releases the handle from @c open.
@@ -526,10 +506,8 @@ typedef struct UfConfigDriver {
     void (*close)(void *ctx);
 } UfConfigDriver;
 
-/*! Opaque.  Forward-declared rather than included: this header is reached by
-    every consumer of the module, and pulling the logger's whole interface in
-    for the sake of one pointer would make ufconfig's public contract depend on
-    the logger's. */
+/*! Opaque.  Forward-declared rather than included: this header is reached by every consumer of the module, and pulling the logger's whole interface in
+    for the sake of one pointer would make ufconfig's public contract depend on the logger's. */
 struct UfLogger;
 
 /*!
@@ -707,7 +685,7 @@ typedef struct UfConfigDescriptor {
      * re-supplying it on every load — and so that reload and persist
      * unambiguously know where the content came from.
      */
-    UfConfigBackendKind kind;      ///< which endpoint below applies
+    UfConfigBackendStore backend;   ///< data backing for the config
 
     UfConfigBackend    redis;     ///< read when @c kind is REDIS
     UfConfigBackend    sql;       ///< read when @c kind is SQL
@@ -729,6 +707,20 @@ typedef struct UfConfigDescriptor {
      * once the call returns.
      */
     const char        *config_file_secrets;
+
+    /*!
+     * The document a FILE handle writes back to.
+     *
+     * Optional.  When set it is the destination @ref UfConfigPersist writes;
+     * when NULL, persist reuses the path the handle was loaded from, and
+     * failing that writes `ufconfig.dumped.config` in the process's current
+     * directory.  Reading is unaffected: a handle reads the document
+     * @ref UfConfigLoadFile names.
+     *
+     * Copied at @ref UfConfigCreate, so the caller's buffer may go out of
+     * scope once the call returns.
+     */
+    const char        *config_file_path;
 } UfConfigDescriptor;
 
 #ifdef __cplusplus

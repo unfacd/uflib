@@ -35,7 +35,7 @@ extern const UfConfigFieldDesc g_ufconfig_fields[];
 extern const int               g_ufconfig_field_count;
 extern int                     UfConfigLookupPath(const char *path);
 
-typedef UfConfigStatus (*SerialiseFn)(const UfConfig *h, char **out);
+typedef UfConfigOpStatus (*SerialiseFn)(const UfConfig *h, char **out);
 
 static int sWrite(const char *path, const char *text) {
     FILE *f = fopen(path, "wb");
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     d.fields          = g_ufconfig_fields;
     d.field_count     = (size_t)g_ufconfig_field_count;
     d.lookup          = UfConfigLookupPath;
-    d.kind            = UF_CONFIG_BACKEND_SQL;
+    d.backend            = UF_CONFIG_BACKEND_SQL;
     d.sql.address     = dsn;
     d.sql.ns          = ns;
     d.sql.config_name = cfg;
@@ -80,12 +80,10 @@ int main(int argc, char **argv) {
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size    = sizeof(opt);
-    opt.version = 1;
     opt.mode    = UF_CONFIG_LOAD_STRICT;
 
     /* The store is the origin here — no file is read at all. */
-    UfConfigStatus st = UfConfigLoad(h, &opt, NULL);
+    UfConfigOpStatus st = UfConfigLoad(h, &opt, NULL);
     if (st != UF_CONFIG_OK) {
         fprintf(stderr, "loading from %s/%s: %s (%s)\n", ns, cfg,
                 UfConfigStatusString(st), UfConfigLastError()->message);
@@ -104,7 +102,7 @@ int main(int argc, char **argv) {
     int failures = 0;
     for (size_t i = 0; i < sizeof(forms) / sizeof(forms[0]); i++) {
         char *text = NULL;
-        UfConfigStatus s = forms[i].fn(h, &text);
+        UfConfigOpStatus s = forms[i].fn(h, &text);
         if (s != UF_CONFIG_OK || !text) {
             printf("  %-5s FAILED: %s\n", forms[i].ext, UfConfigStatusString(s));
             failures++;

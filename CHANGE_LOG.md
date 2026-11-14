@@ -1,5 +1,23 @@
 # Change Log — uflib
 
+## Release-261115 — 4.1.0
+`59d8a99c` → `ac5afeaf` · 2026-10-04 → 2026-11-15
+
+### New
+- **SQLite backend** — opt-in behind `UFLIB_CAPABILITY_SQLITE`: + prepared statements cache. 
+- **RFC 6455** — private ip addresses introspection
+- **Resource router** — a path-keyed route registry 
+- **file_loader** — 
+
+### Fixes
+- **file_loader concurrency** — a stale handle is rejected instead of serving the slot's new occupant; a removal racing a load reports `ESTALE`, not `ENOENT`; a node publishes only after the map insert succeeds and the watch is registered first; mappings survive a removal that overtakes a load; a recycled node is reset field by field, and the monitor is reaped once
+- **hashtable** — merge and insert take no nested locks, a refused merge says so instead of returning zero, the stored container is resolved before keys are compared, probes are bounded, NULL keys are guarded, and references are counted once
+
+### Deprecated
+- (none)
+
+### Removed
+
 ## Release-261004 — 4.0.1
 `f8a4728d` → `7cc243b5` · 2026-10-01 → 2026-10-03
 
