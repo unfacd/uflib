@@ -73,7 +73,7 @@ static UfConfigPairType sVTypeOf(const char *encoded) {
     return UF_PAIR_INT;
 }
 
-static UfConfigStatus sRedisOpen(void **ctx, const UfConfigBackendSpec *spec) {
+static UfConfigOpStatus sRedisOpen(void **ctx, const UfConfigBackendSpec *spec) {
     if (!ctx || !spec) return UF_CONFIG_ERR_INVALID_ARG;
 
     const char *host = spec->u.redis.host ? spec->u.redis.host : "127.0.0.1";
@@ -115,7 +115,7 @@ static UfConfigStatus sRedisOpen(void **ctx, const UfConfigBackendSpec *spec) {
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sRedisReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
+static UfConfigOpStatus sRedisReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
                                    UfConfigMeta *meta) {
     RedisCtx *c = (RedisCtx *)ctx;
     if (!c) return UF_CONFIG_ERR_INVALID_ARG;
@@ -165,7 +165,7 @@ static UfConfigStatus sRedisReadAll(void *ctx, UfConfigFieldPair **out, size_t *
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sRedisWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n,
+static UfConfigOpStatus sRedisWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n,
                                     const UfConfigMeta *meta) {
     RedisCtx *c = (RedisCtx *)ctx;
     if (!c) return UF_CONFIG_ERR_INVALID_ARG;
@@ -207,7 +207,7 @@ static UfConfigStatus sRedisWriteAll(void *ctx, const UfConfigFieldPair *in, siz
     return ok ? UF_CONFIG_OK : UF_CONFIG_ERR_BACKEND;
 }
 
-static UfConfigStatus sRedisReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
+static UfConfigOpStatus sRedisReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
     RedisCtx *c = (RedisCtx *)ctx;
     if (!c || !path || !out) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -222,7 +222,7 @@ static UfConfigStatus sRedisReadOne(void *ctx, const char *path, UfConfigFieldPa
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sRedisWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
+static UfConfigOpStatus sRedisWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
     RedisCtx *c = (RedisCtx *)ctx;
     if (!c || !path || !in) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -237,7 +237,7 @@ static UfConfigStatus sRedisWriteOne(void *ctx, const char *path, const UfConfig
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sRedisStat(void *ctx, UfConfigStamp *out) {
+static UfConfigOpStatus sRedisStat(void *ctx, UfConfigStamp *out) {
     RedisCtx *c = (RedisCtx *)ctx;
     if (!c || !out) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -257,7 +257,7 @@ static void sRedisClose(void *ctx) {
 const UfConfigDriver ufconfig_driver_redis = {
     .caps = {
         .api_version       = UF_CONFIG_DRIVER_API_VERSION,
-        .kind              = UF_CONFIG_BACKEND_REDIS,
+        .backend_store              = UF_CONFIG_BACKEND_REDIS,
         .atomic_write_all  = true,
         .atomic_write_one  = true,
         .per_field_read    = true,

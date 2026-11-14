@@ -109,15 +109,15 @@ static void sAddChild(UfNode *parent, UfNode *c)
   }
 }
 
-static UfConfigStatus sParseValue(P *p, UfNode **out);
+static UfConfigOpStatus sParseValue(P *p, UfNode **out);
 
-static UfConfigStatus sRejectExpr(P *p, const char *name)
+static UfConfigOpStatus sRejectExpr(P *p, const char *name)
 {
   ConfigSetError(UF_CONFIG_ERR_PARSE, NULL, name, p->line, p->col, "evaluation construct rejected: %s", name);
   return UF_CONFIG_ERR_PARSE;
 }
 
-static UfConfigStatus sParseString(P *p, char **out, size_t *olen)
+static UfConfigOpStatus sParseString(P *p, char **out, size_t *olen)
 {
   char   q   = sGetc(p);
   size_t cap = 64, n = 0;
@@ -173,9 +173,9 @@ static UfConfigStatus sParseString(P *p, char **out, size_t *olen)
   return *out ? UF_CONFIG_OK : UF_CONFIG_ERR_NO_MEMORY;
 }
 
-static UfConfigStatus sParseTable(P *p, UfNode *tbl);
+static UfConfigOpStatus sParseTable(P *p, UfNode *tbl);
 
-static UfConfigStatus sParseValue(P *p, UfNode **out)
+static UfConfigOpStatus sParseValue(P *p, UfNode **out)
 {
   sSkipWsComments(p);
   if (p->depth > PRIV_CONFIG_DEFAULT_UFCONFIG_MAX_DEPTH) {
@@ -187,12 +187,12 @@ static UfConfigStatus sParseValue(P *p, UfNode **out)
   if (c == '"' || c == '\'') {
     char *         s;
     size_t         n;
-    UfConfigStatus st = sParseString(p, &s, &n);
+    UfConfigOpStatus st = sParseString(p, &s, &n);
     if (st) return st;
     sSkipWsComments(p);
     if (sPeek(p) == '.' && sPeekn(p, 1) == '.') return sRejectExpr(p, "concat");
     UfNode *nd    = sMk(p, UF_NODE_LEAF, NULL, 0);
-    nd->vkind     = UF_CONFIG_KIND_STRING;
+    nd->value_type     = UF_CONFIG_VALUE_TYPE_STRING;
     nd->v.s.raw     = s;
     nd->v.s.raw_len = n;
     nd->v.s.eff     = s;
@@ -203,7 +203,7 @@ static UfConfigStatus sParseValue(P *p, UfNode **out)
   if (c == '{') {
     p->depth++;
     UfNode *       nd = sMk(p, UF_NODE_SCOPE, NULL, 0);
-    UfConfigStatus st = sParseTable(p, nd);
+    UfConfigOpStatus st = sParseTable(p, nd);
     p->depth--;
     *out = nd;
     return st;
@@ -215,21 +215,21 @@ static UfConfigStatus sParseValue(P *p, UfNode **out)
     const char *id  = p->s + start;
     if (len == 4 && memcmp(id, "true", 4) == 0) {
       UfNode *nd = sMk(p, UF_NODE_LEAF, NULL, 0);
-      nd->vkind  = UF_CONFIG_KIND_BOOL;
+      nd->value_type  = UF_CONFIG_VALUE_TYPE_BOOL;
       nd->v.b.raw  = nd->v.b.eff = true;
       *out       = nd;
       return UF_CONFIG_OK;
     }
     if (len == 5 && memcmp(id, "false", 5) == 0) {
       UfNode *nd = sMk(p, UF_NODE_LEAF, NULL, 0);
-      nd->vkind  = UF_CONFIG_KIND_BOOL;
+      nd->value_type  = UF_CONFIG_VALUE_TYPE_BOOL;
       nd->v.b.raw  = nd->v.b.eff = false;
       *out       = nd;
       return UF_CONFIG_OK;
     }
     if (len == 3 && memcmp(id, "nil", 3) == 0) {
       UfNode *nd = sMk(p, UF_NODE_LEAF, NULL, 0);
-      nd->vkind  = UF_CONFIG_KIND_ABSENT;
+      nd->value_type  = UF_CONFIG_VALUE_TYPE_ABSENT;
       *out       = nd;
       return UF_CONFIG_OK;
     }
@@ -270,7 +270,7 @@ static UfConfigStatus sParseValue(P *p, UfNode **out)
       }
       if (neg) f = -f;
       UfNode *nd = sMk(p, UF_NODE_LEAF, NULL, 0);
-      nd->vkind  = UF_CONFIG_KIND_FLOAT;
+      nd->value_type  = UF_CONFIG_VALUE_TYPE_FLOAT;
       nd->v.f.raw  = nd->v.f.eff = f;
       *out       = nd;
       return UF_CONFIG_OK;
@@ -281,7 +281,7 @@ static UfConfigStatus sParseValue(P *p, UfNode **out)
     if (nx == '+' || nx == '*' || nx == '/' || nx == '%') return sRejectExpr(p, "arithmetic");
     if (nx == '<' || nx == '>' || nx == '=') return sRejectExpr(p, "comparison");
     UfNode *nd = sMk(p, UF_NODE_LEAF, NULL, 0);
-    nd->vkind  = UF_CONFIG_KIND_INT;
+    nd->value_type  = UF_CONFIG_VALUE_TYPE_INT;
     nd->v.i.raw  = nd->v.i.eff = v;
     *out       = nd;
     return UF_CONFIG_OK;
@@ -291,7 +291,7 @@ static UfConfigStatus sParseValue(P *p, UfNode **out)
   return UF_CONFIG_ERR_PARSE;
 }
 
-static UfConfigStatus sParseTable(P *p, UfNode *tbl)
+static UfConfigOpStatus sParseTable(P *p, UfNode *tbl)
 {
   sSkipWsComments(p);
   if (sPeek(p) != '{') {
@@ -333,7 +333,7 @@ static UfConfigStatus sParseTable(P *p, UfNode *tbl)
       nlen = strlen(namebuf);
     }
     UfNode *       val = NULL;
-    UfConfigStatus st  = sParseValue(p, &val);
+    UfConfigOpStatus st  = sParseValue(p, &val);
     if (st) return st;
     val->name = ConfigArenaStrndup(&p->h->arena, namebuf, nlen);
     val->parent = tbl;
@@ -372,7 +372,7 @@ done_table: {
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigParseLuaStyle(UfConfig *h, const char *src, size_t len, UfNode **out_root)
+UfConfigOpStatus ConfigParseLuaStyle(UfConfig *h, const char *src, size_t len, UfNode **out_root)
 {
   P       p        = {.s = src, .n = len, .i = 0, .line = 1, .col = 1, .h = h, .depth = 0};
   UfNode *bindings = sMk(&p, UF_NODE_SCOPE, "", 0);
@@ -390,7 +390,7 @@ UfConfigStatus ConfigParseLuaStyle(UfConfig *h, const char *src, size_t len, UfN
       sSkipWsComments(&p);
       if (nlen == 6 && memcmp(id, "return", 6) == 0) {
         UfNode *       v  = NULL;
-        UfConfigStatus st = sParseValue(&p, &v);
+        UfConfigOpStatus st = sParseValue(&p, &v);
         if (st) return st;
         ret_root = v;
         continue;
@@ -402,7 +402,7 @@ UfConfigStatus ConfigParseLuaStyle(UfConfig *h, const char *src, size_t len, UfN
       sGetc(&p);
       sSkipWsComments(&p);
       UfNode *       v  = NULL;
-      UfConfigStatus st = sParseValue(&p, &v);
+      UfConfigOpStatus st = sParseValue(&p, &v);
       if (st) return st;
       sSkipWsComments(&p);
       char nx = sPeek(&p);
@@ -448,25 +448,25 @@ static UfNode *sFindBinding(UfNode *root, const char *name)
   return NULL;
 }
 
-static UfConfigStatus sResolveOne(UfConfig *h, UfNode *n, int depth, UfNode **stack, int sp);
+static UfConfigOpStatus sResolveOne(UfConfig *h, UfNode *root, UfNode *n, int depth, UfNode **stack, int sp);
 
-static UfConfigStatus sResolveTree(UfConfig *h, UfNode *n, int depth, UfNode **stack, int sp)
+static UfConfigOpStatus sResolveTree(UfConfig *h, UfNode *root, UfNode *n, int depth, UfNode **stack, int sp)
 {
   for (UfNode *c = n->first_child; c; c = c->next_sibling) {
     if (c->name && strcmp(c->name, "#bindings") == 0) {
       for (UfNode *b = c->first_child; b; b = b->next_sibling) {
-        UfConfigStatus st = sResolveOne(h, b, depth, stack, sp);
+        UfConfigOpStatus st = sResolveOne(h, root, b, depth, stack, sp);
         if (st) return st;
       }
       continue;
     }
-    UfConfigStatus st = sResolveOne(h, c, depth, stack, sp);
+    UfConfigOpStatus st = sResolveOne(h, root, c, depth, stack, sp);
     if (st) return st;
   }
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sResolveOne(UfConfig *h, UfNode *n, int depth, UfNode **stack, int sp)
+static UfConfigOpStatus sResolveOne(UfConfig *h, UfNode *root, UfNode *n, int depth, UfNode **stack, int sp)
 {
   if (n->kind == UF_NODE_ALIAS) {
     if (depth >= PRIV_CONFIG_DEFAULT_UFCONFIG_MAX_ALIAS_DEPTH) {
@@ -487,13 +487,13 @@ static UfConfigStatus sResolveOne(UfConfig *h, UfNode *n, int depth, UfNode **st
         return UF_CONFIG_ERR_CYCLE;
       }
     }
-    UfNode *tgt = sFindBinding(h->root ? h->root : n, n->alias_target);
+    UfNode *tgt = sFindBinding(root, n->alias_target);
     if (!tgt) {
       UfNode *top = n;
       while (top->parent) top = top->parent;
       tgt = sFindBinding(top, n->alias_target);
     }
-    if (!tgt && h->root) tgt = sFindBinding(h->root, n->alias_target);
+    if (!tgt) tgt = sFindBinding(root, n->alias_target);
     if (!tgt) {
       ConfigSetError(UF_CONFIG_ERR_ALIAS_UNRESOLVED, n->name, NULL, n->line, n->column,
                      "alias '%s' unresolved (target '%s')", n->name ? n->name : "?", n->alias_target);
@@ -505,34 +505,34 @@ static UfConfigStatus sResolveOne(UfConfig *h, UfNode *n, int depth, UfNode **st
     }
     stack[sp] = n;
     if (tgt->kind == UF_NODE_ALIAS) {
-      UfConfigStatus st = sResolveOne(h, tgt, depth + 1, stack, sp + 1);
+      UfConfigOpStatus st = sResolveOne(h, root, tgt, depth + 1, stack, sp + 1);
       if (st) return st;
       n->resolved = tgt->resolved ? tgt->resolved : tgt;
     }
     else {
       n->resolved       = tgt;
-      UfConfigStatus st = sResolveTree(h, tgt, depth + 1, stack, sp + 1);
+      UfConfigOpStatus st = sResolveTree(h, root, tgt, depth + 1, stack, sp + 1);
       if (st) return st;
     }
     return UF_CONFIG_OK;
   }
-  if (n->kind == UF_NODE_SCOPE) return sResolveTree(h, n, depth, stack, sp);
+  if (n->kind == UF_NODE_SCOPE) return sResolveTree(h, root, n, depth, stack, sp);
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigResolveAliases(UfConfig *h, UfNode *root)
+UfConfigOpStatus ConfigResolveAliases(UfConfig *h, UfNode *root)
 {
   UfNode *stack[PRIV_CONFIG_DEFAULT_UFCONFIG_MAX_ALIAS_DEPTH + 4];
-  h->root = root;
+  (void)h;
   for (UfNode *c = root->first_child; c; c = c->next_sibling) {
     if (c->name && strcmp(c->name, "#bindings") == 0) {
       for (UfNode *b = c->first_child; b; b = b->next_sibling) {
-        UfConfigStatus st = sResolveOne(h, b, 0, stack, 0);
+        UfConfigOpStatus st = sResolveOne(h, root, b, 0, stack, 0);
         if (st) return st;
       }
     }
   }
-  return sResolveOne(h, root, 0, stack, 0);
+  return sResolveOne(h, root, root, 0, stack, 0);
 }
 
 /*!
@@ -611,47 +611,47 @@ UfNode *ConfigFindPath(UfNode *root, const char *path)
   return cur;
 }
 
-UfConfigStatus ConfigNodeToValue(const UfNode *n, UfConfigValue *out)
+UfConfigOpStatus ConfigNodeToValue(const UfNode *n, UfConfigValue *out)
 {
   memset(out, 0, sizeof(*out));
   if (!n) {
-    out->kind    = UF_CONFIG_KIND_ABSENT;
+    out->value_type    = UF_CONFIG_VALUE_TYPE_ABSENT;
     out->present = false;
     return UF_CONFIG_ERR_NOFIELD;
   }
   out->present = true;
   out->desc    = n->desc;
   if (n->kind == UF_NODE_ARRAY) {
-    out->kind           = UF_CONFIG_KIND_ARRAY;
+    out->value_type           = UF_CONFIG_VALUE_TYPE_ARRAY;
     out->as.array.elems = NULL;
     out->as.array.count = n->array_count;
     return UF_CONFIG_OK;
   }
   if (n->kind == UF_NODE_ALIAS || n->kind == UF_NODE_SCOPE) {
-    out->kind = UF_CONFIG_KIND_SCOPE;
+    out->value_type = UF_CONFIG_VALUE_TYPE_SCOPE;
     return UF_CONFIG_OK;
   }
-  out->kind = n->vkind;
-  switch (n->vkind) {
-  case UF_CONFIG_KIND_INT:
+  out->value_type = n->value_type;
+  switch (n->value_type) {
+  case UF_CONFIG_VALUE_TYPE_INT:
     out->as.i = n->v.i.eff;
     out->raw.i = n->v.i.raw;
     break;
-  case UF_CONFIG_KIND_FLOAT:
+  case UF_CONFIG_VALUE_TYPE_FLOAT:
     out->as.f = n->v.f.eff;
     out->raw.f = n->v.f.raw;
     break;
-  case UF_CONFIG_KIND_BOOL:
+  case UF_CONFIG_VALUE_TYPE_BOOL:
     out->as.b = n->v.b.eff;
     out->raw.b = n->v.b.raw;
     break;
-  case UF_CONFIG_KIND_STRING:
+  case UF_CONFIG_VALUE_TYPE_STRING:
     out->as.str.ptr = n->v.s.eff;
     out->as.str.len  = n->v.s.eff_len;
     out->raw.str.ptr = n->v.s.raw;
     out->raw.str.len = n->v.s.raw_len;
     break;
-  case UF_CONFIG_KIND_BYTES:
+  case UF_CONFIG_VALUE_TYPE_BYTES:
     out->as.bytes.ptr = (const uint8_t*)n->v.s.eff;
     out->as.bytes.len = n->v.s.eff_len;
     break;

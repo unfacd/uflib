@@ -5,18 +5,28 @@
 #define UFLIB_DB_DB_SQL_H
 
 #include <uflib/uflib_defs.h>
+#include <config_uflib.h>
+
+#if defined(UFLIB_CAPABILITY_SQLITE) && !defined(_HOEL_SQLITE)
+#define _HOEL_SQLITE 1
+#endif
 
 #include <time.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <uflib/exponential_backoff/exponential_backoff_type.h>
+#include <uflib/collection_descriptor_type.h>
+#ifdef UFLIB_CAPABILITY_SQL
 #include <mariadb/mysql.h>
+#endif
 
 #ifdef _HOEL_SQLITE
 #define HOEL_DB_TYPE_SQLITE  0
 #endif
 
+#if defined(_HOEL_MARIADB) || defined(UFLIB_CAPABILITY_SQL)
 #define HOEL_DB_TYPE_MARIADB 1
+#endif
 
 #ifdef _HOEL_PGSQL
 #define HOEL_DB_TYPE_PGSQL   2
@@ -40,7 +50,9 @@
 #define H_OPTION_SELECT 0x0001 // Execute a SELECT statement
 #define H_OPTION_EXEC   0x0010 // Execute an INSERT, UPDATE or DELETE statement
 
+#ifdef UFLIB_CAPABILITY_SQL
 #define MYSQL_HANDLE(x)	(((struct _h_mariadb *)x->connection)->db_handle)
+#endif
 
 /**
  * handle container
@@ -57,7 +69,7 @@ typedef struct _h_connection DbBackend;
  * sql value integer type
  */
 struct _h_type_int {
-  uint64_t value;
+  int64_t value;
 };
 
 /**
@@ -107,6 +119,8 @@ struct _h_result {
   struct _h_data ** data;
 };
 
+#define AS_H_RESULT(x) ((struct _h_result *)(x))
+
 /**
  * AA+
  * Abstraction around statement object
@@ -115,7 +129,9 @@ struct _h_statement {
     void * t_data;
 };
 
+#ifdef UFLIB_CAPABILITY_SQL
 #define AS_MARIADB_STATEMENT(x) ((MYSQL_STMT *)(x))
+#endif
 
 PUBLIC_API void InitMysql (void);
 struct _h_connection *InitialiseDbBackend (void);
@@ -145,6 +161,16 @@ PUBLIC_API __attribute_used__ char * h_escape_string(const struct _h_connection 
  * return H_OK on success
  */
 PUBLIC_API int h_execute_query(struct _h_connection * conn, const char * query, struct _h_result * result, int options);
+
+/**
+ * h_execute_query_ex
+ * As h_execute_query, with control over whether a multi-statement batch is
+ * applied atomically. `is_atomic` true wraps the batch in a transaction and
+ * rolls it back if any statement fails; false leaves the statements applied
+ * up to the point of failure
+ * return H_OK on success
+ */
+PUBLIC_API int h_execute_query_ex(struct _h_connection * conn, const char * query, struct _h_result * result, int options, bool is_atomic);
 
 /**
  * h_query_insert
@@ -180,6 +206,101 @@ PUBLIC_API int h_query_delete(struct _h_connection * conn, const char * query);
  * return H_OK on success
  */
 PUBLIC_API int h_query_select(struct _h_connection * conn, const char * query, struct _h_result * result);
+
+/**
+ * h_execute_query_collect
+ * Execute every statement in the query, appending one `struct _h_result *` per
+ * statement to `results`. Statements that produce no columns carry nb_rows 0
+ * and nb_columns 0. On failure, the results of the statements that completed
+ * precede `failed_index` and remain owned by the caller.
+ * @param failed_index ordinal of the statement that failed, 0 on success
+ * return H_OK on success
+ */
+PUBLIC_API int h_execute_query_collect(struct _h_connection * conn, const char * query, CollectionDescriptor * results, size_t * failed_index);
+
+/**
+ * h_execute_query_collect_ex
+ * As h_execute_query_collect, with control over whether the batch is applied
+ * atomically. On an atomic failure, `results` is left empty
+ * return H_OK on success
+ */
+PUBLIC_API int h_execute_query_collect_ex(struct _h_connection * conn, const char * query, CollectionDescriptor * results, size_t * failed_index, bool is_atomic);
+
+/**
+ * h_clean_results
+ * Release every result held by a collection built by h_execute_query_collect,
+ * then the collection itself
+ */
+PUBLIC_API void h_clean_results(CollectionDescriptor * results);
+
+/**
+ * h_migration_step_fn
+ * The C half of a migration step, run inside the step's transaction after its
+ * SQL. Anything it executes must use the `_ex` verbs with `is_atomic` false:
+ * the step already holds the transaction.
+ * return H_OK to keep the step, anything else rolls it back
+ */
+typedef int (*h_migration_step_fn)(struct _h_connection * conn, void * context);
+
+/**
+ * h_execute_migration
+ * Apply one schema step as a single transaction: foreign keys are disabled for
+ * the step, `BEGIN IMMEDIATE` is taken, `query` runs statement by statement,
+ * `step_fn` runs, `PRAGMA foreign_key_check` must come back empty,
+ * `PRAGMA user_version` is set to `target_version`, and the step is committed.
+ * Any failure rolls the whole step back, `user_version` included, and foreign
+ * keys are re-enabled before returning.
+ * @param query SQL of the step, or NULL for a step that only calls step_fn
+ * @param target_version value for PRAGMA user_version, 0 or greater
+ * @param failed_offset byte offset in `query` of the statement that failed, 0 on success
+ * return H_OK on success
+ */
+PUBLIC_API int h_execute_migration(struct _h_connection * conn, const char * query, h_migration_step_fn step_fn,
+                                   void * context, int target_version, size_t * failed_offset);
+
+/**
+ * h_last_error_message
+ * Copy the backend's text for the most recent failure into `out`, truncated to
+ * `cap`. Read it before the next call on the connection replaces it
+ * return H_OK on success
+ */
+PUBLIC_API int h_last_error_message(const struct _h_connection * conn, char * out, size_t cap);
+
+typedef struct UfDbStatement UfDbStatement;
+
+/**
+ * UfDbStatementPrepare
+ * Prepare a single statement with bindable parameters, for a sqlite connection.
+ * A second statement in the string is refused, so a value can never extend the
+ * statement it is bound to. Returns NULL on error
+ */
+PUBLIC_API UfDbStatement * UfDbStatementPrepare(struct _h_connection * conn, const char * sql_statement);
+
+PUBLIC_API int UfDbStatementBindInt(UfDbStatement * statement, unsigned int index, int64_t value);
+PUBLIC_API int UfDbStatementBindDouble(UfDbStatement * statement, unsigned int index, double value);
+PUBLIC_API int UfDbStatementBindText(UfDbStatement * statement, unsigned int index, const char * value, size_t length);
+PUBLIC_API int UfDbStatementBindBlob(UfDbStatement * statement, unsigned int index, const void * value, size_t length);
+PUBLIC_API int UfDbStatementBindNull(UfDbStatement * statement, unsigned int index);
+
+/**
+ * UfDbStatementStep
+ * Advance the statement. `has_row` is set true when a row is available, false
+ * once the statement is done
+ * return H_OK on success
+ */
+PUBLIC_API int UfDbStatementStep(UfDbStatement * statement, bool * has_row);
+
+/**
+ * UfDbStatementColumn
+ * Return the value of a column of the current row. The caller releases it with
+ * h_clean_data_full()
+ * return NULL on error
+ */
+PUBLIC_API struct _h_data * UfDbStatementColumn(UfDbStatement * statement, unsigned int index);
+
+PUBLIC_API int UfDbStatementReset(UfDbStatement * statement);
+PUBLIC_API int UfDbStatementClearBindings(UfDbStatement * statement);
+PUBLIC_API void UfDbStatementFinalize(UfDbStatement * statement);
 
 #if 0
 /**
@@ -308,7 +429,7 @@ PUBLIC_API int h_result_add_row(struct _h_result * result, struct _h_data * row,
  * return pointer to the new structure
  * return NULL on error
  */
-struct _h_data * h_new_data_int(const uint64_t value);
+struct _h_data * h_new_data_int(const int64_t value);
 
 /**
  * Allocate memory for a new struct _h_data * containing a double
@@ -431,13 +552,17 @@ PUBLIC_API int h_select_query_sqlite(const struct _h_connection * conn, const ch
  */
 PUBLIC_API int h_exec_query_sqlite(const struct _h_connection * conn, const char * query);
 
-/**
- * h_execute_query_json_sqlite
- * Execute a query on a sqlite connection, set the returned values in the json result
- * Should not be executed by the user because all parameters are supposed to be correct
- * return H_OK on success
- */
-PUBLIC_API int h_execute_query_json_sqlite(const struct _h_connection * conn, const char * query, json_t ** j_result);
+PUBLIC_API int h_exec_query_sqlite_ex(const struct _h_connection * conn, const char * query, bool is_atomic);
+
+PUBLIC_API int h_select_query_sqlite_ex(const struct _h_connection * conn, const char * query, struct _h_result * result, bool is_atomic);
+
+PUBLIC_API int h_execute_query_collect_sqlite(const struct _h_connection * conn, const char * query, CollectionDescriptor * results, size_t * failed_index);
+
+PUBLIC_API int h_execute_query_collect_sqlite_ex(const struct _h_connection * conn, const char * query, CollectionDescriptor * results, size_t * failed_index, bool is_atomic);
+
+PUBLIC_API int h_execute_migration_sqlite(struct _h_connection * conn, const char * query, h_migration_step_fn step_fn, void * context, int target_version, size_t * failed_offset);
+
+PUBLIC_API int h_last_error_message_sqlite(const struct _h_connection * conn, char * out, size_t cap);
 #endif
 
 
@@ -493,7 +618,9 @@ PUBLIC_API int h_execute_query_json_mariadb(const struct _h_connection * conn, c
  */
 struct _h_data * h_get_mariadb_value(const char * value, const unsigned long length, const int m_type);
 
+#ifdef UFLIB_CAPABILITY_SQL
 MYSQL_STMT *h_statement_prepare_mariadb(struct _h_connection *conn, const char *sql_statement, size_t sql_statement_sz);
+#endif
 
 #ifdef _HOEL_PGSQL
 /**

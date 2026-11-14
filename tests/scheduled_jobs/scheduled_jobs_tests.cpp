@@ -52,7 +52,7 @@ static long long sAdvanceTime(long long delta_us)
 /* ── Fake callbacks ───────────────────────────────────────────────── */
 
 extern "C" {
-static int sFakeOnRun(void * /*job_ctx*/, void * /*client_ctx*/)
+static int sFakeOnRun(ScheduledJob * /*job_ctx*/, void * /*client_ctx*/)
 {
     return 0;
 }

@@ -156,5 +156,6 @@ PUBLIC_API bool IsPrimeNumber (size_t x);
  PUBLIC_API void GenerateEtag(struct stat *st, char etag[_CONFIGDEFAULT_ETAG_SIZE]);
 
  PUBLIC_API uint64_t inthash_u64(uint64_t key, size_t key_len);
+ PUBLIC_API uint64_t hash_bytes_u64(const uint8_t *key_bytes, size_t key_len);
 
 #endif

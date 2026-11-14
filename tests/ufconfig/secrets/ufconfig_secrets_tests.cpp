@@ -57,8 +57,6 @@ std::string Fixture(const char *leaf) {
 
 UfConfigLoadOptions Lenient() {
     UfConfigLoadOptions opt = {};
-    opt.size    = sizeof(opt);
-    opt.version = 1;
     opt.mode    = UF_CONFIG_LOAD_LENIENT;
     return opt;
 }
@@ -69,7 +67,7 @@ UfConfigLoadOptions Lenient() {
  * @p secrets_path is what the descriptor advertises.  NULL means the descriptor
  * names none, which is the case that consults `./ufconfig.secrets`.
  */
-UfConfigStatus CreateWith(const char *secrets_path, UfConfig **out) {
+UfConfigOpStatus CreateWith(const char *secrets_path, UfConfig **out) {
     UfConfigDescriptor descriptor;
     memset(&descriptor, 0, sizeof(descriptor));
     descriptor.fields              = g_ufconfig_fields;
@@ -165,7 +163,7 @@ TEST(UfConfigSecrets, ReferenceProducedEnvelopesDecryptToTheirPlaintexts) {
 
     UfConfigValue v;
     ASSERT_EQ(UfConfigGetField(h, "app.db_password", &v), UF_CONFIG_OK);
-    ASSERT_EQ(v.kind, UF_CONFIG_KIND_STRING);
+    ASSERT_EQ(v.value_type, UF_CONFIG_VALUE_TYPE_STRING);
     EXPECT_EQ(std::string(v.as.str.ptr, v.as.str.len), "correct-horse");
 
     ASSERT_EQ(UfConfigGetField(h, "app.api_token", &v), UF_CONFIG_OK);

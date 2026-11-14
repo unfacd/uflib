@@ -46,7 +46,7 @@ static long long sFakeGetTime(void)
 
 static ScheduledJobType s_job_type;
 
-static int sFakeOnRun(void *ctx, void *data)
+static int sFakeOnRun(ScheduledJob *ctx, void *data)
 {
     (void)ctx;
     (void)data;

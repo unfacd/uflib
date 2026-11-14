@@ -84,7 +84,7 @@ static char *CatStrLen(char *Dest, const char *Src, size_t len)
   char *dst;
   int dstlen;
 
-  dstlen=strlen(Dest);
+  dstlen=Dest ? strlen(Dest) : 0;
   Dest=SetStrLen(Dest,dstlen+len);
   dst=Dest+dstlen;
   src=Src;

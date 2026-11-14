@@ -659,6 +659,12 @@ RecyclerGetClientContextData(InstanceHolder *instance_holder_ptr)
   return GetInstance(instance_holder_ptr);
 }
 
+ClientContextData *
+RecyclerGetClientContextDataFromItemContainer(ItemContainer *item_container)
+{
+  return RecyclerGetClientContextData(item_container);
+}
+
 int
 RecyclerDestroyInstance(InstanceHolder *instance_holder_ptr)
 {

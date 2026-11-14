@@ -58,8 +58,7 @@ add_executable(ufconfig_sql_load
 target_include_directories(ufconfig_sql_load PRIVATE
     ${_rt_gen_root}
     ${CMAKE_SOURCE_DIR}/include
-    /opt/include
-    /opt/include/mariadb
+    ${MariaDB_INCLUDE_DIRS}
 )
 
 target_link_libraries(ufconfig_sql_load PRIVATE uflib::uflib pthread m)

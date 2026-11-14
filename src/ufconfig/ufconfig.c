@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 /* A consumer that injected no logger gets silence -- not a crash, and not a
    default destination it did not choose.  The logger macros capture __FILE__
@@ -60,7 +61,7 @@ static int sLookupField(const UfConfig *h, const char *path)
 
 static void sRebuildIndex(UfConfig *h);
 
-UfConfigStatus ConfigCreate(UfConfig **out)
+UfConfigOpStatus ConfigCreate(UfConfig **out)
 {
   if (!out) return UF_CONFIG_ERR_INVALID_ARG;
   UfConfig *h = (UfConfig*)calloc(1, sizeof(*h));
@@ -99,7 +100,7 @@ static int sSchemaDeclaresSecret(const UfConfigDescriptor *d)
  * keys should not start, the keys are then read once instead of on every
  * reload, and the load path stays free of filesystem access.
  */
-static UfConfigStatus sResolveSecrets(UfConfig *h)
+static UfConfigOpStatus sResolveSecrets(UfConfig *h)
 {
   const UfConfigDescriptor *d = &h->descriptor;
 
@@ -150,7 +151,7 @@ static UfConfigStatus sResolveSecrets(UfConfig *h)
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigCreate(UfConfig **out, const UfConfigDescriptor *descriptor_ptr)
+PUBLIC_API UfConfigOpStatus UfConfigCreate(UfConfig **out, const UfConfigDescriptor *descriptor_ptr)
 {
   if (!out || !descriptor_ptr) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -162,7 +163,7 @@ PUBLIC_API UfConfigStatus UfConfigCreate(UfConfig **out, const UfConfigDescripto
     return UF_CONFIG_ERR_NOT_CONFIGURED;
   }
 
-  UfConfigStatus st = ConfigCreate(out);
+  UfConfigOpStatus st = ConfigCreate(out);
   if (st != UF_CONFIG_OK) return st;
 
   /* Copied, so the caller's struct may go out of scope.  What it points at
@@ -170,6 +171,7 @@ PUBLIC_API UfConfigStatus UfConfigCreate(UfConfig **out, const UfConfigDescripto
      and must outlive every handle opened against them. */
   (*out)->descriptor   = *descriptor_ptr;
   (*out)->is_described = 1;
+  if (descriptor_ptr->config_file_path) (*out)->file_dest = strdup(descriptor_ptr->config_file_path);
 
   /* Only reached when the schema actually declares a secret, so a configuration
      with none performs no I/O here and cannot fail for an environmental reason
@@ -198,6 +200,8 @@ PUBLIC_API void UfConfigDestroy(UfConfig *h)
   free(h->by_id);
   free(h->unlisted);
   free(h->source_path);
+  free(h->file_dest);
+  free(h->file_default);
   /* Wipes every key it holds before releasing them; a freed block keeps its
      contents, and a core dump would carry them out of the process. */
   UflibSecretFileClose(h->secrets);
@@ -221,7 +225,7 @@ static uint64_t sFileStampPath(const char *path)
 #endif
 }
 
-UfConfigStatus ConfigFileReadAll(const char *path, char **out, size_t *len)
+UfConfigOpStatus ConfigFileReadAll(const char *path, char **out, size_t *len)
 {
   FILE *f = fopen(path, "rb");
   if (!f) {
@@ -256,13 +260,13 @@ UfConfigStatus ConfigFileReadAll(const char *path, char **out, size_t *len)
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigFileReadAllDefault(void *ctx, const char *path, char **out, size_t *len)
+UfConfigOpStatus ConfigFileReadAllDefault(void *ctx, const char *path, char **out, size_t *len)
 {
   (void)ctx;
   return ConfigFileReadAll(path, out, len);
 }
 
-UfConfigStatus ConfigFileWriteAllDefault(void *ctx, const char *path, const char *buf, size_t len)
+UfConfigOpStatus ConfigFileWriteAllDefault(void *ctx, const char *path, const char *buf, size_t len)
 {
   (void)ctx;
   FILE *f = fopen(path, "wb");
@@ -304,7 +308,7 @@ static const UfConfigFieldDesc *sDescFor(const UfConfig *h, const char *path)
   return &sFields(h)[id];
 }
 
-static UfConfigStatus sCollectUnknown(const UfConfig *h, UfNode *    n, UfConfigLoadMode mode, UfConfigLoadNote *notes,
+static UfConfigOpStatus sCollectUnknown(const UfConfig *h, UfNode *    n, UfConfigLoadMode mode, UfConfigLoadNote *notes,
                                       size_t *        nnotes, size_t cap, int *          strict_fail)
 {
   if (n->name && strcmp(n->name, "#bindings") == 0) {
@@ -421,17 +425,17 @@ static UfNode *sMaterialiseDefault(UfConfig *h, UfNode *root, const struct UfCon
   n->path = ConfigArenaStrndup(&h->arena, d->path, strlen(d->path));
   n->desc = d;
   switch (d->type) {
-  case UF_FT_INT: n->vkind = UF_CONFIG_KIND_INT;
+  case UF_FT_INT: n->value_type = UF_CONFIG_VALUE_TYPE_INT;
     n->v.i.raw = n->v.i.eff = d->d_int;
     break;
-  case UF_FT_FLOAT: n->vkind = UF_CONFIG_KIND_FLOAT;
+  case UF_FT_FLOAT: n->value_type = UF_CONFIG_VALUE_TYPE_FLOAT;
     n->v.f.raw = n->v.f.eff = d->d_float;
     break;
-  case UF_FT_BOOL: n->vkind = UF_CONFIG_KIND_BOOL;
+  case UF_FT_BOOL: n->value_type = UF_CONFIG_VALUE_TYPE_BOOL;
     n->v.b.raw = n->v.b.eff = d->d_bool;
     break;
   case UF_FT_STR:
-    n->vkind = UF_CONFIG_KIND_STRING;
+    n->value_type = UF_CONFIG_VALUE_TYPE_STRING;
     n->v.s.raw     = ConfigArenaStrndup(&h->arena, d->d_str ? d->d_str : "", d->d_str ? strlen(d->d_str) : 0);
     n->v.s.raw_len = d->d_str ? strlen(d->d_str) : 0;
     n->v.s.eff     = n->v.s.raw;
@@ -458,7 +462,7 @@ static UfNode *sMaterialiseDefault(UfConfig *h, UfNode *root, const struct UfCon
  * and wrong for a secret — the message would carry the plaintext into the error
  * struct that every caller can read.
  */
-static UfConfigStatus sDecryptSecret(UfConfig *h, const struct UfConfigFieldDesc *d,
+static UfConfigOpStatus sDecryptSecret(UfConfig *h, const struct UfConfigFieldDesc *d,
                                      const char *raw, const char **out, size_t *out_len)
 {
   if (!h->secrets) {
@@ -510,9 +514,120 @@ static UfConfigStatus sDecryptSecret(UfConfig *h, const struct UfConfigFieldDesc
   return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sApplyStringField(UfConfig *h, UfNode *n, const struct UfConfigFieldDesc *d)
+/*
+ * A config document may name a value which the running process supplies: $$name and
+ * $${name}, resolved by the caller's callback, with \$$ a literal.  What the
+ * value means is the caller's business -- a path, a hostname, a flag, a secret
+ * -- so nothing here inspects it.  The resolved text becomes the effective
+ * value; the document's own text stays in raw, which is what keeps the digest
+ * independent of what any process resolved.
+ *
+ * Recursion re-runs the pass over what the callback produced, so a value may
+ * itself contain a reference.  It stops when a pass changes nothing, which is
+ * both the natural end and the cycle guard: a value that refers to itself
+ * produces itself and the loop ends there.
+ */
+#define CONFIG_SUBST_MAX_PASSES 8
+#define CONFIG_SUBST_NAME_MAX   64
+
+static char *sSubstGrow(UfConfig *h, char *cur, size_t used, size_t need, size_t *cap)
 {
-  if (!n || n->kind != UF_NODE_LEAF || n->vkind != UF_CONFIG_KIND_STRING) return UF_CONFIG_OK;
+  if (need <= *cap) return cur;
+  size_t bigger = *cap ? *cap : 64;
+  while (bigger < need) bigger *= 2;
+  char *fresh = (char*)ConfigArenaAlloc(&h->arena, bigger);
+  if (!fresh) return NULL;
+  if (cur && used) memcpy(fresh, cur, used);
+  *cap = bigger;
+  return fresh;
+}
+
+static UfConfigOpStatus sSubstituteOnce(UfConfig *h, const UfConfigLoadOptions *opt, const char *in, size_t n,
+                                        char **out, size_t *out_len)
+{
+  size_t cap = n + 64, j = 0;
+  char * o   = (char*)ConfigArenaAlloc(&h->arena, cap);
+  if (!o) return UF_CONFIG_ERR_NO_MEMORY;
+
+  for (size_t i = 0; i < n;) {
+    if (in[i] == '\\' && i + 2 < n && in[i + 1] == '$' && in[i + 2] == '$') {
+      o = sSubstGrow(h, o, j, j + 3, &cap);
+      if (!o) return UF_CONFIG_ERR_NO_MEMORY;
+      o[j++] = '$';
+      o[j++] = '$';
+      i += 3;
+      continue;
+    }
+    if (in[i] == '$' && i + 1 < n && in[i + 1] == '$') {
+      char   name[CONFIG_SUBST_NAME_MAX];
+      size_t nl = 0;
+
+      i += 2;
+      if (i < n && in[i] == '{') {
+        i++;
+        while (i < n && in[i] != '}' && nl + 1 < sizeof(name)) name[nl++] = in[i++];
+        if (i < n && in[i] == '}') i++;
+      }
+      else {
+        while (i < n && (ConfigAsciiIsAlpha((unsigned char)in[i]) || ConfigAsciiIsDigit((unsigned char)in[i]) ||
+                         in[i] == '_') && nl + 1 < sizeof(name))
+          name[nl++] = in[i++];
+      }
+      name[nl] = 0;
+
+      if (!opt || !opt->subst_get) {
+        ConfigSetError(UF_CONFIG_ERR_SUBST_UNRESOLVED, name, "varsub", 0, 0,
+                       "$$%s: no substitution source was supplied", name);
+        return UF_CONFIG_ERR_SUBST_UNRESOLVED;
+      }
+      const char *val = opt->subst_get(opt->subst_ctx, name);
+      if (!val) {
+        ConfigSetError(UF_CONFIG_ERR_SUBST_UNRESOLVED, name, "varsub", 0, 0, "unresolved $$%s", name);
+        return UF_CONFIG_ERR_SUBST_UNRESOLVED;
+      }
+      size_t vl = strlen(val);
+      o = sSubstGrow(h, o, j, j + vl + 1, &cap);
+      if (!o) return UF_CONFIG_ERR_NO_MEMORY;
+      memcpy(o + j, val, vl);
+      j += vl;
+      continue;
+    }
+    o = sSubstGrow(h, o, j, j + 2, &cap);
+    if (!o) return UF_CONFIG_ERR_NO_MEMORY;
+    o[j++] = in[i++];
+  }
+  o[j]   = 0;
+  *out     = o;
+  *out_len = j;
+  return UF_CONFIG_OK;
+}
+
+static UfConfigOpStatus sSubstitute(UfConfig *h, const UfConfigLoadOptions *opt, const char *in, size_t n,
+                                    char **out, size_t *out_len)
+{
+  const char *cur  = in;
+  size_t      clen = n;
+  int         passes = (opt && opt->subst_recursive) ? CONFIG_SUBST_MAX_PASSES : 1;
+
+  for (int pass = 0; pass < passes; pass++) {
+    char *          next = NULL;
+    size_t          nlen = 0;
+    UfConfigOpStatus st   = sSubstituteOnce(h, opt, cur, clen, &next, &nlen);
+    if (st) return st;
+    int unchanged = (nlen == clen) && (nlen == 0 || memcmp(next, cur, nlen) == 0);
+    cur  = next;
+    clen = nlen;
+    if (unchanged) break;
+  }
+  *out     = (char*)cur;
+  *out_len = clen;
+  return UF_CONFIG_OK;
+}
+
+static UfConfigOpStatus sApplyStringField(UfConfig *h, UfNode *n, const struct UfConfigFieldDesc *d,
+                                          const UfConfigLoadOptions *opt)
+{
+  if (!n || n->kind != UF_NODE_LEAF || n->value_type != UF_CONFIG_VALUE_TYPE_STRING) return UF_CONFIG_OK;
   const char *cur  = n->v.s.raw;
   size_t      clen = n->v.s.raw_len;
 
@@ -523,7 +638,7 @@ static UfConfigStatus sApplyStringField(UfConfig *h, UfNode *n, const struct UfC
      and then ConfigValidateString -- is therefore looking at the secret, which
      is what a declared length or format on the field was written to constrain. */
   if (d && d->is_encrypted) {
-    UfConfigStatus ss = sDecryptSecret(h, d, cur, &cur, &clen);
+    UfConfigOpStatus ss = sDecryptSecret(h, d, cur, &cur, &clen);
     if (ss != UF_CONFIG_OK) return ss;
   }
 
@@ -534,7 +649,9 @@ static UfConfigStatus sApplyStringField(UfConfig *h, UfNode *n, const struct UfC
     for (char *tok = strtok_r(ops, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
       char *         produced = NULL;
       size_t         plen     = 0;
-      UfConfigStatus ts       = ConfigTransformApplyNamed(&h->arena, tok, cur, clen, &produced, &plen);
+      UfConfigOpStatus ts       = strcmp(tok, "varsub") == 0
+                                     ? sSubstitute(h, opt, cur, clen, &produced, &plen)
+                                     : ConfigTransformApplyNamed(&h->arena, tok, cur, clen, &produced, &plen);
       if (ts) return ts;
       cur  = produced;
       clen = plen;
@@ -561,15 +678,15 @@ static const char *sTypeName(UfFieldType t)
   }
 }
 
-static const char *sKindName(UfConfigValueKind k)
+static const char *sKindName(UfConfigValueType k)
 {
   switch (k) {
-  case UF_CONFIG_KIND_INT:    return "an integer";
-  case UF_CONFIG_KIND_FLOAT:  return "a float";
-  case UF_CONFIG_KIND_BOOL:   return "a boolean";
-  case UF_CONFIG_KIND_STRING: return "a string";
-  case UF_CONFIG_KIND_BYTES:  return "bytes";
-  case UF_CONFIG_KIND_ABSENT: return "nil";
+  case UF_CONFIG_VALUE_TYPE_INT:    return "an integer";
+  case UF_CONFIG_VALUE_TYPE_FLOAT:  return "a float";
+  case UF_CONFIG_VALUE_TYPE_BOOL:   return "a boolean";
+  case UF_CONFIG_VALUE_TYPE_STRING: return "a string";
+  case UF_CONFIG_VALUE_TYPE_BYTES:  return "bytes";
+  case UF_CONFIG_VALUE_TYPE_ABSENT: return "nil";
   default:                    return "of no kind";
   }
 }
@@ -587,14 +704,14 @@ static const char *sNodeKindName(UfNodeKind k)
 
 /*! @brief The value kind a field of type @p t must carry, or ABSENT if @p t is
  *         not a scalar and the kind is decided by the shape instead. */
-static UfConfigValueKind sKindForType(UfFieldType t)
+static UfConfigValueType sKindForType(UfFieldType t)
 {
   switch (t) {
-  case UF_FT_INT:   return UF_CONFIG_KIND_INT;
-  case UF_FT_FLOAT: return UF_CONFIG_KIND_FLOAT;
-  case UF_FT_BOOL:  return UF_CONFIG_KIND_BOOL;
-  case UF_FT_STR:   return UF_CONFIG_KIND_STRING;
-  default:          return UF_CONFIG_KIND_ABSENT;
+  case UF_FT_INT:   return UF_CONFIG_VALUE_TYPE_INT;
+  case UF_FT_FLOAT: return UF_CONFIG_VALUE_TYPE_FLOAT;
+  case UF_FT_BOOL:  return UF_CONFIG_VALUE_TYPE_BOOL;
+  case UF_FT_STR:   return UF_CONFIG_VALUE_TYPE_STRING;
+  default:          return UF_CONFIG_VALUE_TYPE_ABSENT;
   }
 }
 
@@ -612,7 +729,8 @@ static int sShapeMatches(UfFieldType t, UfNodeKind k)
   return k == UF_NODE_LEAF;
 }
 
-UfConfigStatus ConfigApplySchema(UfConfig *h, UfNode *root, UfConfigLoadMode mode, UfConfigLoadReport *report)
+UfConfigOpStatus ConfigApplySchema(UfConfig *h, UfNode *root, UfConfigLoadMode mode, UfConfigLoadReport *report,
+                                   const UfConfigLoadOptions *opt)
 {
   sAssignPaths(&h->arena, root, "");
   UfConfigLoadNote tmp[128];
@@ -644,27 +762,20 @@ UfConfigStatus ConfigApplySchema(UfConfig *h, UfNode *root, UfConfigLoadMode mod
     }
     n->desc = d;
 
-    /* The check nothing performed.  Each scalar check below is gated on the
-       value already being of the right kind, so a value of the wrong kind
-       satisfied none of them and fell through unexamined -- a string on an
-       integer field, or an integer on a boolean, loaded cleanly in both strict
-       and lenient.  The kind is what the parser saw; the declared type is what
-       the schema wants; a mismatch is refused, as it is for every other rule
-       here.  A nil is an absent value rather than a wrong-typed one. */
+    /* Each scalar check below is gated on the value already being of the right kind -- a string on an
+       integer field, or an integer on a boolean, loaded cleanly in both strict and lenient.  */
     if (!sShapeMatches(d->type, n->kind)) {
       ConfigSetError(UF_CONFIG_ERR_TYPE_MISMATCH, d->path, "type", n->line, n->column,
                      "%s: declared %s, document gave %s", d->path, sTypeName(d->type), sNodeKindName(n->kind));
       return UF_CONFIG_ERR_TYPE_MISMATCH;
     }
-    if (n->kind == UF_NODE_LEAF && n->vkind != UF_CONFIG_KIND_ABSENT && n->vkind != sKindForType(d->type)) {
+    if (n->kind == UF_NODE_LEAF && n->value_type != UF_CONFIG_VALUE_TYPE_ABSENT && n->value_type != sKindForType(d->type)) {
       ConfigSetError(UF_CONFIG_ERR_TYPE_MISMATCH, d->path, "type", n->line, n->column,
-                     "%s: declared %s, document gave %s", d->path, sTypeName(d->type), sKindName(n->vkind));
+                     "%s: declared %s, document gave %s", d->path, sTypeName(d->type), sKindName(n->value_type));
       return UF_CONFIG_ERR_TYPE_MISMATCH;
     }
 
-    /* The ceiling is on an array's element count, and an array is not a leaf.
-       This used to sit inside the leaf branch below and was therefore
-       unreachable: array_max was never enforced on anything. */
+    /* The ceiling is on an array's element count, and an array is not a leaf. */
     if (d->has_array_max && (long long)n->array_count > d->array_max) {
       ConfigSetError(UF_CONFIG_ERR_VALIDATION, d->path, "array_max", n->line, n->column,
                      "%s: %zu elements, above array_max (%lld)", d->path, n->array_count, d->array_max);
@@ -672,7 +783,7 @@ UfConfigStatus ConfigApplySchema(UfConfig *h, UfNode *root, UfConfigLoadMode mod
     }
 
     if (n->kind == UF_NODE_LEAF) {
-      if (d->type == UF_FT_INT && n->vkind == UF_CONFIG_KIND_INT) {
+      if (d->type == UF_FT_INT && n->value_type == UF_CONFIG_VALUE_TYPE_INT) {
         if (d->has_min && n->v.i.eff < d->vmin) {
           ConfigSetError(UF_CONFIG_ERR_VALIDATION, d->path, "min", n->line, n->column,
                          "%s = %lld, below min (%lld)", d->path, (long long)n->v.i.eff, d->vmin);
@@ -684,8 +795,8 @@ UfConfigStatus ConfigApplySchema(UfConfig *h, UfNode *root, UfConfigLoadMode mod
           return UF_CONFIG_ERR_VALIDATION;
         }
       }
-      if (d->type == UF_FT_STR && n->vkind == UF_CONFIG_KIND_STRING) {
-        UfConfigStatus vs = sApplyStringField(h, n, d);
+      if (d->type == UF_FT_STR && n->value_type == UF_CONFIG_VALUE_TYPE_STRING) {
+        UfConfigOpStatus vs = sApplyStringField(h, n, d, opt);
         if (vs) return vs;
       }
     }
@@ -860,65 +971,86 @@ UfNode *ConfigResolvePath(const UfConfig *h, const char *path)
   return ConfigFindPath(h->root, path);
 }
 
-static UfConfigStatus sLoadBuf(UfConfig *          h, const char *buf, size_t len, const UfConfigLoadOptions *opt,
-                               UfConfigLoadReport *report)
+/* Builds a new tree without touching anything a reader can see: the root and
+ * the digest go to out-parameters and are published by the caller.  That is
+ * what lets the caller-supplied substitution callback run without excluding
+ * readers -- see UfConfigLoadPairs, which has always been built this way. */
+static UfConfigOpStatus sLoadBuf(UfConfig *h, const char *buf, size_t len, const UfConfigLoadOptions *opt,
+                                 UfConfigLoadReport *report, UfNode **out_root, unsigned char out_digest[32])
 {
   ConfigClearError();
   UfNode *       root = NULL;
-  UfConfigStatus st   = ConfigParseLuaStyle(h, buf, len, &root);
+  UfConfigOpStatus st   = ConfigParseLuaStyle(h, buf, len, &root);
   if (st) return st;
   st = ConfigResolveAliases(h, root);
   if (st) return st;
   UfConfigLoadMode mode = opt ? opt->mode : UF_CONFIG_LOAD_STRICT;
-  st                    = ConfigApplySchema(h, root, mode, report);
+  st                    = ConfigApplySchema(h, root, mode, report, opt);
   if (st) return st;
-  st = ConfigCanonAndDigest(root, h->digest);
+  st = ConfigCanonAndDigest(root, out_digest);
   if (st) return st;
+  *out_root = root;
+  return UF_CONFIG_OK;
+}
+
+PUBLIC_API UfConfigOpStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_t len, const UfConfigLoadOptions *opt,
+                                             UfConfigLoadReport *report)
+{
+  if (!h || !buf) return UF_CONFIG_ERR_INVALID_ARG;
+  /* The build is exclusive against other writers -- they contend for arena,
+     and no reader allocates -- and needs no exclusion from readers at all: it
+     works in an arena of its own and leaves root and digest alone until the
+     publish below.  A caller-supplied substitution callback therefore runs
+     without stalling a single reader. */
+  pthread_mutex_lock(&h->build_lock);
+  UfArena *     old_a  = h->arena;
+  UfNode *      root   = NULL;
+  unsigned char digest[32];
+  memset(digest, 0, sizeof(digest));
+  h->arena = NULL; /* the build allocates here; only a writer ever looks */
+  UfConfigOpStatus st = sLoadBuf(h, buf, len, opt, report, &root, digest);
+  if (st != UF_CONFIG_OK) {
+    ConfigArenaFree(h->arena);
+    h->arena = old_a;
+    pthread_mutex_unlock(&h->build_lock);
+    return st;
+  }
+  /* The publish: the whole of what a reader can collide with. */
+  pthread_rwlock_wrlock(&h->lock);
+  if (atomic_load(&h->readers) == 0) {
+    ConfigArenaFree(old_a);
+    ConfigArenaFree(h->retired);
+    h->retired = NULL;
+  }
+  else if (old_a) {
+    old_a->next = h->retired;
+    h->retired  = old_a;
+  }
   h->root = root;
+  memcpy(h->digest, digest, 32);
   if (opt) {
     h->load_opt        = *opt;
     h->is_load_opt_set = 1;
   }
   atomic_fetch_add(&h->generation, 1);
+  ConfigRebuildIndexes(h);
+  pthread_rwlock_unlock(&h->lock);
+  pthread_mutex_unlock(&h->build_lock);
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_t len, const UfConfigLoadOptions *opt,
-                                             UfConfigLoadReport *report)
+static UfConfigOpStatus sFileDefaultPath(UfConfig *h)
 {
-  if (!h || !buf) return UF_CONFIG_ERR_INVALID_ARG;
-  pthread_mutex_lock(&h->build_lock);
-  pthread_rwlock_wrlock(&h->lock);
-  UfArena *     old_a    = h->arena;
-  UfNode *      old_root = h->root;
-  unsigned char old_d[32];
-  memcpy(old_d, h->digest, 32);
-  h->arena          = NULL;
-  h->root           = NULL;
-  UfConfigStatus st = sLoadBuf(h, buf, len, opt, report);
-  if (st != UF_CONFIG_OK) {
-    ConfigArenaFree(h->arena);
-    h->arena = old_a;
-    h->root  = old_root;
-    memcpy(h->digest, old_d, 32);
-  }
-  else {
-    if (atomic_load(&h->readers) == 0) {
-      ConfigArenaFree(old_a);
-      ConfigArenaFree(h->retired);
-      h->retired = NULL;
-    }
-    else {
-      if (old_a) {
-        old_a->next = h->retired;
-        h->retired  = old_a;
-      }
-    }
-    ConfigRebuildIndexes(h);
-  }
-  pthread_rwlock_unlock(&h->lock);
-  pthread_mutex_unlock(&h->build_lock);
-  return st;
+  char cwd[4096];
+  if (!getcwd(cwd, sizeof(cwd))) return UF_CONFIG_ERR_NOT_CONFIGURED;
+  static const char name[] = "ufconfig.dumped.config";
+  size_t            n      = strlen(cwd) + 1 + sizeof(name);
+  char *            p      = (char *)malloc(n);
+  if (!p) return UF_CONFIG_ERR_NO_MEMORY;
+  snprintf(p, n, "%s/%s", cwd, name);
+  free(h->file_default);
+  h->file_default = p;
+  return UF_CONFIG_OK;
 }
 
 /* Translate the caller's endpoint into the form a driver is opened with.
@@ -928,18 +1060,34 @@ PUBLIC_API UfConfigStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_
  * answers the same questions either way; a driver is handed the shape its own
  * store needs.  Keeping the translation in one function is what stops the two
  * definitions drifting apart. */
-static UfConfigStatus sResolveBackend(const UfConfig *h, UfConfigBackendSpec *spec)
+static UfConfigOpStatus sResolveBackend(UfConfig *h, UfConfigBackendSpec *spec, bool for_write)
 {
   memset(spec, 0, sizeof(*spec));
-  spec->kind = h->descriptor.kind;
+  spec->backend_store = h->descriptor.backend;
 
-  switch (h->descriptor.kind) {
+  switch (h->descriptor.backend) {
   case UF_CONFIG_BACKEND_FILE:
+    if (for_write) {
+      if (h->file_dest) {
+        spec->u.file.path = h->file_dest;
+        return UF_CONFIG_OK;
+      }
+      if (h->source_path) {
+        spec->u.file.path = h->source_path;
+        return UF_CONFIG_OK;
+      }
+      UfConfigOpStatus st = sFileDefaultPath(h);
+      if (st) return st;
+      spec->u.file.path = h->file_default;
+      return UF_CONFIG_OK;
+    }
     /* The path is per-load rather than per-handle: one handle may be pointed
        at different documents.  UfConfigLoadFile records it. */
-    if (!h->source_path) return UF_CONFIG_ERR_NOT_CONFIGURED;
-    spec->u.file.path = h->source_path;
-    return UF_CONFIG_OK;
+    if (h->source_path) {
+      spec->u.file.path = h->source_path;
+      return UF_CONFIG_OK;
+    }
+    return UF_CONFIG_ERR_NOT_CONFIGURED;
 
   case UF_CONFIG_BACKEND_MEM:
     if (!h->descriptor.redis.address) return UF_CONFIG_ERR_NOT_CONFIGURED;
@@ -967,22 +1115,22 @@ static UfConfigStatus sResolveBackend(const UfConfig *h, UfConfigBackendSpec *sp
   return UF_CONFIG_ERR_NOT_CONFIGURED;
 }
 
-PUBLIC_API UfConfigStatus UfConfigLoad(UfConfig *h, const UfConfigLoadOptions *opt, UfConfigLoadReport *report)
+PUBLIC_API UfConfigOpStatus UfConfigLoad(UfConfig *h, const UfConfigLoadOptions *opt, UfConfigLoadReport *report)
 {
   if (!h) return UF_CONFIG_ERR_INVALID_ARG;
   if (!h->is_described) return UF_CONFIG_ERR_NOT_CONFIGURED;
 
   UfConfigBackendSpec spec;
-  UfConfigStatus      st = sResolveBackend(h, &spec);
+  UfConfigOpStatus      st = sResolveBackend(h, &spec, false);
   if (st != UF_CONFIG_OK) {
-    ConfigSetError(st, NULL, NULL, 0, 0, "no usable origin: kind %d is not fully specified", (int)h->descriptor.kind);
+    ConfigSetError(st, NULL, NULL, 0, 0, "no usable origin: kind %d is not fully specified", (int)h->descriptor.backend);
     return st;
   }
 
-  const UfConfigDriver *driver = UfConfigDriverFindKind(h->descriptor.kind);
+  const UfConfigDriver *driver = UfConfigDriverFindKind(h->descriptor.backend);
   if (!driver) {
     ConfigSetError(UF_CONFIG_ERR_NOT_CONFIGURED, NULL, NULL, 0, 0, "no driver registered for kind %d",
-                   (int)h->descriptor.kind);
+                   (int)h->descriptor.backend);
     return UF_CONFIG_ERR_NOT_CONFIGURED;
   }
 
@@ -1017,7 +1165,7 @@ PUBLIC_API UfConfigStatus UfConfigLoad(UfConfig *h, const UfConfigLoadOptions *o
   UfConfigFreePairs(pairs, n);
 
   if (st == UF_CONFIG_OK) {
-    UFCONFIG_LOG_INFO(h, "config: loaded %zu fields from kind %d", n, (int)h->descriptor.kind);
+    UFCONFIG_LOG_INFO(h, "config: loaded %zu fields from kind %d", n, (int)h->descriptor.backend);
   }
   else {
     UFCONFIG_LOG_ERROR(h, "config: origin content refused: %s", UfConfigStatusString(st));
@@ -1025,7 +1173,7 @@ PUBLIC_API UfConfigStatus UfConfigLoad(UfConfig *h, const UfConfigLoadOptions *o
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigLoadFile(UfConfig *          h, const char *path, const UfConfigLoadOptions *opt,
+PUBLIC_API UfConfigOpStatus UfConfigLoadFile(UfConfig *          h, const char *path, const UfConfigLoadOptions *opt,
                                            UfConfigLoadReport *report)
 {
   if (!h || !path) return UF_CONFIG_ERR_INVALID_ARG;
@@ -1036,7 +1184,7 @@ PUBLIC_API UfConfigStatus UfConfigLoadFile(UfConfig *          h, const char *pa
   }
   char *         buf = NULL;
   size_t         n   = 0;
-  UfConfigStatus st  = h->backend.read_all ?
+  UfConfigOpStatus st  = h->backend.read_all ?
                          h->backend.read_all(h->backend.ctx, path, &buf, &n) :
                          ConfigFileReadAll(path, &buf, &n);
   if (st) return st;
@@ -1085,15 +1233,15 @@ static void sSnapFree(SnapEnt *e, size_t n)
   free(e);
 }
 
-PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *report)
+PUBLIC_API UfConfigOpStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *report)
 {
   if (!h) return UF_CONFIG_ERR_INVALID_ARG;
 
   UfConfigBackendSpec spec;
-  UfConfigStatus      rst = sResolveBackend(h, &spec);
+  UfConfigOpStatus      rst = sResolveBackend(h, &spec, false);
   if (rst != UF_CONFIG_OK) return rst;
 
-  const UfConfigDriver *driver = UfConfigDriverFindKind(h->descriptor.kind);
+  const UfConfigDriver *driver = UfConfigDriverFindKind(h->descriptor.backend);
   if (!driver) return UF_CONFIG_ERR_NOT_CONFIGURED;
 
   /* Ask the store whether anything moved before reading it.  A store that
@@ -1116,12 +1264,13 @@ PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *repo
   }
   size_t   cold = sSnapCount(h->root);
   SnapEnt *olds = cold ? (SnapEnt*)calloc(cold, sizeof(SnapEnt)) : NULL;
+  if (cold && !olds) return UF_CONFIG_ERR_NO_MEMORY;
   size_t   nold = 0;
   sSnapWalk(h->root, olds, &nold);
   UfConfigLoadOptions opt = h->is_load_opt_set ?
                               h->load_opt :
-                              (UfConfigLoadOptions){.size = sizeof(opt), .version = 1, .mode = UF_CONFIG_LOAD_STRICT};
-  UfConfigStatus st = UfConfigLoad(h, &opt, NULL);
+                              (UfConfigLoadOptions){.mode = UF_CONFIG_LOAD_STRICT};
+  UfConfigOpStatus st = UfConfigLoad(h, &opt, NULL);
   if (report) {
     if (h->reload_store) {
       for (size_t i = 0; i < h->reload_store_n; i++) free((char*)h->reload_store[i].path);
@@ -1131,10 +1280,19 @@ PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *repo
     }
     size_t   cnew = sSnapCount(h->root);
     SnapEnt *news = cnew ? (SnapEnt*)calloc(cnew, sizeof(SnapEnt)) : NULL;
+    if (cnew && !news) {
+      sSnapFree(olds, nold);
+      return UF_CONFIG_ERR_NO_MEMORY;
+    }
     size_t   nnew = 0;
     sSnapWalk(h->root, news, &nnew);
     size_t cap        = nold + nnew + 1;
     h->reload_store   = (UfConfigReloadEntry*)calloc(cap, sizeof(UfConfigReloadEntry));
+    if (!h->reload_store) {
+      sSnapFree(news, nnew);
+      sSnapFree(olds, nold);
+      return UF_CONFIG_ERR_NO_MEMORY;
+    }
     h->reload_store_n = 0;
     for (size_t i = 0; i < nnew; i++) {
       int found = 0;
@@ -1145,16 +1303,17 @@ PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *repo
         en->path                = strdup(news[i].path);
         memcpy(en->old_digest, olds[j].dig, 32);
         memcpy(en->new_digest, news[i].dig, 32);
-        if (st != UF_CONFIG_OK) en->status = UF_CONFIG_RELOAD_REJECTED;
+        if (st != UF_CONFIG_OK) en->reload_status = UF_CONFIG_RELOAD_REJECTED;
         else if (memcmp(olds[j].dig, news[i].dig, 32) != 0)
-          en->status    = news[i].alias ? UF_CONFIG_RELOAD_CHANGED_VIA_ALIAS : UF_CONFIG_RELOAD_CHANGED;
-        else en->status = UF_CONFIG_RELOAD_UNCHANGED;
+          en->reload_status    = news[i].alias ? UF_CONFIG_RELOAD_CHANGED_VIA_ALIAS : UF_CONFIG_RELOAD_CHANGED;
+        else en->reload_status = UF_CONFIG_RELOAD_UNCHANGED;
         break;
       }
+      // codechecker_false_positive [core.NullDereference] sSnapCount and sSnapWalk share one predicate, so cnew == 0 implies nnew == 0
       if (!found && news[i].path) {
         UfConfigReloadEntry *en = &h->reload_store[h->reload_store_n++];
         en->path                = strdup(news[i].path);
-        en->status              = UF_CONFIG_RELOAD_ADDED;
+        en->reload_status              = UF_CONFIG_RELOAD_ADDED;
         memcpy(en->new_digest, news[i].dig, 32);
       }
     }
@@ -1170,7 +1329,7 @@ PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *repo
       if (!found) {
         UfConfigReloadEntry *en = &h->reload_store[h->reload_store_n++];
         en->path                = strdup(olds[j].path);
-        en->status              = UF_CONFIG_RELOAD_REMOVED;
+        en->reload_status              = UF_CONFIG_RELOAD_REMOVED;
         memcpy(en->old_digest, olds[j].dig, 32);
       }
     }
@@ -1182,16 +1341,16 @@ PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *repo
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigPersist(UfConfig *h)
+PUBLIC_API UfConfigOpStatus UfConfigPersist(UfConfig *h)
 {
   if (!h) return UF_CONFIG_ERR_INVALID_ARG;
   if (!h->root) return UF_CONFIG_ERR_NOFIELD;
 
   UfConfigBackendSpec spec;
-  UfConfigStatus      st = sResolveBackend(h, &spec);
+  UfConfigOpStatus      st = sResolveBackend(h, &spec, true);
   if (st != UF_CONFIG_OK) return st;
 
-  const UfConfigDriver *driver = UfConfigDriverFindKind(h->descriptor.kind);
+  const UfConfigDriver *driver = UfConfigDriverFindKind(h->descriptor.backend);
   if (!driver || !driver->write_all) return UF_CONFIG_ERR_NOT_CONFIGURED;
 
   /* The pair-set, not the document text.  A store receives what the contract
@@ -1220,12 +1379,12 @@ PUBLIC_API UfConfigStatus UfConfigPersist(UfConfig *h)
   UfConfigFreePairs(pairs, n);
 
   if (st == UF_CONFIG_OK) {
-    UFCONFIG_LOG_INFO(h, "config: wrote %zu fields to kind %d", n, (int)h->descriptor.kind);
+    UFCONFIG_LOG_INFO(h, "config: wrote %zu fields to kind %d", n, (int)h->descriptor.backend);
   }
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigGetField(const UfConfig *h, const char *field_path, UfConfigValue *out)
+PUBLIC_API UfConfigOpStatus UfConfigGetField(const UfConfig *h, const char *field_path, UfConfigValue *out)
 {
   if (!h || !field_path || !out) return UF_CONFIG_ERR_INVALID_ARG;
   if (strlen(field_path) >= CONFIG_DEFAULT_UFCONFIG_PATH_MAX) return UF_CONFIG_ERR_LIMIT_EXCEEDED;
@@ -1233,16 +1392,16 @@ PUBLIC_API UfConfigStatus UfConfigGetField(const UfConfig *h, const char *field_
   if (!h->root) {
     pthread_rwlock_unlock((pthread_rwlock_t*)&h->lock);
     memset(out, 0, sizeof(*out));
-    out->kind    = UF_CONFIG_KIND_ABSENT;
+    out->value_type    = UF_CONFIG_VALUE_TYPE_ABSENT;
     out->present = false;
     return UF_CONFIG_ERR_NOFIELD;
   }
   UfNode *n = ConfigResolvePath(h, field_path);
-  UfConfigStatus st;
+  UfConfigOpStatus st;
   if (!n) {
     st = UF_CONFIG_ERR_NOFIELD;
     memset(out, 0, sizeof(*out));
-    out->kind    = UF_CONFIG_KIND_ABSENT;
+    out->value_type    = UF_CONFIG_VALUE_TYPE_ABSENT;
     out->present = false;
   }
   else if (n->kind == UF_NODE_ALIAS && n->resolved) {
@@ -1255,20 +1414,20 @@ PUBLIC_API UfConfigStatus UfConfigGetField(const UfConfig *h, const char *field_
   return st;
 }
 
-PUBLIC_API UfConfigStatus UfConfigGetFieldByIndex(const UfConfig *h, int id, UfConfigValue *out)
+PUBLIC_API UfConfigOpStatus UfConfigGetFieldByIndex(const UfConfig *h, int id, UfConfigValue *out)
 {
   if (!h || !out) return UF_CONFIG_ERR_INVALID_ARG;
   if (id < 0 || (size_t)id >= sFieldCount(h)) return UF_CONFIG_ERR_NOFIELD;
   if (h->by_id && (int)id < h->by_id_n && h->by_id[id]) {
     pthread_rwlock_rdlock((pthread_rwlock_t*)&h->lock);
-    UfConfigStatus st = ConfigNodeToValue(h->by_id[id], out);
+    UfConfigOpStatus st = ConfigNodeToValue(h->by_id[id], out);
     pthread_rwlock_unlock((pthread_rwlock_t*)&h->lock);
     return st;
   }
   return UfConfigGetField(h, sFields(h)[id].path, out);
 }
 
-PUBLIC_API UfConfigStatus UfConfigSetInt(UfConfig *h, const char *path, int64_t v)
+PUBLIC_API UfConfigOpStatus UfConfigSetInt(UfConfig *h, const char *path, int64_t v)
 {
   if (!h || !path) return UF_CONFIG_ERR_INVALID_ARG;
   if (strlen(path) >= CONFIG_DEFAULT_UFCONFIG_PATH_MAX) return UF_CONFIG_ERR_LIMIT_EXCEEDED;
@@ -1302,14 +1461,14 @@ PUBLIC_API UfConfigStatus UfConfigSetInt(UfConfig *h, const char *path, int64_t 
     }
   }
   n->v.i.raw = n->v.i.eff = v;
-  n->vkind = UF_CONFIG_KIND_INT;
+  n->value_type = UF_CONFIG_VALUE_TYPE_INT;
   atomic_fetch_add(&h->generation, 1);
   pthread_rwlock_unlock(&h->lock);
   pthread_mutex_unlock(&h->build_lock);
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigSetString(UfConfig *h, const char *path, const char *v)
+PUBLIC_API UfConfigOpStatus UfConfigSetString(UfConfig *h, const char *path, const char *v)
 {
   if (!h || !path || !v) return UF_CONFIG_ERR_INVALID_ARG;
   if (strlen(path) >= CONFIG_DEFAULT_UFCONFIG_PATH_MAX) return UF_CONFIG_ERR_LIMIT_EXCEEDED;
@@ -1326,13 +1485,24 @@ PUBLIC_API UfConfigStatus UfConfigSetString(UfConfig *h, const char *path, const
     pthread_mutex_unlock(&h->build_lock);
     return UF_CONFIG_ERR_IMMUTABLE;
   }
+  char *const             raw_before     = n->v.s.raw;
+  const size_t            raw_len_before = n->v.s.raw_len;
+  char *const             eff_before     = n->v.s.eff;
+  const size_t            eff_len_before = n->v.s.eff_len;
+  const UfConfigValueType kind_before    = n->value_type;
+
   n->v.s.raw          = ConfigArenaStrndup(&h->arena, v, strlen(v));
   n->v.s.raw_len      = strlen(v);
   n->v.s.eff          = n->v.s.raw;
   n->v.s.eff_len      = n->v.s.raw_len;
-  n->vkind          = UF_CONFIG_KIND_STRING;
-  UfConfigStatus vs = sApplyStringField(h, n, n->desc);
-  if (vs) {
+  n->value_type          = UF_CONFIG_VALUE_TYPE_STRING;
+  UfConfigOpStatus vs = sApplyStringField(h, n, n->desc, NULL);
+  if (vs != UF_CONFIG_OK) {
+    n->v.s.raw     = raw_before;
+    n->v.s.raw_len = raw_len_before;
+    n->v.s.eff     = eff_before;
+    n->v.s.eff_len = eff_len_before;
+    n->value_type       = kind_before;
     pthread_rwlock_unlock(&h->lock);
     pthread_mutex_unlock(&h->build_lock);
     return vs;
@@ -1343,7 +1513,7 @@ PUBLIC_API UfConfigStatus UfConfigSetString(UfConfig *h, const char *path, const
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigSetFloat(UfConfig *h, const char *path, double v)
+PUBLIC_API UfConfigOpStatus UfConfigSetFloat(UfConfig *h, const char *path, double v)
 {
   if (!h || !path) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_mutex_lock(&h->build_lock);
@@ -1360,14 +1530,14 @@ PUBLIC_API UfConfigStatus UfConfigSetFloat(UfConfig *h, const char *path, double
     return UF_CONFIG_ERR_IMMUTABLE;
   }
   n->v.f.raw = n->v.f.eff = v;
-  n->vkind = UF_CONFIG_KIND_FLOAT;
+  n->value_type = UF_CONFIG_VALUE_TYPE_FLOAT;
   atomic_fetch_add(&h->generation, 1);
   pthread_rwlock_unlock(&h->lock);
   pthread_mutex_unlock(&h->build_lock);
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigSetBool(UfConfig *h, const char *path, bool v)
+PUBLIC_API UfConfigOpStatus UfConfigSetBool(UfConfig *h, const char *path, bool v)
 {
   if (!h || !path) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_mutex_lock(&h->build_lock);
@@ -1384,14 +1554,14 @@ PUBLIC_API UfConfigStatus UfConfigSetBool(UfConfig *h, const char *path, bool v)
     return UF_CONFIG_ERR_IMMUTABLE;
   }
   n->v.b.raw = n->v.b.eff = v;
-  n->vkind = UF_CONFIG_KIND_BOOL;
+  n->value_type = UF_CONFIG_VALUE_TYPE_BOOL;
   atomic_fetch_add(&h->generation, 1);
   pthread_rwlock_unlock(&h->lock);
   pthread_mutex_unlock(&h->build_lock);
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigDigest(const UfConfig *h, unsigned char out[32])
+PUBLIC_API UfConfigOpStatus UfConfigDigest(const UfConfig *h, unsigned char out[32])
 {
   if (!h || !out) return UF_CONFIG_ERR_INVALID_ARG;
   memcpy(out, h->digest, 32);
@@ -1403,7 +1573,7 @@ PUBLIC_API uint64_t UfConfigGeneration(const UfConfig *h)
   return h ? atomic_load(&h->generation) : 0;
 }
 
-PUBLIC_API UfConfigStatus UfConfigSetBytes(UfConfig *h, const char *path, const uint8_t *p, size_t n)
+PUBLIC_API UfConfigOpStatus UfConfigSetBytes(UfConfig *h, const char *path, const uint8_t *p, size_t n)
 {
   if (!h || !path || !p) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_mutex_lock(&h->build_lock);
@@ -1418,14 +1588,14 @@ PUBLIC_API UfConfigStatus UfConfigSetBytes(UfConfig *h, const char *path, const 
   nd->v.s.raw_len = n;
   nd->v.s.eff     = nd->v.s.raw;
   nd->v.s.eff_len = n;
-  nd->vkind     = UF_CONFIG_KIND_BYTES;
+  nd->value_type     = UF_CONFIG_VALUE_TYPE_BYTES;
   atomic_fetch_add(&h->generation, 1);
   pthread_rwlock_unlock(&h->lock);
   pthread_mutex_unlock(&h->build_lock);
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigUnset(UfConfig *h, const char *path)
+PUBLIC_API UfConfigOpStatus UfConfigUnset(UfConfig *h, const char *path)
 {
   if (!h || !path) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_mutex_lock(&h->build_lock);
@@ -1448,7 +1618,7 @@ PUBLIC_API UfConfigStatus UfConfigUnset(UfConfig *h, const char *path)
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigArrayClear(UfConfig *h, const char *path)
+PUBLIC_API UfConfigOpStatus UfConfigArrayClear(UfConfig *h, const char *path)
 {
   if (!h || !path) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_mutex_lock(&h->build_lock);
@@ -1470,7 +1640,7 @@ PUBLIC_API UfConfigStatus UfConfigArrayClear(UfConfig *h, const char *path)
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigArrayAppendString(UfConfig *h, const char *path, const char *v)
+PUBLIC_API UfConfigOpStatus UfConfigArrayAppendString(UfConfig *h, const char *path, const char *v)
 {
   if (!h || !path || !v) return UF_CONFIG_ERR_INVALID_ARG;
   pthread_mutex_lock(&h->build_lock);
@@ -1492,7 +1662,7 @@ PUBLIC_API UfConfigStatus UfConfigArrayAppendString(UfConfig *h, const char *pat
   UfNode *c = (UfNode*)ConfigArenaAlloc(&h->arena, sizeof(UfNode));
   memset(c, 0, sizeof(*c));
   c->kind      = UF_NODE_LEAF;
-  c->vkind     = UF_CONFIG_KIND_STRING;
+  c->value_type     = UF_CONFIG_VALUE_TYPE_STRING;
   c->name      = ConfigArenaStrndup(&h->arena, name, strlen(name));
   c->v.s.raw     = ConfigArenaStrndup(&h->arena, v, strlen(v));
   c->v.s.raw_len = c->v.s.eff_len = strlen(v);
@@ -1514,8 +1684,8 @@ PUBLIC_API UfConfigStatus UfConfigArrayAppendString(UfConfig *h, const char *pat
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API void UfConfigSetBackend(UfConfig *h, UfConfigStatus (*read_all)(void *, const char *, char **, size_t *),
-                                   UfConfigStatus (*write_all)(void *, const char *, const char *, size_t), void *ctx)
+PUBLIC_API void UfConfigSetBackend(UfConfig *h, UfConfigOpStatus (*read_all)(void *, const char *, char **, size_t *),
+                                   UfConfigOpStatus (*write_all)(void *, const char *, const char *, size_t), void *ctx)
 {
   if (!h) return;
   if (read_all) h->backend.read_all = read_all;

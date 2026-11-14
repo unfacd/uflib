@@ -38,10 +38,12 @@ enum ScheduledJobExecutionConcurrencyMode {
 };
 typedef void JobContext;
 
-typedef int (*CallbackOnRun)(JobContext *, ClientContextData *);
+struct ScheduledJob; //the job instance handed to the callbacks, defined below
+
+typedef int (*CallbackOnRun)(struct ScheduledJob *, ClientContextData *);
 typedef int (*CallbackOnError)(ClientContextData *);
 typedef int (*CallbackOnCompareKeys)(void *, void *);
-typedef int (*CallbackOnInsert)(JobContext *, ClientContextData *);
+typedef int (*CallbackOnInsert)(struct ScheduledJob *, ClientContextData *);
 
 #define AS_JOB_CONTEXT(x) ((JobContext *)(x))
 
@@ -55,9 +57,9 @@ typedef struct ScheduledJobType {
 	struct {
 		int (*on_compare_keys)(void *, void *); ///>how to compare time values. Default provided if none specified
 		int (*on_error)(ClientContextData *);
-		int (*on_run)(JobContext *, ClientContextData *); ///>callback when the job is ready to run
+		int (*on_run)(struct ScheduledJob *, ClientContextData *); ///>callback when the job is ready to run
 		long long (*on_get_time)(void);///> calculate current time value using user's chosen precision
-    int (*on_first_insert)(JobContext *, ClientContextData *); ///>callback when the job is inserted into scheduler for the first time
+    int (*on_first_insert)(struct ScheduledJob *, ClientContextData *); ///>callback when the job is inserted into scheduler for the first time
 	} callbacks;
 
 } ScheduledJobType;

@@ -196,6 +196,159 @@ elseif("${LOCAL_VERSION}" STREQUAL "${GIT_VERSION}" AND
 else()
     message(STATUS "=> RELEASE DRIFT detected (see lines above) — informational only, build unaffected")
 endif()
+
+# ── Installed library flavours ─────────────────────────────────────────────
+# Everything above compares release numbers read from headers. This half reports
+# what was actually installed beside them: the static archive and the shared
+# object are produced by separate targets from the same objects, so "static,
+# shared, or both" and "do the two artefacts carry the same release" are facts
+# worth stating, not assuming. Each artefact is asked for the version string its
+# own version.c carries, so a stale archive beside a fresh shared object shows
+# up here instead of at a consumer's link line.
+
+set(_libdir "${INSTALL_PREFIX}/lib")
+set(_static_path "${_libdir}/libuflib.a")
+set(_shared_path "")
+set(_soname_links "")
+file(GLOB _shared_candidates "${_libdir}/libuflib.so*")
+foreach(_candidate IN LISTS _shared_candidates)
+    get_filename_component(_candidate_name "${_candidate}" NAME)
+    # libX.so.M[.m[.p[.internal]]] is the object; libX.so and libX.so.<major> are
+    # the links the loader and the linker resolve through. The depth after .so
+    # differs per library, so it is matched rather than assumed.
+    if(_candidate_name MATCHES "\\.so\\.")
+        string(REGEX REPLACE ".*\\.so\\." "" _version_suffix "${_candidate_name}")
+        string(REPLACE "." ";" _version_components "${_version_suffix}")
+        list(LENGTH _version_components _version_count)
+        if(_version_count GREATER 2)
+            set(_shared_path "${_candidate}")
+        else()
+            list(APPEND _soname_links "${_candidate_name}")
+        endif()
+    else()
+        list(APPEND _soname_links "${_candidate_name}")
+    endif()
+endforeach()
+
+if(EXISTS "${_static_path}" AND NOT "${_shared_path}" STREQUAL "")
+    set(_flavour "static + shared")
+elseif(EXISTS "${_static_path}")
+    set(_flavour "static")
+elseif(NOT "${_shared_path}" STREQUAL "")
+    set(_flavour "shared")
+else()
+    set(_flavour "none")
+endif()
+
+# The release part of the installed header, and its most significant component.
+string(REPLACE "." ";" _release_parts "${INSTALLED_VERSION}")
+list(GET _release_parts 0 _installed_major)
+
+# artefact_version(<path> <out_var>)
+# Reads the version string the library itself embeds: MAJOR.MINOR.PATCH in some
+# libraries, MAJOR.MINOR.PATCH.INTERNAL in others, so the answer is matched
+# rather than parsed positionally. Candidates are ranked, because an archive
+# also carries its vendored dependencies' version strings — a match on the
+# installed release wins over a bare major-version match.
+function(artefact_version path out_var)
+    set(_found "")
+    if(NOT "${path}" STREQUAL "" AND EXISTS "${path}" AND NOT "${_strings_executable}" STREQUAL "_strings_executable-NOTFOUND"
+       AND NOT "${INSTALLED_VERSION}" STREQUAL "N/A")
+        execute_process(COMMAND "${_strings_executable}" "${path}"
+            OUTPUT_VARIABLE _strings_out
+            ERROR_QUIET)
+        string(REGEX MATCHALL "[0-9]+(\\.[0-9]+)+" _versions "${_strings_out}")
+        foreach(_candidate IN LISTS _versions)
+            if(_candidate MATCHES "^${INSTALLED_VERSION}$" OR _candidate MATCHES "^${INSTALLED_VERSION}\\.[0-9]+$")
+                set(_found "${_candidate}")
+                break()
+            endif()
+        endforeach()
+        if("${_found}" STREQUAL "")
+            foreach(_candidate IN LISTS _versions)
+                if(_candidate MATCHES "^${_installed_major}\\.")
+                    set(_found "${_candidate}")
+                    break()
+                endif()
+            endforeach()
+        endif()
+    endif()
+    if("${_found}" STREQUAL "")
+        set(${out_var} "N/A" PARENT_SCOPE)
+    else()
+        set(${out_var} "${_found}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+# artefact_release(<version> <out_var>)
+# The release part — MAJOR.MINOR.PATCH — of an artefact's version string. The
+# gate counter is reported by the header checks above and is deliberately not
+# compared here: an artefact that embeds only the release is not stale.
+function(artefact_release version out_var)
+    if("${version}" STREQUAL "N/A")
+        set(${out_var} "N/A" PARENT_SCOPE)
+        return()
+    endif()
+    string(REPLACE "." ";" _components "${version}")
+    list(LENGTH _components _count)
+    if(_count GREATER 2)
+        list(SUBLIST _components 0 3 _release_components)
+        string(REPLACE ";" "." _release "${_release_components}")
+    else()
+        set(_release "${version}")
+    endif()
+    set(${out_var} "${_release}" PARENT_SCOPE)
+endfunction()
+
+find_program(_strings_executable strings)
+
+set(_static_version "N/A")
+set(_shared_version "N/A")
+if(EXISTS "${_static_path}")
+    artefact_version("${_static_path}" _static_version)
+endif()
+if(NOT "${_shared_path}" STREQUAL "")
+    artefact_version("${_shared_path}" _shared_version)
+endif()
+artefact_release("${_static_version}" _static_release)
+artefact_release("${_shared_version}" _shared_release)
+
+message(STATUS "--------------------------------------------------------------")
+message(STATUS "uflib installed libraries — flavour and artefact agreement")
+message(STATUS "--------------------------------------------------------------")
+message(STATUS "  install flavour : ${_flavour}")
+if(EXISTS "${_static_path}")
+    message(STATUS "  static          : ${_static_path}   ${_static_version}")
+else()
+    message(STATUS "  static          : not installed")
+endif()
+if(NOT "${_shared_path}" STREQUAL "")
+    message(STATUS "  shared          : ${_shared_path}   ${_shared_version}")
+    if(NOT "${_soname_links}" STREQUAL "")
+        message(STATUS "  soname links    : ${_soname_links}")
+    endif()
+else()
+    message(STATUS "  shared          : not installed")
+endif()
+message(STATUS "--------------------------------------------------------------")
+
+if(EXISTS "${_static_path}" AND NOT "${_shared_path}" STREQUAL "")
+    report_compare("static  vs  shared       " "${_static_release}" "${_shared_release}")
+endif()
+if(EXISTS "${_static_path}")
+    report_compare("header  vs  static       " "${INSTALLED_VERSION}" "${_static_release}")
+endif()
+if(NOT "${_shared_path}" STREQUAL "")
+    report_compare("header  vs  shared       " "${INSTALLED_VERSION}" "${_shared_release}")
+endif()
+
+if("${_flavour}" STREQUAL "none")
+    message(STATUS "=> nothing installed under ${_libdir} — the install step did not run, or ran elsewhere")
+elseif("${_static_version}" STREQUAL "N/A" AND "${_shared_version}" STREQUAL "N/A")
+    message(STATUS "=> ${_flavour} installed; artefact versions unreadable (no 'strings', or no header to aim at)")
+else()
+    message(STATUS "=> ${_flavour} installed; artefacts report static ${_static_version}, shared ${_shared_version}")
+endif()
 message(STATUS "--------------------------------------------------------------")
 
 # ── Introspection: newly added artefact in the last origin commit ──────────

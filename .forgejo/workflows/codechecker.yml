@@ -1,0 +1,80 @@
+name: static-analysis
+
+on:
+  push:
+    branches: ["master", "develop", "release/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  codechecker:
+    runs-on: uflib-cc-analysis
+    env:
+      CC_SERVER: http://127.0.0.1:8001
+      PRODUCT: codechecker_uflib
+      REPORT_HASH: context-free-v2
+      COMPILE_DB: build/compile_commands.json
+      BRANCH: ${{ github.ref_name }}
+      DEFAULT_BRANCH: master
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: Checkout
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          workdir="${GITHUB_WORKSPACE:-$PWD}"
+          mkdir -p "$workdir"
+          cd "$workdir"
+
+          git init -q .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')" \
+              fetch -q --depth=1 origin "${GITHUB_SHA}"
+          git checkout -q FETCH_HEAD
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DUFLIB_CAPABILITY_ALL=ON
+
+      - name: Analyze
+        run: |
+          CodeChecker analyze "$COMPILE_DB" \
+            -o reports \
+            --analyzers clangsa clang-tidy \
+            --skip .codechecker/skipfile.txt \
+            --report-hash "$REPORT_HASH"
+
+      - name: Store
+        run: |
+          RUN_NAME="${PRODUCT}-${BRANCH}"
+          SHA=$(git rev-parse HEAD)
+
+          CodeChecker store reports \
+            --url "${CC_SERVER}/${PRODUCT}" \
+            --name "${RUN_NAME}" \
+            --tag "${SHA}" \
+            --trim-path-prefix "$PWD/"
+
+      - name: Diff against the mainline baseline
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          RUN_NAME="${PRODUCT}-${BRANCH}"
+          SHA=$(git rev-parse HEAD)
+
+          if [ -z "${BASE_SHA}" ]; then
+            echo "::error::No pull-request base SHA. Refusing to report a pass."
+            exit 1
+          fi
+
+          if ! CodeChecker cmd history -n "${PRODUCT}-${DEFAULT_BRANCH}" --url "${CC_SERVER}/${PRODUCT}" \
+               | grep -q "${BASE_SHA}"; then
+            echo "::error::Baseline ${BASE_SHA} is not present in ${PRODUCT}-${DEFAULT_BRANCH}."
+            echo "No clean result has been assumed. Refusing to report a pass."
+            exit 1
+          fi
+
+          CodeChecker cmd diff \
+            -b "${PRODUCT}-${DEFAULT_BRANCH}:${BASE_SHA}" \
+            -n "${RUN_NAME}:${SHA}" \
+            --new \
+            --url "${CC_SERVER}/${PRODUCT}"

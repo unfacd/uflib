@@ -44,7 +44,7 @@
  * Version of the driver interface this build implements.
  *
  * A driver declares the version it was written against in its
- * @ref UfConfigDriverCaps, and registration refuses one that does not match.
+ * @ref UfConfigDriverCapabilities, and registration refuses one that does not match.
  * The check exists so that a driver built against an older interface fails at
  * registration with a diagnostic, rather than at the first call with a
  * misread struct.

@@ -56,7 +56,7 @@ static long long sFakeGetTime(void)
     return g_clock.load(std::memory_order_relaxed);
 }
 
-static int sFakeOnRun(void * /*job*/, void * /*client*/) { return 0; }
+static int sFakeOnRun(ScheduledJob * /*job*/, void * /*client*/) { return 0; }
 }  /* extern "C" */
 
 /* ── Fixture: a zeroed store, destroyed on teardown ──────────────────── */

@@ -17,13 +17,13 @@ typedef enum UfConfigFieldId {
 } UfConfigFieldId;
 _Static_assert(sizeof(UfConfigFieldId) <= sizeof(int), "UfConfigFieldId_is_int");
 struct UfConfig;
-UfConfigStatus UfConfigGetSIntV(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetSFloatV(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetSBoolV(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetSStrV(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetSQuoted(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetSListV(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetTNestedDeepV(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetTAliasTableAV(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetTAliasTableBV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigSIntV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigSFloatV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigSBoolV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigSStrV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigSQuoted(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigSListV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigTNestedDeepV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigTAliasTableAV(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigTAliasTableBV(const struct UfConfig *h, UfConfigValue *out);
 #endif

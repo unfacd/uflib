@@ -66,8 +66,7 @@ add_executable(ufconfig_sql_live
 target_include_directories(ufconfig_sql_live PRIVATE
     ${_live_gen_root}
     ${CMAKE_SOURCE_DIR}/include
-    /opt/include
-    /opt/include/mariadb
+    ${MariaDB_INCLUDE_DIRS}
 )
 
 target_link_libraries(ufconfig_sql_live PRIVATE
@@ -109,8 +108,7 @@ if(UFLIB_CAPABILITY_SQL)
     target_include_directories(ufconfig_sql_live_library PRIVATE
         ${_live_gen_root}
         ${CMAKE_SOURCE_DIR}/include
-        /opt/include
-        /opt/include/mariadb
+        ${MariaDB_INCLUDE_DIRS}
     )
 
     target_link_libraries(ufconfig_sql_live_library PRIVATE

@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
     CleanupKey();
 
     /* ── Register the driver this test supplies ───────────────────────────── */
-    UfConfigStatus st = UfConfigRegisterDriver(&g_ufconfig_driver_hiredis);
+    UfConfigOpStatus st = UfConfigRegisterDriver(&g_ufconfig_driver_hiredis);
     printf("\nregister        %s", UfConfigStatusString(st));
     if (st != UF_CONFIG_OK) { printf("\n"); Fail("UfConfigRegisterDriver"); }
     printf("  (as \"%s\")\n", g_ufconfig_driver_hiredis.caps.name);
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_REDIS;
+    d.backend        = UF_CONFIG_BACKEND_REDIS;
     d.redis.address     = host;
     d.redis.port        = port;
     d.redis.ns   = ns;
@@ -111,8 +111,6 @@ int main(int argc, char **argv) {
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_STRICT;
 
     st = UfConfigLoad(h, &opt, NULL);
@@ -138,7 +136,7 @@ int main(int argc, char **argv) {
 
     UfConfigBackendSpec spec;
     memset(&spec, 0, sizeof(spec));
-    spec.kind = UF_CONFIG_BACKEND_REDIS;
+    spec.backend_store = UF_CONFIG_BACKEND_REDIS;
     spec.u.redis.host = host;
     spec.u.redis.port = (unsigned)port;
     spec.u.redis.ns = ns;
@@ -172,9 +170,9 @@ int main(int argc, char **argv) {
             printf("  %-32s MISSING\n", probe[i]);
             continue;
         }
-        if (v.kind == UF_CONFIG_KIND_STRING)
+        if (v.kind == UF_CONFIG_VALUE_TYPE_STRING)
             printf("  %-32s \"%.*s\"\n", probe[i], (int)v.as.str.len, v.as.str.ptr);
-        else if (v.kind == UF_CONFIG_KIND_INT)
+        else if (v.kind == UF_CONFIG_VALUE_TYPE_INT)
             printf("  %-32s %lld\n", probe[i], (long long)v.as.i);
         else
             printf("  %-32s (kind %d)\n", probe[i], (int)v.kind);

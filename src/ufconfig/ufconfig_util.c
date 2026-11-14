@@ -42,7 +42,7 @@ static _Thread_local char g_err_path[CONFIG_DEFAULT_UFCONFIG_PATH_MAX];
 
 void ConfigClearError(void) { memset(&g_err, 0, sizeof(g_err)); }
 
-void ConfigSetError(UfConfigStatus st, const char *path, const char *validator, int line, int col, const char *fmt, ...)
+void ConfigSetError(UfConfigOpStatus st, const char *path, const char *validator, int line, int col, const char *fmt, ...)
 {
   g_err.status = st;
   if (path) {
@@ -65,7 +65,7 @@ void ConfigSetError(UfConfigStatus st, const char *path, const char *validator, 
 
 PUBLIC_API const UfConfigError *UfConfigLastError(void) { return &g_err; }
 
-PUBLIC_API const char *UfConfigStatusString(UfConfigStatus s)
+PUBLIC_API const char *UfConfigStatusString(UfConfigOpStatus s)
 {
   switch (s) {
   case UF_CONFIG_OK: return "OK";
@@ -195,7 +195,7 @@ static void sSha256Block(uint32_t h[8], const unsigned char block[64])
   h[7] += hh;
 }
 
-UfConfigStatus ConfigSha256(const void *data, size_t len, unsigned char out[32])
+UfConfigOpStatus ConfigSha256(const void *data, size_t len, unsigned char out[32])
 {
   uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
   const unsigned char *p = (const unsigned char*)data;

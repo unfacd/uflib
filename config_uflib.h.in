@@ -28,13 +28,16 @@
 # define _GNU_SOURCE
 #endif
 
-#define UF_DEBUG_BUILD  @UF_DEBUG_BUILD@   /* 1 when CMAKE_BUILD_TYPE=Debug, else 0 */
+#define UF_DEBUG_BUILD  @UF_DEBUG_BUILD@   /* 1 when CMAKE_BUILD_TYPE=Debug, or when a verbosity level is on */
+#define UF_DEBUG_BUILD_L2 @UF_DEBUG_L2@    /* level-2 verbose tracing */
+#define UF_DEBUG_BUILD_L3 @UF_DEBUG_L3@    /* level-3 per-object tracing */
 
 /* Build-time capabilities.  Every capability the build understands appears
  * here, and every one is off unless the build asks for it:
  *
  *   cmake -DUFLIB_CAPABILITY_HIREDIS=ON …     the config module's Redis driver
  *   cmake -DUFLIB_CAPABILITY_SQL=ON …         the config module's SQL driver
+ *   cmake -DUFLIB_CAPABILITY_SQLITE=ON …      the config module's SQLite driver
  *   cmake -DUFLIB_CAPABILITY_QUIRC=ON …       QR-code reading
  *   cmake -DUFLIB_CAPABILITY_QRENCODE=ON …    QR-code rendering
  *   cmake -DUFLIB_CAPABILITY_UTF8PROC=ON …    the utf8proc-backed UTF-8 helpers
@@ -54,6 +57,7 @@
   */
 #cmakedefine UFLIB_CAPABILITY_HIREDIS 1
 #cmakedefine UFLIB_CAPABILITY_SQL 1
+#cmakedefine UFLIB_CAPABILITY_SQLITE 1
 #cmakedefine UFLIB_CAPABILITY_QUIRC 1
 #cmakedefine UFLIB_CAPABILITY_QRENCODE 1
 #cmakedefine UFLIB_CAPABILITY_UTF8PROC 1

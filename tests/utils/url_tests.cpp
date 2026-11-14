@@ -645,3 +645,71 @@ TEST(utils_url, empty_token_middle_preserves_probe_chain)
     EXPECT_STREQ(tokens[2].token, "");   // empty token at index 2
     EXPECT_STREQ(tokens[3].token, "3");  // probe chain continued correctly
 }
+
+/* =========================================================================
+ * UrlEncodeComponent — RFC 3986 §2.1 component encoding
+ * ========================================================================= */
+
+TEST(utils_url, encode_leaves_unreserved_untouched)
+{
+    char out[64];
+
+    EXPECT_EQ(UrlEncodeComponent("AZaz09-._~", out, sizeof out), 10);
+    EXPECT_STREQ(out, "AZaz09-._~");
+}
+
+TEST(utils_url, encode_escapes_path_and_query_separators)
+{
+    char out[128];
+
+    ASSERT_GT(UrlEncodeComponent("/V1/Account/Profile/3J14?a=1&b=2", out, sizeof out), 0);
+    EXPECT_STREQ(out, "%2FV1%2FAccount%2FProfile%2F3J14%3Fa%3D1%26b%3D2");
+}
+
+TEST(utils_url, encode_escapes_every_reserved_and_unsafe_octet)
+{
+    char out[64];
+
+    EXPECT_EQ(UrlEncodeComponent(" %#+", out, sizeof out), 12);
+    EXPECT_STREQ(out, "%20%25%23%2B");
+}
+
+TEST(utils_url, encode_escapes_non_ascii_octets_as_utf8_bytes)
+{
+    char out[16];
+
+    EXPECT_EQ(UrlEncodeComponent("\xC3\xA9", out, sizeof out), 6);
+    EXPECT_STREQ(out, "%C3%A9");
+}
+
+TEST(utils_url, encode_empty_and_null_inputs)
+{
+    char out[8];
+
+    EXPECT_EQ(UrlEncodeComponent("", out, sizeof out), 0);
+    EXPECT_STREQ(out, "");
+
+    EXPECT_EQ(UrlEncodeComponent(nullptr, out, sizeof out), 0);
+    EXPECT_STREQ(out, "");
+}
+
+TEST(utils_url, encode_fits_exactly_and_rejects_shortfall)
+{
+    char exact[6];
+    char short_by_one[5];
+
+    // "a b" -> "a%20b" (5) + terminator
+    EXPECT_EQ(UrlEncodeComponent("a b", exact, sizeof exact), 5);
+    EXPECT_STREQ(exact, "a%20b");
+
+    EXPECT_EQ(UrlEncodeComponent("a b", short_by_one, sizeof short_by_one), -1);
+    EXPECT_STREQ(short_by_one, "a%20");
+}
+
+TEST(utils_url, encode_rejects_zero_sized_destination)
+{
+    char out[4] = {'x', 'x', 'x', '\0'};
+
+    EXPECT_EQ(UrlEncodeComponent("a", out, 0), -1);
+    EXPECT_EQ(out[0], 'x');
+}

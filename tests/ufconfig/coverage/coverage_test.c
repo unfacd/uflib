@@ -53,14 +53,14 @@ static void Show(const char *label, const char *path) {
 
 /* Print a value the way its kind calls for, without assuming text. */
 static void PrintValue(const UfConfigValue *v, char *out, size_t cap) {
-    switch (v->kind) {
-    case UF_CONFIG_KIND_INT:    snprintf(out, cap, "%lld", (long long)v->as.i); break;
-    case UF_CONFIG_KIND_FLOAT:  snprintf(out, cap, "%g", v->as.f); break;
-    case UF_CONFIG_KIND_BOOL:   snprintf(out, cap, "%s", v->as.b ? "true" : "false"); break;
-    case UF_CONFIG_KIND_STRING: snprintf(out, cap, "\"%.*s\"", (int)v->as.str.len, v->as.str.ptr); break;
-    case UF_CONFIG_KIND_ARRAY:  snprintf(out, cap, "[%zu elems]", v->as.array.count); break;
-    case UF_CONFIG_KIND_SCOPE:  snprintf(out, cap, "{table}"); break;
-    default:                    snprintf(out, cap, "(kind %d)", (int)v->kind); break;
+    switch (v->value_type) {
+    case UF_CONFIG_VALUE_TYPE_INT:    snprintf(out, cap, "%lld", (long long)v->as.i); break;
+    case UF_CONFIG_VALUE_TYPE_FLOAT:  snprintf(out, cap, "%g", v->as.f); break;
+    case UF_CONFIG_VALUE_TYPE_BOOL:   snprintf(out, cap, "%s", v->as.b ? "true" : "false"); break;
+    case UF_CONFIG_VALUE_TYPE_STRING: snprintf(out, cap, "\"%.*s\"", (int)v->as.str.len, v->as.str.ptr); break;
+    case UF_CONFIG_VALUE_TYPE_ARRAY:  snprintf(out, cap, "[%zu elems]", v->as.array.count); break;
+    case UF_CONFIG_VALUE_TYPE_SCOPE:  snprintf(out, cap, "{table}"); break;
+    default:                    snprintf(out, cap, "(kind %d)", (int)v->value_type); break;
     }
 }
 
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_FILE;
+    d.backend        = UF_CONFIG_BACKEND_FILE;
 
     UfConfig *h = NULL;
     if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) {
@@ -96,13 +96,11 @@ int main(int argc, char **argv) {
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size        = sizeof(opt);
-    opt.version     = 1;
     opt.mode        = UF_CONFIG_LOAD_LENIENT;  /* the alias binding is not a declared field */
     opt.subst_get   = SubstGet;
     opt.subst_ctx   = NULL;
 
-    UfConfigStatus st = UfConfigLoadFile(h, document, &opt, NULL);
+    UfConfigOpStatus st = UfConfigLoadFile(h, document, &opt, NULL);
     if (st != UF_CONFIG_OK) {
         const UfConfigError *e = UfConfigLastError();
         fprintf(stderr, "FAIL: load — %s: %s (%s)\n", UfConfigStatusString(st),
@@ -193,7 +191,7 @@ int main(int argc, char **argv) {
         snprintf(subst_doc, sizeof(subst_doc), "%s/document_subst.lua", dir);
         UfConfig *sh = NULL;
         UfConfigCreate(&sh, &d);
-        UfConfigStatus ss = UfConfigLoadFile(sh, subst_doc, &opt, NULL);
+        UfConfigOpStatus ss = UfConfigLoadFile(sh, subst_doc, &opt, NULL);
         printf("  load %-16s %s\n", "document_subst.lua", UfConfigStatusString(ss));
         printf("     why  %s\n", UfConfigLastError()->message);
         if (ss == UF_CONFIG_OK) {
@@ -205,7 +203,7 @@ int main(int argc, char **argv) {
             printf("  xf.sub read back  %s\n", eff);
             printf("  substitution WORKED\n");
         } else {
-            printf("  KNOWN DEFECT — subst_get is never consulted; see TD-014\n");
+            printf("  FAILED — the load was refused; see the error above\n");
         }
         UfConfigDestroy(sh);
     }
@@ -271,14 +269,14 @@ int main(int argc, char **argv) {
         UfConfigValue via_alias, via_inline;
         memset(&via_alias, 0, sizeof(via_alias));
         memset(&via_inline, 0, sizeof(via_inline));
-        UfConfigStatus a = UfConfigGetField(from_store, "nest.shared.connected", &via_alias);
+        UfConfigOpStatus a = UfConfigGetField(from_store, "nest.shared.connected", &via_alias);
 
         char inline_path[1024];
         snprintf(inline_path, sizeof(inline_path), "%s/document_inline.lua", dir);
         UfConfig *inl = NULL;
         UfConfigCreate(&inl, &d);
-        UfConfigStatus is = UfConfigLoadFile(inl, inline_path, &opt, NULL);
-        UfConfigStatus b = UfConfigGetField(inl, "nest.shared.connected", &via_inline);
+        UfConfigOpStatus is = UfConfigLoadFile(inl, inline_path, &opt, NULL);
+        UfConfigOpStatus b = UfConfigGetField(inl, "nest.shared.connected", &via_inline);
 
         printf("  alias  load=%s  nest.shared.connected=%s  value=%lld\n",
                UfConfigStatusString(st), UfConfigStatusString(a),
@@ -295,7 +293,7 @@ int main(int argc, char **argv) {
         UfConfigCreate(&alias, &d);
         char alias_path[1024];
         snprintf(alias_path, sizeof(alias_path), "%s/document_coverage.lua", dir);
-        UfConfigStatus as = UfConfigLoadFile(alias, alias_path, &opt, NULL);
+        UfConfigOpStatus as = UfConfigLoadFile(alias, alias_path, &opt, NULL);
         printf("  alias  direct load=%s\n", UfConfigStatusString(as));
 
         unsigned char da[32], db[32];

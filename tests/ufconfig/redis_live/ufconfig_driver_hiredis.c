@@ -48,7 +48,7 @@ static UfConfigPairType sVTypeOf(const char *encoded) {
     return UF_PAIR_INT;
 }
 
-static UfConfigStatus sLiveOpen(void **ctx, const UfConfigBackendSpec *spec) {
+static UfConfigOpStatus sLiveOpen(void **ctx, const UfConfigBackendSpec *spec) {
     if (!ctx || !spec) return UF_CONFIG_ERR_INVALID_ARG;
 
     const char *host = spec->u.redis.host ? spec->u.redis.host : "127.0.0.1";
@@ -90,7 +90,7 @@ static UfConfigStatus sLiveOpen(void **ctx, const UfConfigBackendSpec *spec) {
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
+static UfConfigOpStatus sLiveReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
                                    UfConfigMeta *meta) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c) return UF_CONFIG_ERR_INVALID_ARG;
@@ -140,7 +140,7 @@ static UfConfigStatus sLiveReadAll(void *ctx, UfConfigFieldPair **out, size_t *n
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n,
+static UfConfigOpStatus sLiveWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n,
                                     const UfConfigMeta *meta) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c) return UF_CONFIG_ERR_INVALID_ARG;
@@ -182,7 +182,7 @@ static UfConfigStatus sLiveWriteAll(void *ctx, const UfConfigFieldPair *in, size
     return ok ? UF_CONFIG_OK : UF_CONFIG_ERR_BACKEND;
 }
 
-static UfConfigStatus sLiveReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
+static UfConfigOpStatus sLiveReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c || !path || !out) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -197,7 +197,7 @@ static UfConfigStatus sLiveReadOne(void *ctx, const char *path, UfConfigFieldPai
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
+static UfConfigOpStatus sLiveWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c || !path || !in) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -212,7 +212,7 @@ static UfConfigStatus sLiveWriteOne(void *ctx, const char *path, const UfConfigF
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sLiveStat(void *ctx, UfConfigStamp *out) {
+static UfConfigOpStatus sLiveStat(void *ctx, UfConfigStamp *out) {
     LiveCtx *c = (LiveCtx *)ctx;
     if (!c || !out) return UF_CONFIG_ERR_INVALID_ARG;
 
@@ -232,7 +232,7 @@ static void sLiveClose(void *ctx) {
 const UfConfigDriver g_ufconfig_driver_hiredis = {
     .caps = {
         .api_version       = UF_CONFIG_DRIVER_API_VERSION,
-        .kind              = UF_CONFIG_BACKEND_REDIS,
+        .backend_store              = UF_CONFIG_BACKEND_REDIS,
         .atomic_write_all  = true,
         .atomic_write_one  = true,
         .per_field_read    = true,

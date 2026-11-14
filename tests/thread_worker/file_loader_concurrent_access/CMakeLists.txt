@@ -19,6 +19,9 @@ target_include_directories(file_loader_concurrent_access_stress PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}
 )
+target_compile_definitions(file_loader_concurrent_access_stress PRIVATE
+    FILE_LOADER_CONCURRENT_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+)
 target_link_libraries(file_loader_concurrent_access_stress PRIVATE
     uflib::uflib pthread m
 )

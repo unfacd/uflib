@@ -740,3 +740,61 @@ TEST(MessageDestruct, EmptyDecryptedMessageSelfDestruct)
   ASSERT_NE(dec, nullptr);
   DecryptedMessageDestruct(dec, true);
 }
+
+/* =========================================================================
+ * GeneratePkceCodeChallenge — RFC 7636 §4.2 derivation
+ * ========================================================================= */
+
+TEST(PkceCodeChallenge, S256MatchesTheRfc7636Vector)
+{
+    // RFC 7636 Appendix B: the published verifier and its S256 challenge.
+    char out[64] = {0};
+
+    ASSERT_TRUE(GeneratePkceCodeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                                          "S256", out, sizeof out));
+    EXPECT_STREQ(out, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+}
+
+TEST(PkceCodeChallenge, PlainCopiesTheVerifier)
+{
+    char out[64] = {0};
+
+    ASSERT_TRUE(GeneratePkceCodeChallenge("a-verifier.of_43~chars", "plain", out, sizeof out));
+    EXPECT_STREQ(out, "a-verifier.of_43~chars");
+}
+
+TEST(PkceCodeChallenge, RejectsAnUnknownMethod)
+{
+    char out[64] = "unchanged";
+
+    EXPECT_FALSE(GeneratePkceCodeChallenge("verifier", "S512", out, sizeof out));
+    EXPECT_STREQ(out, "unchanged");
+}
+
+TEST(PkceCodeChallenge, RejectsMissingArguments)
+{
+    char out[64];
+
+    EXPECT_FALSE(GeneratePkceCodeChallenge(nullptr, "S256", out, sizeof out));
+    EXPECT_FALSE(GeneratePkceCodeChallenge("verifier", nullptr, out, sizeof out));
+    EXPECT_FALSE(GeneratePkceCodeChallenge("verifier", "S256", nullptr, sizeof out));
+    EXPECT_FALSE(GeneratePkceCodeChallenge("verifier", "S256", out, 0));
+}
+
+TEST(PkceCodeChallenge, RejectsAChallengeThatDoesNotFit)
+{
+    char exact[44];      // the S256 challenge is 43 characters + terminator
+    char short_by_one[43];
+
+    EXPECT_TRUE(GeneratePkceCodeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                                          "S256", exact, sizeof exact));
+    EXPECT_STREQ(exact, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+
+    EXPECT_FALSE(GeneratePkceCodeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                                           "S256", short_by_one, sizeof short_by_one));
+    char verifier_43[44];
+    memset(verifier_43, 'a', 43);
+    verifier_43[43] = '\0';
+
+    EXPECT_FALSE(GeneratePkceCodeChallenge(verifier_43, "plain", short_by_one, sizeof short_by_one));
+}

@@ -23,9 +23,8 @@
  * UfConfig *h = NULL;
  * if (UfConfigCreate(&h, &descriptor) != UF_CONFIG_OK) { ... }
  *
- * UfConfigLoadOptions opt = { .size = sizeof(opt), .version = 1,
- *                             .mode = UF_CONFIG_LOAD_STRICT };
- * UfConfigStatus st = UfConfigLoadFile(h, "etc/ufsrvwebsock.config.lua", &opt, NULL);
+ * UfConfigLoadOptions opt = { *                             .mode = UF_CONFIG_LOAD_STRICT };
+ * UfConfigOpStatus st = UfConfigLoadFile(h, "etc/ufsrvwebsock.config.lua", &opt, NULL);
  * if (st != UF_CONFIG_OK) {
  *     const UfConfigError *e = UfConfigLastError();
  *     fprintf(stderr, "%s: %s (%s:%d)\n", UfConfigStatusString(st),
@@ -175,7 +174,7 @@ typedef struct UfConfig UfConfig;
  * };
  *
  * UfConfig *h = NULL;
- * UfConfigStatus st = UfConfigCreate(&h, &descriptor);
+ * UfConfigOpStatus st = UfConfigCreate(&h, &descriptor);
  * if (st != UF_CONFIG_OK) {
  *     fprintf(stderr, "config: %s\n", UfConfigStatusString(st));
  *     return EXIT_FAILURE;
@@ -183,7 +182,7 @@ typedef struct UfConfig UfConfig;
  * UfConfigDestroy(h);
  * @endcode
  */
-PUBLIC_API UfConfigStatus UfConfigCreate(UfConfig **out,
+PUBLIC_API UfConfigOpStatus UfConfigCreate(UfConfig **out,
                                          const UfConfigDescriptor *descriptor_ptr);
 
 /*!
@@ -216,7 +215,7 @@ PUBLIC_API void UfConfigDestroy(UfConfig *h);
  * @note A failed load leaves the handle's previous configuration untouched, so
  *       a failed reload is not a way to lose a working configuration.
  */
-PUBLIC_API UfConfigStatus UfConfigLoadFile(UfConfig *h, const char *path,
+PUBLIC_API UfConfigOpStatus UfConfigLoadFile(UfConfig *h, const char *path,
                                            const UfConfigLoadOptions *opt,
                                            UfConfigLoadReport *report);
 
@@ -233,7 +232,7 @@ PUBLIC_API UfConfigStatus UfConfigLoadFile(UfConfig *h, const char *path,
  *
  * @note The buffer is borrowed for the duration of the call only.
  */
-PUBLIC_API UfConfigStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_t len,
+PUBLIC_API UfConfigOpStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_t len,
                                              const UfConfigLoadOptions *opt,
                                              UfConfigLoadReport *report);
 
@@ -241,7 +240,7 @@ PUBLIC_API UfConfigStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_
  * @brief Loads from the origin the handle was created with.
  *
  * This is the entry point for a configuration held anywhere other than a file
- * named at the call site.  It reads @ref UfConfigDescriptor.kind and the
+ * named at the call site.  It reads @ref UfConfigDescriptor.backend and the
  * endpoint that goes with it — Redis, SQL or memory — resolves the driver for
  * that kind, opens it, and installs what comes back.
  *
@@ -273,7 +272,7 @@ PUBLIC_API UfConfigStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_
  * UfConfigDescriptor d = { .fields = g_ufconfig_fields,
  *                          .field_count = (size_t)g_ufconfig_field_count,
  *                          .lookup = UfConfigLookupPath,
- *                          .kind = UF_CONFIG_BACKEND_REDIS, .redis = redis };
+ *                          .backend = UF_CONFIG_BACKEND_REDIS, .redis = redis };
  *
  * UfConfig *h = NULL;
  * UfConfigCreate(&h, &d);
@@ -284,7 +283,7 @@ PUBLIC_API UfConfigStatus UfConfigLoadBuffer(UfConfig *h, const char *buf, size_
  * UfConfigDestroy(h);
  * @endcode
  */
-PUBLIC_API UfConfigStatus UfConfigLoad(UfConfig *h, const UfConfigLoadOptions *opt,
+PUBLIC_API UfConfigOpStatus UfConfigLoad(UfConfig *h, const UfConfigLoadOptions *opt,
                                        UfConfigLoadReport *report);
 
 /*!
@@ -304,7 +303,7 @@ PUBLIC_API UfConfigStatus UfConfigLoad(UfConfig *h, const UfConfigLoadOptions *o
  *       not change, so a reader holding a pointer is not invalidated by a
  *       reload that did not touch what it is reading.
  */
-PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *report);
+PUBLIC_API UfConfigOpStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *report);
 
 /*!
  * @brief Writes the current configuration back to its source.
@@ -316,7 +315,7 @@ PUBLIC_API UfConfigStatus UfConfigReload(UfConfig *h, UfConfigReloadReport *repo
  *         backend that can write.
  * @return UF_CONFIG_ERR_BACKEND if the write failed.
  */
-PUBLIC_API UfConfigStatus UfConfigPersist(UfConfig *h);
+PUBLIC_API UfConfigOpStatus UfConfigPersist(UfConfig *h);
 
 /*!
  * @brief Reads one field by its dotted path.
@@ -334,7 +333,7 @@ PUBLIC_API UfConfigStatus UfConfigPersist(UfConfig *h);
  *       When the path is a schema field, prefer
  *       @ref UfConfigGetFieldByIndex, which resolves without a walk.
  */
-PUBLIC_API UfConfigStatus UfConfigGetField(const UfConfig *h, const char *field_path,
+PUBLIC_API UfConfigOpStatus UfConfigGetField(const UfConfig *h, const char *field_path,
                                            UfConfigValue *out);
 
 /*!
@@ -353,7 +352,7 @@ PUBLIC_API UfConfigStatus UfConfigGetField(const UfConfig *h, const char *field_
  * @note Constant time.  Use this in a hot path where the path is known at
  *       compile time.
  */
-PUBLIC_API UfConfigStatus UfConfigGetFieldByIndex(const UfConfig *h, int id,
+PUBLIC_API UfConfigOpStatus UfConfigGetFieldByIndex(const UfConfig *h, int id,
                                                   UfConfigValue *out);
 
 /*!
@@ -368,12 +367,12 @@ PUBLIC_API UfConfigStatus UfConfigGetFieldByIndex(const UfConfig *h, int id,
  * @return UF_CONFIG_ERR_IMMUTABLE if the schema marks the field immutable.
  * @return UF_CONFIG_ERR_VALIDATION if the value fails its range or validator.
  */
-PUBLIC_API UfConfigStatus UfConfigSetInt(UfConfig *h, const char *path, int64_t v);
+PUBLIC_API UfConfigOpStatus UfConfigSetInt(UfConfig *h, const char *path, int64_t v);
 
 /*!
  * @brief Writes a float field.  See @ref UfConfigSetInt for the returns.
  */
-PUBLIC_API UfConfigStatus UfConfigSetFloat(UfConfig *h, const char *path, double v);
+PUBLIC_API UfConfigOpStatus UfConfigSetFloat(UfConfig *h, const char *path, double v);
 
 /*!
  * @brief Writes a string field.  See @ref UfConfigSetInt for the returns.
@@ -381,12 +380,12 @@ PUBLIC_API UfConfigStatus UfConfigSetFloat(UfConfig *h, const char *path, double
  * @note @c v is copied.  A transform the schema declares is applied on write,
  *       so a later read returns the transformed value.
  */
-PUBLIC_API UfConfigStatus UfConfigSetString(UfConfig *h, const char *path, const char *v);
+PUBLIC_API UfConfigOpStatus UfConfigSetString(UfConfig *h, const char *path, const char *v);
 
 /*!
  * @brief Writes a boolean field.  See @ref UfConfigSetInt for the returns.
  */
-PUBLIC_API UfConfigStatus UfConfigSetBool(UfConfig *h, const char *path, bool v);
+PUBLIC_API UfConfigOpStatus UfConfigSetBool(UfConfig *h, const char *path, bool v);
 
 /*!
  * @brief Writes an opaque byte field.
@@ -396,7 +395,7 @@ PUBLIC_API UfConfigStatus UfConfigSetBool(UfConfig *h, const char *path, bool v)
  * @param[in] p  Bytes to store.  May contain NUL.
  * @param[in] n  Number of bytes at @c p.
  */
-PUBLIC_API UfConfigStatus UfConfigSetBytes(UfConfig *h, const char *path, const uint8_t *p, size_t n);
+PUBLIC_API UfConfigOpStatus UfConfigSetBytes(UfConfig *h, const char *path, const uint8_t *p, size_t n);
 
 /*!
  * @brief Removes a field from the instance.
@@ -405,14 +404,14 @@ PUBLIC_API UfConfigStatus UfConfigSetBytes(UfConfig *h, const char *path, const 
  * @return UF_CONFIG_ERR_REQUIRED if the schema marks the field required.
  * @return UF_CONFIG_ERR_NOFIELD if the field is not present.
  */
-PUBLIC_API UfConfigStatus UfConfigUnset(UfConfig *h, const char *path);
+PUBLIC_API UfConfigOpStatus UfConfigUnset(UfConfig *h, const char *path);
 
 /*!
  * @brief Empties an array field, leaving it present but with no elements.
  *
  * @return UF_CONFIG_ERR_TYPE_MISMATCH if the field is not an array.
  */
-PUBLIC_API UfConfigStatus UfConfigArrayClear(UfConfig *h, const char *path);
+PUBLIC_API UfConfigOpStatus UfConfigArrayClear(UfConfig *h, const char *path);
 
 /*!
  * @brief Appends one string element to an array field.
@@ -420,7 +419,7 @@ PUBLIC_API UfConfigStatus UfConfigArrayClear(UfConfig *h, const char *path);
  * @return UF_CONFIG_ERR_TYPE_MISMATCH if the field is not an array.
  * @return UF_CONFIG_ERR_LIMIT_EXCEEDED if the array is at its declared maximum.
  */
-PUBLIC_API UfConfigStatus UfConfigArrayAppendString(UfConfig *h, const char *path, const char *v);
+PUBLIC_API UfConfigOpStatus UfConfigArrayAppendString(UfConfig *h, const char *path, const char *v);
 
 /*!
  * @brief Computes the handle's canonical digest.
@@ -436,7 +435,7 @@ PUBLIC_API UfConfigStatus UfConfigArrayAppendString(UfConfig *h, const char *pat
  *       produce the same digest.  A document that expresses a table inline and
  *       one that reaches the same table through an alias likewise agree.
  */
-PUBLIC_API UfConfigStatus UfConfigDigest(const UfConfig *h, unsigned char out[32]);
+PUBLIC_API UfConfigOpStatus UfConfigDigest(const UfConfig *h, unsigned char out[32]);
 
 /*!
  * @brief Returns a counter bumped on every successful mutation.
@@ -463,7 +462,7 @@ PUBLIC_API const UfConfigError *UfConfigLastError(void);
  * @return A static string.  Never NULL; an unknown value yields a placeholder
  *         rather than reading out of bounds.
  */
-PUBLIC_API const char *UfConfigStatusString(UfConfigStatus s);
+PUBLIC_API const char *UfConfigStatusString(UfConfigOpStatus s);
 
 /*!
  * @brief Opens a namespace by path.
@@ -495,7 +494,7 @@ PUBLIC_API const char *UfConfigStatusString(UfConfigStatus s);
  * }
  * @endcode
  */
-PUBLIC_API UfConfigStatus UfConfigNamespaceGet(const UfConfig *h, const char *path,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceGet(const UfConfig *h, const char *path,
                                                UfConfigNamespace **out);
 
 /*!
@@ -504,7 +503,7 @@ PUBLIC_API UfConfigStatus UfConfigNamespaceGet(const UfConfig *h, const char *pa
  * @return As @ref UfConfigNamespaceGet with an empty path.  The caller owns the
  *         returned handle and must free() it.
  */
-PUBLIC_API UfConfigStatus UfConfigRootGet(const UfConfig *h, UfConfigNamespace **out);
+PUBLIC_API UfConfigOpStatus UfConfigRootGet(const UfConfig *h, UfConfigNamespace **out);
 
 /*!
  * @brief Returns the number of entries directly under a namespace.
@@ -524,7 +523,7 @@ PUBLIC_API size_t UfConfigNamespaceEntryCount(const UfConfigNamespace *ns);
  * @note Entry order is not defined.  Use @ref UfConfigNamespaceEntryByName to
  *       reach a named entry.
  */
-PUBLIC_API UfConfigStatus UfConfigNamespaceEntryAt(const UfConfigNamespace *ns, size_t idx,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceEntryAt(const UfConfigNamespace *ns, size_t idx,
                                                    UfConfigNamespaceEntry *out);
 
 /*!
@@ -532,7 +531,7 @@ PUBLIC_API UfConfigStatus UfConfigNamespaceEntryAt(const UfConfigNamespace *ns, 
  *
  * @return UF_CONFIG_ERR_NOFIELD if the namespace has no such entry.
  */
-PUBLIC_API UfConfigStatus UfConfigNamespaceEntryByName(const UfConfigNamespace *ns,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceEntryByName(const UfConfigNamespace *ns,
                                                        const char *name,
                                                        UfConfigNamespaceEntry *out);
 
@@ -549,7 +548,7 @@ PUBLIC_API UfConfigStatus UfConfigNamespaceEntryByName(const UfConfigNamespace *
  * @return UF_CONFIG_ERR_ALIAS_UNRESOLVED if the alias names a table that does
  *         not exist.
  */
-PUBLIC_API UfConfigStatus UfConfigNamespaceResolve(const UfConfigNamespace *ns,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceResolve(const UfConfigNamespace *ns,
                                                    UfConfigNamespace **out);
 
 /*!
@@ -578,19 +577,19 @@ PUBLIC_API const char *UfConfigNamespacePathVia(const UfConfigNamespace *ns);
  * @return UF_CONFIG_ERR_LIMIT_EXCEEDED if @c cap is too small; @c needed then
  *         reports what is required, so a caller can size and retry.
  */
-PUBLIC_API UfConfigStatus UfConfigNamespaceToJson(const UfConfigNamespace *ns,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceToJson(const UfConfigNamespace *ns,
                                                   char *buf, size_t cap, size_t *needed);
 
 /*!
  * @brief Serialises a namespace as YAML.  See @ref UfConfigNamespaceToJson.
  */
-PUBLIC_API UfConfigStatus UfConfigNamespaceToYaml(const UfConfigNamespace *ns,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceToYaml(const UfConfigNamespace *ns,
                                                   char *buf, size_t cap, size_t *needed);
 
 /*!
  * @brief Serialises a namespace as INI.  See @ref UfConfigNamespaceToJson.
  */
-PUBLIC_API UfConfigStatus UfConfigNamespaceToIni(const UfConfigNamespace *ns,
+PUBLIC_API UfConfigOpStatus UfConfigNamespaceToIni(const UfConfigNamespace *ns,
                                                  char *buf, size_t cap, size_t *needed);
 
 /*!
@@ -601,34 +600,34 @@ PUBLIC_API UfConfigStatus UfConfigNamespaceToIni(const UfConfigNamespace *ns,
  * @param[in]  cap  Capacity of @c buf.
  * @param[out] needed  Receives the bytes required, including the terminator.
  */
-PUBLIC_API UfConfigStatus UfConfigToJson(const UfConfig *h, char *buf, size_t cap, size_t *needed);
+PUBLIC_API UfConfigOpStatus UfConfigToJson(const UfConfig *h, char *buf, size_t cap, size_t *needed);
 
 /*!
  * @brief Serialises the whole configuration as JSON into a fresh allocation.
  *
  * @param[out] out  Receives a NUL-terminated string the caller must free().
  */
-PUBLIC_API UfConfigStatus UfConfigToJsonAlloc(const UfConfig *h, char **out);
+PUBLIC_API UfConfigOpStatus UfConfigToJsonAlloc(const UfConfig *h, char **out);
 
 /*!
  * @brief Serialises the whole configuration as YAML.  See @ref UfConfigToJson.
  */
-PUBLIC_API UfConfigStatus UfConfigToYaml(const UfConfig *h, char *buf, size_t cap, size_t *needed);
+PUBLIC_API UfConfigOpStatus UfConfigToYaml(const UfConfig *h, char *buf, size_t cap, size_t *needed);
 
 /*!
  * @brief Serialises the whole configuration as YAML into a fresh allocation.
  */
-PUBLIC_API UfConfigStatus UfConfigToYamlAlloc(const UfConfig *h, char **out);
+PUBLIC_API UfConfigOpStatus UfConfigToYamlAlloc(const UfConfig *h, char **out);
 
 /*!
  * @brief Serialises the whole configuration as INI.  See @ref UfConfigToJson.
  */
-PUBLIC_API UfConfigStatus UfConfigToIni(const UfConfig *h, char *buf, size_t cap, size_t *needed);
+PUBLIC_API UfConfigOpStatus UfConfigToIni(const UfConfig *h, char *buf, size_t cap, size_t *needed);
 
 /*!
  * @brief Serialises the whole configuration as INI into a fresh allocation.
  */
-PUBLIC_API UfConfigStatus UfConfigToIniAlloc(const UfConfig *h, char **out);
+PUBLIC_API UfConfigOpStatus UfConfigToIniAlloc(const UfConfig *h, char **out);
 
 /*!
  * @brief Serialises the whole configuration in the Lua-styled document syntax.
@@ -637,12 +636,12 @@ PUBLIC_API UfConfigStatus UfConfigToIniAlloc(const UfConfig *h, char **out);
  *       read back.  It is not a Lua program and is not evaluated as one — the
  *       format mimics Lua's table syntax and carries no expressions.
  */
-PUBLIC_API UfConfigStatus UfConfigToLuaStyle(const UfConfig *h, char *buf, size_t cap, size_t *needed);
+PUBLIC_API UfConfigOpStatus UfConfigToLuaStyle(const UfConfig *h, char *buf, size_t cap, size_t *needed);
 
 /*!
  * @brief Serialises in the Lua-styled syntax into a fresh allocation.
  */
-PUBLIC_API UfConfigStatus UfConfigToLuaStyleAlloc(const UfConfig *h, char **out);
+PUBLIC_API UfConfigOpStatus UfConfigToLuaStyleAlloc(const UfConfig *h, char **out);
 
 /*!
  * @brief Installs a write-through backend for the handle's source.
@@ -660,8 +659,8 @@ PUBLIC_API UfConfigStatus UfConfigToLuaStyleAlloc(const UfConfig *h, char **out)
  *       again on the way back in.
  */
 PUBLIC_API void UfConfigSetBackend(UfConfig *h,
-    UfConfigStatus (*read_all)(void *ctx, const char *ident, char **buf, size_t *len),
-    UfConfigStatus (*write_all)(void *ctx, const char *ident, const char *buf, size_t len),
+    UfConfigOpStatus (*read_all)(void *ctx, const char *ident, char **buf, size_t *len),
+    UfConfigOpStatus (*write_all)(void *ctx, const char *ident, const char *buf, size_t len),
     void *ctx);
 
 /*!
@@ -686,7 +685,7 @@ PUBLIC_API void UfConfigUnpin(UfConfig *h);
  * @return UF_CONFIG_ERR_NOT_CONFIGURED if no backend supports single-field
  *         reads.
  */
-PUBLIC_API UfConfigStatus UfConfigRefreshField(UfConfig *h, const char *path,
+PUBLIC_API UfConfigOpStatus UfConfigRefreshField(UfConfig *h, const char *path,
                                                UfConfigValue *out);
 
 /*!
@@ -707,7 +706,7 @@ PUBLIC_API void UfConfigFreePairs(UfConfigFieldPair *p, size_t n);
  * @note Pairs are unordered.  This is the bulk-read direction of the driver
  *       contract, exposed so a backend can be exercised without a store.
  */
-PUBLIC_API UfConfigStatus UfConfigFlattenHandle(const struct UfConfig *h,
+PUBLIC_API UfConfigOpStatus UfConfigFlattenHandle(const struct UfConfig *h,
                                                 UfConfigFieldPair **out, size_t *np,
                                                 UfConfigMeta *meta);
 
@@ -720,7 +719,7 @@ PUBLIC_API UfConfigStatus UfConfigFlattenHandle(const struct UfConfig *h,
  *                  @ref UfConfigFreePairs.
  * @param[out] np   Receives the pair count.
  */
-PUBLIC_API UfConfigStatus UfConfigPairsFromLua(const char *buf, size_t n,
+PUBLIC_API UfConfigOpStatus UfConfigPairsFromLua(const char *buf, size_t n,
                                                UfConfigFieldPair **out, size_t *np);
 
 /*!
@@ -735,8 +734,17 @@ PUBLIC_API UfConfigStatus UfConfigPairsFromLua(const char *buf, size_t n,
  * @note This is the bulk-write direction of the driver contract.  Ordering and
  *       structure are re-established here, so a driver may return pairs in any
  *       order it likes and is never asked to preserve one.
+ *
+ * @note A load that fails publishes nothing.  The schema is applied to a tree in
+ *       private, and a refusal — a required field absent, a field the schema does
+ *       not declare under strict mode, a value a validator rejects — frees that
+ *       tree and leaves the configuration already in force, whatever the mode.
+ *       The status a pair-set earns is the status the equivalent document would
+ *       earn, so a store cannot install a partial configuration that a document
+ *       would have been refused for.  On that path @c report is empty: its notes
+ *       belonged to the tree that was discarded.
  */
-PUBLIC_API UfConfigStatus UfConfigLoadPairs(struct UfConfig *h,
+PUBLIC_API UfConfigOpStatus UfConfigLoadPairs(struct UfConfig *h,
                                             const UfConfigFieldPair *pairs, size_t n,
                                             const UfConfigMeta *meta,
                                             const UfConfigLoadOptions *opt,
@@ -759,14 +767,14 @@ PUBLIC_API UfConfigStatus UfConfigLoadPairs(struct UfConfig *h,
  * @note The driver struct must outlive every handle that uses it.  Registration
  *       is not required for a driver the module already builds in.
  */
-PUBLIC_API UfConfigStatus UfConfigRegisterDriver(const UfConfigDriver *drv);
+PUBLIC_API UfConfigOpStatus UfConfigRegisterDriver(const UfConfigDriver *drv);
 
 /*!
  * @brief Finds a registered driver by the kind it serves.
  *
  * @return The driver, or NULL if none is registered for that kind.
  */
-PUBLIC_API const UfConfigDriver *UfConfigDriverFindKind(UfConfigBackendKind kind);
+PUBLIC_API const UfConfigDriver *UfConfigDriverFindKind(UfConfigBackendStore kind);
 
 /*!
  * @brief Finds a registered driver by its declared name.

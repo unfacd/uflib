@@ -40,7 +40,7 @@
  *      - Keyed, whereby the key is stored along with the stored object inside their own "bucket"
  *
  *  @author Hirochika Asai <asai@jar.jp>
- *  @author Ayman Akt
+ *  @author Ayman Akt (significant mods)
  *  @bug No known bugs.
  */
 
@@ -103,6 +103,7 @@ hopscotch_init_with_offset(struct HopscotchHashtable *ht, size_t pfactor)
 
   ht->pfactor 		= pfactor;
   ht->buckets 		= buckets;
+  ht->count			= 0;
 
   return ht;
 }
@@ -613,108 +614,58 @@ hopscotch_iterator_executor(HopscotchHashtable *ht, CallbackExecutor executor_pt
 
 // end of keyed
 
-void *
-hopscotch_lookup_configurable(HopscotchHashtableConfigurable *htc, uint8_t *key)
+/*
+ * The configurable store is an open-addressed set whose key the caller defines:
+ *
+ *   keylen > 0   content key.  The key is keylen bytes at key_offset inside the
+ *                item; hash_func is handed those bytes and items are compared
+ *                with memcmp over the same range.
+ *   keylen == 0  identity key.  The item pointer is the key; hash_func is handed
+ *                the pointer's bytes and items are compared by pointer.
+ *
+ * Both modes hash and compare the same thing, probing wraps around the array,
+ * and the table doubles once it is three quarters full.  A resize reinserts
+ * every item through the same key code, so growth cannot change the key.
+ *
+ * hopinfo is unused here; the offset-based API above owns it.
+ */
+static const uint8_t *
+sKeyBytes(const HopscotchHashtableConfigurable *htc, const void *item)
 {
-  uint32_t h;
-  size_t idx;
-  size_t i;
-  size_t sz;
-  HopscotchHashtable *ht = &(htc->hashtable);
-  struct hopscotch_bucket *buckets = ht->buckets;
-
-  sz = 1ULL << ht->pfactor;
-  h = (*htc->hash_func)(key, htc->keylen);
-  idx = h & (sz - 1);
-
-  if (!buckets[idx].hopinfo) {
-    return NULL;
-  }
-
-  for (i = 0; i < HOPSCOTCH_HOPINFO_SIZE; i++) {
-    if (buckets[idx].hopinfo & (1 << i)) {
-      void *key_container = (char *)buckets[idx + i].data + htc->key_offset;
-      if (0 == memcmp(key, key_container, htc->keylen)) {
-          return buckets[idx + i].data;
-      }
-    }
-  }
-
-  return NULL;
+  return (const uint8_t *)item + htc->key_offset;
 }
 
-void *
-hopscotch_iterator_executor_configurable(HopscotchHashtableConfigurable *htc, CallbackExecutor executor_ptr, ClientContextData *ctx_ptr)
+static uint64_t
+sHashKey(const HopscotchHashtableConfigurable *htc, const void *item)
 {
-	size_t i,
-				 sz;
+  if (htc->keylen == 0) return (*htc->hash_func)((const uint8_t *)&item, sizeof(item));
 
-	HopscotchHashtable *ht = &(htc->hashtable);
-  struct hopscotch_bucket *buckets = ht->buckets;
-
-	sz = 1ULL << ht->pfactor;
-
-	for (i = 0; i < sz; i++) {
-		if (IS_PRESENT(buckets[i].data)) (*executor_ptr)(ctx_ptr, CLIENT_CTX_DATA(buckets[i].data));
-	}
-
-	return NULL;
+  return (*htc->hash_func)(sKeyBytes(htc, item), htc->keylen);
 }
 
-int
-hopscotch_insert_configurable(HopscotchHashtableConfigurable *htc, uint8_t *data)
+static bool
+sKeyMatches(const HopscotchHashtableConfigurable *htc, const void *key, const void *stored)
 {
-  uint32_t h;
-  size_t idx;
-  size_t i;
-  size_t sz;
-  size_t off;
-  size_t j;
-  HopscotchHashtable *ht = &(htc->hashtable);
-  struct hopscotch_bucket *buckets = ht->buckets;
+  if (htc->keylen == 0) return key == stored;
 
-  if (unlikely(IS_EMPTY(data)))	return -2;
+  return memcmp(sKeyBytes(htc, key), sKeyBytes(htc, stored), htc->keylen) == 0;
+}
 
-  /* Ensure the key does not exist.  Duplicate keys are not allowed. */
-  //AA this rule enforced by caller
-//    if ( NULL != hopscotch_lookup(ht, key) ) {
-//        /* The key already exists. */
-//        return -1;
-//    }
+static size_t
+sIdealSlot(const HopscotchHashtableConfigurable *htc, const void *item, size_t sz)
+{
+  return (size_t)sHashKey(htc, item) & (sz - 1);
+}
 
-  void *key_contained = (char *)data + htc->key_offset;
-  sz = 1ULL << ht->pfactor;
+static int
+sInsertIntoBuckets(struct hopscotch_bucket *buckets, size_t sz,
+                   const HopscotchHashtableConfigurable *htc, void *item)
+{
+  size_t slot = sIdealSlot(htc, item, sz);
 
-  h = (*htc->hash_func)(data, htc->keylen);
-  idx = h & (sz - 1);
-
-  // Linear probing to find an empty bucket
-  for (i=idx; i < sz; i++) {
-    if (NULL == buckets[i].data) {
-      /* Found an available bucket */
-      while (i-idx >= HOPSCOTCH_HOPINFO_SIZE) {
-        for (j=1; j<HOPSCOTCH_HOPINFO_SIZE; j++) {
-          if (buckets[i - j].hopinfo) {
-            off = __builtin_ctz(buckets[i - j].hopinfo);
-            if (off >= j) continue;
-            buckets[i].data = buckets[i - j + off].data;
-            buckets[i - j + off].data = NULL;
-            buckets[i - j].hopinfo &= ~(1ULL << off);
-            buckets[i - j].hopinfo |= (1ULL << j);
-            i = i - j + off;
-            break;
-          }
-        }
-
-        if (j >= HOPSCOTCH_HOPINFO_SIZE) {
-          if ((hopscotch_resize_with_offset(ht, ITEM_EXTRACTOR_UNDEFINED, 1, htc->key_offset)) == -1)	return -1;
-          return hopscotch_insert_with_offset(ht, NULL, data, htc->key_offset);
-        }
-      }
-
-      off = i - idx;
-      buckets[i].data = data;
-      buckets[idx].hopinfo |= (1ULL << off);
+  for (size_t probed = 0; probed < sz; probed++, slot = (slot + 1) % sz) {
+    if (buckets[slot].data == NULL) {
+      buckets[slot].data = item;
 
       return 0;
     }
@@ -723,38 +674,124 @@ hopscotch_insert_configurable(HopscotchHashtableConfigurable *htc, uint8_t *data
   return -1;
 }
 
-void *
-hopscotch_remove_configurable(HopscotchHashtableConfigurable *htc, uint8_t *key)
+/*
+ * Double the bucket array and reinsert every item.  The offset-based resize
+ * cannot be reused here: it hashes with _jenkins_hash over a fixed key length,
+ * which is not this store's key definition.
+ */
+static int
+sResizeConfigurable(HopscotchHashtableConfigurable *htc)
 {
-  uint32_t h;
-  size_t idx;
-  size_t i;
+  HopscotchHashtable *ht = &(htc->hashtable);
+  size_t sz = 1ULL << ht->pfactor;
+  size_t resized_sz = sz << 1;
+  struct hopscotch_bucket *buckets = ht->buckets;
+  struct hopscotch_bucket *resized = calloc(resized_sz, sizeof(struct hopscotch_bucket));
+
+  if (IS_EMPTY(resized)) return -1;
+
+  for (size_t i = 0; i < sz; i++) {
+    if (IS_EMPTY(buckets[i].data)) continue;
+
+    if (sInsertIntoBuckets(resized, resized_sz, htc, buckets[i].data) != 0) {
+      free(resized);
+
+      return -1;
+    }
+  }
+
+  free(buckets);
+  ht->buckets = resized;
+  ht->pfactor++;
+
+  return 0;
+}
+
+void *
+hopscotch_lookup_configurable(HopscotchHashtableConfigurable *htc, uint8_t *key)
+{
   size_t sz;
-  void *data;
-  void *key_from_container;
+  size_t slot;
   HopscotchHashtable *ht = &(htc->hashtable);
   struct hopscotch_bucket *buckets = ht->buckets;
 
   sz = 1ULL << ht->pfactor;
-  h = (*htc->hash_func)(key, htc->keylen);
-  idx = h & (sz - 1);
+  slot = sIdealSlot(htc, key, sz);
 
-  if ( !buckets[idx].hopinfo ) {
-      return NULL;
-  }
-
-  for (i=0; i < HOPSCOTCH_HOPINFO_SIZE; i++ ) {
-    if (buckets[idx].hopinfo & (1 << i)) {
-      key_from_container = (char *)buckets[idx + i].data + htc->key_offset;
-      if (0 == memcmp(key, key_from_container, htc->keylen)) {
-          data = buckets[idx + i].data;
-          buckets[idx].hopinfo &= ~(1ULL << i);
-          buckets[idx + i].data = NULL;
-
-          return data;
-      }
-    }
+  for (size_t probed = 0; probed < sz; probed++, slot = (slot + 1) % sz) {
+    if (buckets[slot].data == NULL) return NULL;
+    if (sKeyMatches(htc, key, buckets[slot].data)) return buckets[slot].data;
   }
 
   return NULL;
+}
+
+int
+hopscotch_insert_configurable(HopscotchHashtableConfigurable *htc, uint8_t *data)
+{
+  HopscotchHashtable *ht = &(htc->hashtable);
+
+  if (unlikely(IS_EMPTY(data)))	return -2;
+
+  /* Keep the load factor at or below 3/4: linear probing degrades sharply as
+   * the table fills, and the resize is far cheaper than the probing it saves. */
+  if ((htc->hashtable.count + 1) * 4 > (1ULL << ht->pfactor) * 3) {
+    if (sResizeConfigurable(htc) == -1)	return -1;
+  }
+
+  if (sInsertIntoBuckets(ht->buckets, 1ULL << ht->pfactor, htc, data) != 0) {
+    /* only reachable if the table filled between the check and the insert */
+    if (sResizeConfigurable(htc) == -1)	return -1;
+    if (sInsertIntoBuckets(ht->buckets, 1ULL << ht->pfactor, htc, data) != 0)	return -1;
+  }
+
+  htc->hashtable.count++;
+
+  return 0;
+}
+
+void *
+hopscotch_remove_configurable(HopscotchHashtableConfigurable *htc, uint8_t *key)
+{
+  size_t sz;
+  size_t slot;
+  bool found = false;
+  void *data;
+  HopscotchHashtable *ht = &(htc->hashtable);
+  struct hopscotch_bucket *buckets = ht->buckets;
+
+  sz = 1ULL << ht->pfactor;
+  slot = sIdealSlot(htc, key, sz);
+
+  for (size_t probed = 0; probed < sz; probed++, slot = (slot + 1) % sz) {
+    if (buckets[slot].data == NULL) return NULL;
+    if (sKeyMatches(htc, key, buckets[slot].data)) {
+      found = true;
+
+      break;
+    }
+  }
+
+  if (!found) return NULL;
+
+  data = buckets[slot].data;
+  buckets[slot].data = NULL;
+  htc->hashtable.count--;
+
+  /* Linear probing cannot leave a hole in a run: reinsert the rest of it so
+   * every later lookup still stops at the first empty bucket it meets. */
+  for (size_t i = (slot + 1) % sz; buckets[i].data != NULL; i = (i + 1) % sz) {
+    void *displaced = buckets[i].data;
+
+    buckets[i].data = NULL;
+    if (sInsertIntoBuckets(buckets, sz, htc, displaced) != 0) {
+      /* cannot happen while the table keeps its load factor, but never lose
+       * the item if it does */
+      buckets[i].data = displaced;
+
+      break;
+    }
+  }
+
+  return data;
 }

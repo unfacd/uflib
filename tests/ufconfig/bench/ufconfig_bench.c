@@ -238,15 +238,13 @@ static UfConfig *open_doc(const char *doc, size_t len)
   d.fields      = g_ufconfig_fields;
   d.field_count = (size_t)g_ufconfig_field_count;
   d.lookup      = UfConfigLookupPath;
-  d.kind        = UF_CONFIG_BACKEND_FILE;
+  d.backend        = UF_CONFIG_BACKEND_FILE;
   UfConfig *h   = NULL;
   if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) return NULL;
   UfConfigLoadOptions o;
   memset(&o, 0, sizeof(o));
-  o.size    = sizeof(o);
-  o.version = 1;
   o.mode    = UF_CONFIG_LOAD_LENIENT;
-  UfConfigStatus st = UfConfigLoadBuffer(h, doc, len, &o, NULL);
+  UfConfigOpStatus st = UfConfigLoadBuffer(h, doc, len, &o, NULL);
   if (st != UF_CONFIG_OK) {
     const UfConfigError *e = UfConfigLastError();
     fprintf(stderr, "open_doc(%zu bytes): %s: %s (at %s line %d)\n", len, UfConfigStatusString(st),
@@ -264,13 +262,11 @@ static UfConfig *open_schema(const char *file)
   d.fields      = g_ufconfig_fields;
   d.field_count = (size_t)g_ufconfig_field_count;
   d.lookup      = UfConfigLookupPath;
-  d.kind        = UF_CONFIG_BACKEND_FILE;
+  d.backend        = UF_CONFIG_BACKEND_FILE;
   UfConfig *h   = NULL;
   if (UfConfigCreate(&h, &d) != UF_CONFIG_OK) return NULL;
   UfConfigLoadOptions o;
   memset(&o, 0, sizeof(o));
-  o.size    = sizeof(o);
-  o.version = 1;
   o.mode    = UF_CONFIG_LOAD_LENIENT;
   if (UfConfigLoadFile(h, file, &o, NULL) != UF_CONFIG_OK) {
     UfConfigDestroy(h);
@@ -381,7 +377,7 @@ static void b_reload(void *v, long n)
   uint64_t          acc = 0;
   for (long i = 0; i < n; i++) {
     memset(&rep, 0, sizeof(rep));
-    UfConfigStatus st = UfConfigReload(c->h, &rep);
+    UfConfigOpStatus st = UfConfigReload(c->h, &rep);
     acc += (st == UF_CONFIG_OK || st == UF_CONFIG_NO_CHANGE);
   }
   g_sink += acc;

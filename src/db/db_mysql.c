@@ -523,7 +523,7 @@ int h_execute_query_json_mariadb(const struct _h_connection * conn, const char *
  */
 struct _h_data * h_get_mariadb_value(const char * value, const unsigned long length, const int m_type) {
   struct _h_data * data = NULL;
-  u_int64_t i_value;
+  int64_t i_value;
   double d_value;
   struct tm tm_value;
   char * endptr;
@@ -540,7 +540,7 @@ struct _h_data * h_get_mariadb_value(const char * value, const unsigned long len
       case FIELD_TYPE_LONGLONG:
       case FIELD_TYPE_INT24:
       case FIELD_TYPE_YEAR:
-        i_value = strtoul(value, &endptr, 10);
+        i_value = strtoll(value, &endptr, 10);
         if (endptr != value) {
           data = h_new_data_int(i_value);
         } else {
@@ -548,7 +548,7 @@ struct _h_data * h_get_mariadb_value(const char * value, const unsigned long len
         }
         break;
       case FIELD_TYPE_BIT:
-        i_value = strtol(value, &endptr, 2);
+        i_value = strtoll(value, &endptr, 2);
         if (endptr != value) {
           data = h_new_data_int(i_value);
         } else {

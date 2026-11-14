@@ -23,7 +23,6 @@
 
 #include <uflib/standard_c_includes.h>
 #include <uflib/db/db_sql.h>
-#include <mysql.h>
 
 // Get rid of noisy warning
 char * strcasestr(const char *haystack, const char *needle);
@@ -41,9 +40,11 @@ int h_close_db(struct _h_connection * conn) {
       h_close_sqlite(conn);
       return H_OK;
 #endif
+#ifdef UFLIB_CAPABILITY_SQL
     } else if (conn->type == HOEL_DB_TYPE_MARIADB) {
       h_close_mariadb(conn);
       return H_OK;
+#endif
 #ifdef _HOEL_PGSQL
     } else if (conn->type == HOEL_DB_TYPE_PGSQL) {
       h_close_pgsql(conn);
@@ -73,8 +74,10 @@ char * h_escape_string(const struct _h_connection * conn, const char * unsafe) {
       return h_escape_string_sqlite(conn, unsafe);
 #endif
 
+#ifdef UFLIB_CAPABILITY_SQL
     } else if (conn->type == HOEL_DB_TYPE_MARIADB) {
       return h_escape_string_mariadb(conn, unsafe);
+#endif
 
 #ifdef _HOEL_PGSQL
     } else if (conn->type == HOEL_DB_TYPE_PGSQL) {
@@ -101,17 +104,22 @@ char * h_escape_string(const struct _h_connection * conn, const char * unsafe) {
  * return H_OK on success
  */
 int h_execute_query(struct _h_connection * conn, const char * query, struct _h_result * result, int options) {
+  return h_execute_query_ex(conn, query, result, options, true);
+}
+
+int h_execute_query_ex(struct _h_connection * conn, const char * query, struct _h_result * result, int options, bool is_atomic) {
   if (conn != NULL && conn->connection != NULL && query != NULL) {
     if (0) {
       // Not happening
 #ifdef _HOEL_SQLITE
     } else if (conn->type == HOEL_DB_TYPE_SQLITE) {
       if (options & H_OPTION_EXEC) {
-        return h_exec_query_sqlite(conn, query);
+        return h_exec_query_sqlite_ex(conn, query, is_atomic);
       } else {
-        return h_select_query_sqlite(conn, query, result);
+        return h_select_query_sqlite_ex(conn, query, result, is_atomic);
       }
 #endif
+#ifdef UFLIB_CAPABILITY_SQL
     } else if (conn->type == HOEL_DB_TYPE_MARIADB) {
       int return_value = H_OK;
       BackoffAlgorithmStatus_t  retry_status = BackoffAlgorithmSuccess;
@@ -141,6 +149,7 @@ int h_execute_query(struct _h_connection * conn, const char * query, struct _h_r
       }
 
       return return_value;
+#endif
 
 #ifdef _HOEL_PGSQL
     } else if (conn->type == HOEL_DB_TYPE_PGSQL) {
@@ -191,8 +200,12 @@ struct _h_statement *
 h_statement_prepare(struct _h_connection *conn, const char *sql_statement, size_t sql_statement_sz)
 {
   if (conn->type == HOEL_DB_TYPE_MARIADB) {
+#ifdef UFLIB_CAPABILITY_SQL
     //value will be marshalled into struct's first and only member
     return (struct _h_statement *) h_statement_prepare_mariadb(conn, sql_statement, sql_statement_sz);
+#else
+    return NULL;
+#endif
   } else {
     return NULL;
   }
@@ -234,9 +247,6 @@ int h_row_add_data(struct _h_data ** row, struct _h_data * data, int cols) {
         }
         break;
       case HOEL_COL_TYPE_TEXT:
-        if (((struct _h_type_text *)data->t_data)->length==0) {
-          return H_ERROR_PARAMS;
-        }
         tmp[cols].type = HOEL_COL_TYPE_TEXT;
         tmp[cols].t_data = malloc(sizeof(struct _h_type_text));
         if (tmp[cols].t_data == NULL) {
@@ -302,11 +312,12 @@ int h_row_add_data(struct _h_data ** row, struct _h_data * data, int cols) {
  * return H_OK on success
  */
 int h_result_add_row(struct _h_result * result, struct _h_data * row, int rows) {
-  result->data = realloc(result->data, (rows+1)*sizeof(struct _h_data *));
-  if (result->data == NULL) {
+  struct _h_data **tmp = realloc(result->data, (rows+1)*sizeof(struct _h_data *));
+  if (tmp == NULL) {
     //y_log_message(Y_LOG_LEVEL_ERROR, "Hoel - Error allocating memory for result->data");
     return H_ERROR_MEMORY;
   } else {
+    result->data = tmp;
     result->data[rows] = row;
     result->nb_rows++;
     return H_OK;
@@ -345,6 +356,7 @@ struct _h_data * h_query_last_insert_id(struct _h_connection * conn) {
         data = h_new_data_null();
       }
 #endif
+#ifdef UFLIB_CAPABILITY_SQL
     } else if (conn->type == HOEL_DB_TYPE_MARIADB) {
       int last_id = h_last_insert_id_mariadb(conn);
       if (last_id > 0) {
@@ -352,6 +364,7 @@ struct _h_data * h_query_last_insert_id(struct _h_connection * conn) {
       } else {
         data = h_new_data_null();
       }
+#endif
 #ifdef _HOEL_PGSQL
     } else if (conn->type == HOEL_DB_TYPE_PGSQL) {
       // TODO
@@ -403,6 +416,100 @@ int h_query_select(struct _h_connection * conn, const char * query, struct _h_re
   } else {
     return H_ERROR_PARAMS;
   }
+}
+
+/**
+ * h_execute_query_collect
+ * Execute every statement in the query, appending one result per statement
+ * return H_OK on success
+ */
+int h_execute_query_collect(struct _h_connection * conn, const char * query, CollectionDescriptor * results, size_t * failed_index) {
+  return h_execute_query_collect_ex(conn, query, results, failed_index, true);
+}
+
+int h_execute_query_collect_ex(struct _h_connection * conn, const char * query, CollectionDescriptor * results, size_t * failed_index, bool is_atomic) {
+  if (conn != NULL && conn->connection != NULL && query != NULL && results != NULL) {
+    results->collection = NULL;
+    results->collection_sz = 0;
+    results->collection_base_offset = 0;
+    results->on_destroy_collection = NULL;
+
+    if (failed_index != NULL) *failed_index = 0;
+
+    if (0) {
+#ifdef _HOEL_SQLITE
+    } else if (conn->type == HOEL_DB_TYPE_SQLITE) {
+      return h_execute_query_collect_sqlite_ex(conn, query, results, failed_index, is_atomic);
+#endif
+    } else {
+      return H_ERROR_PARAMS;
+    }
+  } else {
+    return H_ERROR_PARAMS;
+  }
+
+  return H_ERROR_PARAMS;
+}
+
+/**
+ * h_clean_results
+ * Release every result held by a collection built by h_execute_query_collect
+ */
+void h_clean_results(CollectionDescriptor * results) {
+  if (results == NULL || results->collection == NULL) {
+    return;
+  }
+
+  for (size_t i = 0; i < results->collection_sz; i++) {
+    struct _h_result * result = AS_H_RESULT(results->collection[i]);
+
+    if (result != NULL) {
+      h_clean_result(result);
+      free(result);
+    }
+  }
+
+  free(results->collection);
+  results->collection = NULL;
+  results->collection_sz = 0;
+}
+
+int h_execute_migration(struct _h_connection * conn, const char * query, h_migration_step_fn step_fn,
+                        void * context, int target_version, size_t * failed_offset) {
+  if (conn == NULL || conn->connection == NULL) return H_ERROR_PARAMS;
+
+  if (0) {
+    // Not happening
+#ifdef _HOEL_SQLITE
+  } else if (conn->type == HOEL_DB_TYPE_SQLITE) {
+    return h_execute_migration_sqlite(conn, query, step_fn, context, target_version, failed_offset);
+#endif
+#ifdef UFLIB_CAPABILITY_SQL
+  } else if (conn->type == HOEL_DB_TYPE_MARIADB) {
+    syslog(LOG_ERR, "%s: MIGRATIONS ARE NOT SUPPORTED ON THIS BACKEND", __func__);
+#endif
+  }
+
+  return H_ERROR_PARAMS;
+}
+
+int h_last_error_message(const struct _h_connection * conn, char * out, size_t cap) {
+  if (conn == NULL || conn->connection == NULL || out == NULL || cap == 0) return H_ERROR_PARAMS;
+
+  if (0) {
+    // Not happening
+#ifdef _HOEL_SQLITE
+  } else if (conn->type == HOEL_DB_TYPE_SQLITE) {
+    return h_last_error_message_sqlite(conn, out, cap);
+#endif
+#ifdef UFLIB_CAPABILITY_SQL
+  } else if (conn->type == HOEL_DB_TYPE_MARIADB) {
+    out[0] = '\0';
+    syslog(LOG_ERR, "%s: NO ERROR TEXT FOR THIS BACKEND", __func__);
+#endif
+  }
+
+  return H_ERROR_PARAMS;
 }
 
 #if 0
@@ -518,7 +625,7 @@ int h_clean_data_full(struct _h_data * data) {
  * return pointer to the new structure
  * return NULL on error
  */
-struct _h_data * h_new_data_int(const u_int64_t value) {
+struct _h_data * h_new_data_int(const int64_t value) {
   struct _h_data * data = malloc(sizeof(struct _h_data));
   if (data != NULL) {
     data->t_data = malloc(sizeof(struct _h_type_int));

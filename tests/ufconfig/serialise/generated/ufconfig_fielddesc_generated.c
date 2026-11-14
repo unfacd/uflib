@@ -12,30 +12,30 @@ const struct UfConfigFieldDesc g_ufconfig_fields[] = {
     { UF_CONFIG_FIELD_T_ALIAS_TABLE_B_V, "t.alias_table.b_v", UF_FT_STR, 0, 0, 1, 0LL, 0.0, 0, "", 0, 0, 0LL, 0LL, NULL, NULL, NULL, 0, 0, 0LL, 0LL, 0, 0LL, NULL, NULL, 0 },
 };
 const int g_ufconfig_field_count = 9;
-PUBLIC_API UfConfigStatus UfConfigGetSIntV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSIntV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_S_INT_V, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetSFloatV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSFloatV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_S_FLOAT_V, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetSBoolV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSBoolV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_S_BOOL_V, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetSStrV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSStrV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_S_STR_V, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetSQuoted(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSQuoted(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_S_QUOTED, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetSListV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigSListV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_S_LIST_V, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetTNestedDeepV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigTNestedDeepV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_T_NESTED_DEEP_V, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetTAliasTableAV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigTAliasTableAV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_T_ALIAS_TABLE_A_V, out);
 }
-PUBLIC_API UfConfigStatus UfConfigGetTAliasTableBV(const UfConfig *h, UfConfigValue *out) {
+PUBLIC_API UfConfigOpStatus UfConfigTAliasTableBV(const UfConfig *h, UfConfigValue *out) {
     return UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_T_ALIAS_TABLE_B_V, out);
 }

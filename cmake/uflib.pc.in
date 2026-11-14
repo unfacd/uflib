@@ -6,7 +6,7 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 Name: uflib
 Description: C utility library for the ufsrv platform (ADTs, crypto, DB abstraction, networking)
 Version: @UFLIB_VERSION@
-Requires.private: openssl
+Requires.private: openssl@UFLIB_PC_REQUIRES_PRIVATE@
 # -luflib alone.  The vendored archives — K12, lzf, mjson, protobuf-c and the
 # logger's zlog backend — are folded into libuflib.a at build time, so naming
 # them here would be redundant at best.  At worst it was wrong: `-lzlog`
@@ -29,4 +29,4 @@ Libs: -L${libdir} -luflib
 # would make every uflib consumer depend on a library most of them never call —
 # the contract hiredis and libmariadb already follow.
 Libs.private: -lssl -lcrypto -lm
-Cflags: -I${includedir}
+Cflags: -I${includedir} -I${includedir}/uflib

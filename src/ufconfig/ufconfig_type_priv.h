@@ -12,7 +12,7 @@
  *
  * A node is one of four kinds and, when it is a leaf, holds exactly one value.
  * That value is held in a tagged union: @ref UfNode.v carries the four
- * representations, @ref UfNode.vkind names the one that is live, and exactly one
+ * representations, @ref UfNode.value_type names the one that is live, and exactly one
  * arm is ever populated.  Within the live arm the raw value is what the document
  * said and the effective value is what the schema's transform made of it, so a
  * read site is the same whichever stage produced the value it wants.
@@ -23,12 +23,6 @@
  * separate buffer that a transform writes (@ref sApplyStringField), but not of
  * the three scalar arms: every assignment to a scalar @c eff is an assignment of
  * its own @c raw, so those arms held one value in two fields.
- *
- * The cost of the union is that a read of a dead arm is undefined and silent.
- * Every read site is reached through a @c vkind test; that is a precondition of
- * this layout, not a convention.  A read that is not so guarded is a defect
- * under the flat layout too — it returned a zeroed field rather than a garbage
- * one — so the union narrows the margin for error rather than introducing it.
  *
  * Copyright (C) 2015-2026 unfacd works
  *
@@ -71,8 +65,7 @@ typedef enum UfNodeKind
 /*!
  * A bump allocator, in a chain of blocks.
  *
- * The whole tree, every string in it, and every string a transform produces are
- * allocated here, so destroying a configuration is releasing a handful of
+ * The whole tree, every string in it, and every string a transform produces are allocated here, so destroying a configuration is releasing a handful of
  * blocks rather than walking the tree.  Blocks are never freed individually.
  */
 typedef struct UfArena
@@ -105,10 +98,10 @@ struct UfNode
   UfNode *                        first_child;  ///< first child, or NULL
   UfNode *                        next_sibling; ///< next sibling, or NULL
 
-  UfConfigValueKind vkind; ///< which arm of @c v is the live one
+  UfConfigValueType value_type; ///< which arm of @c v is the live one
 
   /*!
-   * The value.  Exactly one arm is live, and @c vkind names it — a node holds
+   * The value.  Exactly one arm is live, and @c value_type names it — a node holds
    * one value, so the four representations do not need to co-exist.  A read
    * must be reached through the tag; reading a dead arm is undefined and the
    * compiler will not diagnose it.
@@ -119,10 +112,25 @@ struct UfNode
    */
   union
   {
-    struct { int64_t raw, eff; } i;                                      ///< integer value
-    struct { double  raw, eff; } f;                                      ///< float value
-    struct { bool    raw, eff; } b;                                      ///< boolean value
-    struct { char *raw; size_t raw_len; char *eff; size_t eff_len; } s;   ///< text value
+    struct
+    {
+      int64_t raw, eff;
+    } i; ///< integer value
+    struct
+    {
+      double raw, eff;
+    } f; ///< float value
+    struct
+    {
+      bool raw, eff;
+    } b; ///< boolean value
+    struct
+    {
+      char * raw;
+      size_t raw_len;
+      char * eff;
+      size_t eff_len;
+    } s; ///< text value
   } v;
 
   unsigned char digest[32];   ///< canonical digest of this subtree
@@ -140,9 +148,9 @@ struct UfNode
  */
 typedef struct UfConfigBackendOps
 {
-  UfConfigStatus (*read_all)(void *ctx, const char *ident, char **buf, size_t *len);
-  UfConfigStatus (*write_all)(void *ctx, const char *ident, const char *buf, size_t len);
-  void *           ctx;
+  UfConfigOpStatus (*read_all)(void *ctx, const char *ident, char **buf, size_t *len);
+  UfConfigOpStatus (*write_all)(void *ctx, const char *ident, const char *buf, size_t len);
+  void *             ctx;
 } UfConfigBackendOps;
 
 /*!
@@ -172,59 +180,27 @@ typedef struct UfLenientSlot
 
 struct UfConfig
 {
-  /*!
-   * The schema this handle was opened against.
-   *
-   * Copied from the caller's descriptor at initialisation, so the caller's
-   * struct may go out of scope.  The table and the function it points at must
-   * outlive the handle — they are the consumer's generated objects.
-   *
-   * A handle from @ref ConfigCreate -- the internal raw allocator -- carries
-   * a zeroed descriptor and @c is_described is false: it can parse and
-   * serialise, but it has no schema to validate against, and says so rather
-   * than pretending.  No consumer can reach that state: UfConfigCreate always
-   * binds a schema.
-   */
-  UfConfigDescriptor descriptor;
+  UfConfigDescriptor descriptor;  ///<
   int                is_described; ///< whether @c descriptor carries a schema
 
-  UfArena *            arena;           ///< the arena the current tree lives in
-  UfArena *            retired;         ///< arenas from previous loads, not yet released
-  UfNode *             root;            ///< the parsed tree, or NULL before a load
-  UfNode **            by_id;           ///< node per schema field id, or NULL
-  int                  by_id_n;         ///< length of @c by_id
+  UfArena *arena;   ///< the arena the current tree lives in
+  UfArena *retired; ///< arenas from previous loads, not yet released
+  UfNode * root;    ///< the parsed tree, or NULL before a load
+  UfNode **by_id;   ///< node per schema field id, or NULL
+  int      by_id_n; ///< length of @c by_id
 
   /*!
    * Index of the paths the schema does not declare, keyed by full path.
-   *
-   * The injected perfect hash answers a declared path in one probe, but a path
-   * it does not know falls through to a walk of the tree, and that walk scans
-   * siblings linearly.  A document loaded leniently may carry a scope of any
-   * width, so that scan is unbounded in what the document's author chose.
-   *
-   * This covers exactly the paths the hash cannot, so a strict load — where
-   * every leaf is declared — holds only the intermediate scopes, which the
-   * schema bounds.  A lenient load holds the undeclared remainder as well,
-   * which is proportional to the part of the document that does not conform
-   * rather than to the document.  Nothing here is proportional to declared
-   * content, and nothing is allocated at all when a document has no scopes.
    */
   UfLenientSlot *      unlisted;      ///< undeclared-path index, or NULL
   size_t               unlisted_n;    ///< slots in @c unlisted; a power of two, or 0
   size_t               unlisted_used; ///< occupied slots
-  UfConfigBackendOps   backend;         ///< superseded write-through seam
-  char *               source_path;     ///< where this was loaded from, or NULL
+  UfConfigBackendOps   backend;       ///< superseded write-through seam
+  char *               source_path;   ///< where this was loaded from, or NULL
+  char *               file_dest;     ///< the FILE destination the descriptor named, or NULL
+  char *               file_default;  ///< resolved cwd fallback, or NULL
   /*!
    * The parsed secrets file, or NULL when the schema declares no secret.
-   *
-   * Only opened when UfConfigDescriptor.fields carries a field with
-   * @c is_encrypted, so a configuration with no secrets never touches the
-   * filesystem here and @ref UfConfigCreate keeps its freedom from I/O.
-   *
-   * Keys are held once, here, and looked up by path when a field is decrypted
-   * rather than being copied per field onto the handle: one copy is one thing
-   * to wipe, and it is wiped when this is closed.  The lookup is a scan of a
-   * handful of entries, on the load path rather than the read path.
    */
   UflibSecretFile *    secrets;
   unsigned char        digest[32];      ///< canonical digest of the whole tree
@@ -254,10 +230,5 @@ struct UfConfig
   UfConfigReloadEntry *reload_store;    ///< backing store for reload reports
   size_t               reload_store_n;  ///< entries used in @c reload_store
 };
-
-/* The schema's types -- UfFieldType and UfConfigFieldDesc -- are part of the
-   public contract and live in <uflib/ufconfig/ufconfig_type.h>.  They are the
-   consumer's schema, generated from the consumer's files and injected at
-   initialisation, so they are not this module's to keep private. */
 
 #endif /* UFLIB_UFCONFIG_UFCONFIG_TYPE_PRIV_H */

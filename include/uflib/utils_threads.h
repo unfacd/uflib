@@ -23,6 +23,9 @@
 #include <uflib/standard_defs.h>
 #include <uflib/standard_c_includes.h>
 
+/* Kernel limit for PR_SET_NAME */
+#define PRCTL_MAX_NAME_SZ 15
+
 PUBLIC_API int ThreadSleep(long milliseconds);
 PUBLIC_API int ThreadSleepMs(long milliseconds);
 PUBLIC_API int SetThreadName(const char *thread_name);

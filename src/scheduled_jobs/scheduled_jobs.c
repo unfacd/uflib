@@ -263,9 +263,8 @@ DestructScheduledJobs(ScheduledJobs *jobs_ptr)
 			MinHeapDestroy(jobs_ptr->scheduled_jobs_store);
 			pthread_spin_destroy(&jobs_ptr->spin_lock);
 		}
+		memset(jobs_ptr, 0, sizeof(ScheduledJobs));
 	}
-
-	memset(jobs_ptr, 0, sizeof(ScheduledJobs));
 }
 
 size_t

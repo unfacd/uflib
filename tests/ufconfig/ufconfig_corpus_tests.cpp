@@ -73,11 +73,9 @@ TEST_P(UfConfigCorpus, MatchesItsDeclaredVerdict) {
     ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
 
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_LENIENT;
 
-    UfConfigStatus st = UfConfigLoadFile(h, path.c_str(), &opt, nullptr);
+    UfConfigOpStatus st = UfConfigLoadFile(h, path.c_str(), &opt, nullptr);
 
     if (c.want_accept) {
         EXPECT_NE(st, UF_CONFIG_ERR_PARSE)
@@ -97,8 +95,6 @@ TEST_P(UfConfigCorpus, MatchesItsDeclaredVerdict) {
         UfConfig *hs = nullptr;
         ASSERT_EQ(UfConfigTestCreate(&hs), UF_CONFIG_OK);
         UfConfigLoadOptions strict = {};
-        strict.size = sizeof(strict);
-        strict.version = 1;
         strict.mode = UF_CONFIG_LOAD_STRICT;
         EXPECT_NE(UfConfigLoadFile(hs, path.c_str(), &strict, nullptr), UF_CONFIG_OK)
             << c.file << " was accepted outright in strict mode";

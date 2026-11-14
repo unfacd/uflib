@@ -46,16 +46,5 @@ set_target_properties(zlog_s PROPERTIES OUTPUT_NAME zlog)
 add_executable(zlog-chk-conf zlog-chk-conf.c)
 target_link_libraries(zlog-chk-conf zlog)
 
-install(TARGETS
-        zlog zlog_s zlog-chk-conf
-        COMPONENT zlog
-        ARCHIVE DESTINATION lib
-        LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin
-)
-
-install(FILES
-        zlog.h
-        COMPONENT zlog
-        DESTINATION include
-)
+# Vendored zlog is merged into libuflib.a (zlog_s); uflib installs the header
+# under its own namespace, so this subproject installs nothing of its own.

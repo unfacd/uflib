@@ -2,8 +2,8 @@
 #ifndef UFCONFIG_SETTERS_STUB_GENERATED_H
 #define UFCONFIG_SETTERS_STUB_GENERATED_H
 #include <uflib/ufconfig/ufconfig.h>
-UfConfigStatus UfConfigSetTestharnKnobA(struct UfConfig *h, int64_t v);
-UfConfigStatus UfConfigSetTestharnKnobB(struct UfConfig *h, const char * v);
-UfConfigStatus UfConfigSetTestharnKnobC(struct UfConfig *h, bool v);
-UfConfigStatus UfConfigSetTestharnKnobF(struct UfConfig *h, double v);
+UfConfigOpStatus UfConfigSetTestharnKnobA(struct UfConfig *h, int64_t v);
+UfConfigOpStatus UfConfigSetTestharnKnobB(struct UfConfig *h, const char * v);
+UfConfigOpStatus UfConfigSetTestharnKnobC(struct UfConfig *h, bool v);
+UfConfigOpStatus UfConfigSetTestharnKnobF(struct UfConfig *h, double v);
 #endif

@@ -23,10 +23,10 @@
 #include <string.h>
 
 #include <regex.h>
-UfConfigStatus ConfigValidateIp4(const char *s);
-UfConfigStatus ConfigValidateIp6(const char *s);
+UfConfigOpStatus ConfigValidateIp4(const char *s);
+UfConfigOpStatus ConfigValidateIp6(const char *s);
 
-UfConfigStatus ConfigValidateCidr(const char *s)
+UfConfigOpStatus ConfigValidateCidr(const char *s)
 {
   if (!s) return UF_CONFIG_ERR_VALIDATION;
   const char *slash = strrchr(s, '/');
@@ -54,7 +54,7 @@ static int sIsLeap(int y)
   return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
 }
 
-UfConfigStatus ConfigValidateDate(const char *s)
+UfConfigOpStatus ConfigValidateDate(const char *s)
 {
   if (!s || strlen(s) != 10 || s[4] != '-' || s[7] != '-') return UF_CONFIG_ERR_VALIDATION;
   int y = 0, m = 0, d = 0;
@@ -75,7 +75,7 @@ UfConfigStatus ConfigValidateDate(const char *s)
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigValidateIp4(const char *s)
+UfConfigOpStatus ConfigValidateIp4(const char *s)
 {
   int         oct = 0, val = 0, digits = 0, lead0 = 0;
   const char *p   = s;
@@ -103,7 +103,7 @@ UfConfigStatus ConfigValidateIp4(const char *s)
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigValidateIp6(const char *s)
+UfConfigOpStatus ConfigValidateIp6(const char *s)
 {
   if (!s || !*s) return UF_CONFIG_ERR_VALIDATION;
   int         compact = 0, groups = 0, hex = 0;
@@ -146,7 +146,7 @@ UfConfigStatus ConfigValidateIp6(const char *s)
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigValidateEmail(const char *s)
+UfConfigOpStatus ConfigValidateEmail(const char *s)
 {
   if (!s || !*s) return UF_CONFIG_ERR_VALIDATION;
   const char *at = strchr(s, '@');
@@ -158,7 +158,7 @@ UfConfigStatus ConfigValidateEmail(const char *s)
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigValidateUrl(const char *s)
+UfConfigOpStatus ConfigValidateUrl(const char *s)
 {
   if (!s) return UF_CONFIG_ERR_VALIDATION;
   const char *sep = strstr(s, "://");
@@ -168,7 +168,7 @@ UfConfigStatus ConfigValidateUrl(const char *s)
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigValidateFqdn(const char *s)
+UfConfigOpStatus ConfigValidateFqdn(const char *s)
 {
   if (!s || !*s) return UF_CONFIG_ERR_VALIDATION;
   size_t n = strlen(s);
@@ -209,7 +209,7 @@ UfConfigStatus ConfigValidateFqdn(const char *s)
   return UF_CONFIG_OK;
 }
 
-UfConfigStatus ConfigValidateFileSize(const char *s)
+UfConfigOpStatus ConfigValidateFileSize(const char *s)
 {
   if (!s || !*s) return UF_CONFIG_ERR_VALIDATION;
   const char *p = s;
@@ -236,7 +236,7 @@ UfConfigStatus ConfigValidateFileSize(const char *s)
   return UF_CONFIG_ERR_VALIDATION;
 }
 
-UfConfigStatus ConfigValidateString(const struct UfConfigFieldDesc *d, const char *s, size_t n, int line, int col)
+UfConfigOpStatus ConfigValidateString(const struct UfConfigFieldDesc *d, const char *s, size_t n, int line, int col)
 {
   /* Every message below names the value, so a caller diagnosing a rejected
      configuration does not have to re-read the document to find out what was
@@ -280,7 +280,7 @@ UfConfigStatus ConfigValidateString(const struct UfConfigFieldDesc *d, const cha
     }
   }
   if (d->fmt) {
-    UfConfigStatus st = UF_CONFIG_OK;
+    UfConfigOpStatus st = UF_CONFIG_OK;
     if (!strcmp(d->fmt, "date")) st = ConfigValidateDate(s);
     else if (!strcmp(d->fmt, "url")) st = ConfigValidateUrl(s);
     else if (!strcmp(d->fmt, "email")) st = ConfigValidateEmail(s);

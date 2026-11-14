@@ -82,9 +82,9 @@ ufsrv = {
 
      -- ── File loader (concurrent registry + background I/O) ───────────
     fileloader = {
-        enabled              = 0,  -- disabled by default; set to 1 to enable
+        is_enabled              = true,  -- disabled by default;
         registry_size        = 4096,
-        registry_hot_loaded  = 64,
+        registry_hot_loaded_size  = 64,
         black_listed_files_registry = {"/etc/passwd", "/var/lib/secret.dat"}
     },
 

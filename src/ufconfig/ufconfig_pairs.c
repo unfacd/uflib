@@ -26,17 +26,17 @@
 static char *sEncDup(const UfNode *n)
 {
   char buf[512];
-  if (n->vkind == UF_CONFIG_KIND_INT) {
+  if (n->value_type == UF_CONFIG_VALUE_TYPE_INT) {
     snprintf(buf, sizeof(buf), "%lld", (long long)n->v.i.raw);
     return strdup(buf);
   }
-  if (n->vkind == UF_CONFIG_KIND_FLOAT) {
+  if (n->value_type == UF_CONFIG_VALUE_TYPE_FLOAT) {
     snprintf(buf, sizeof(buf), "%.17g", n->v.f.raw);
     if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E')) strcat(buf, ".0");
     return strdup(buf);
   }
-  if (n->vkind == UF_CONFIG_KIND_BOOL) return strdup(n->v.b.raw ? "true" : "false");
-  if (n->vkind == UF_CONFIG_KIND_STRING) {
+  if (n->value_type == UF_CONFIG_VALUE_TYPE_BOOL) return strdup(n->v.b.raw ? "true" : "false");
+  if (n->value_type == UF_CONFIG_VALUE_TYPE_STRING) {
     size_t nlen = n->v.s.raw_len;
     char * o    = (char*)malloc(nlen + 3);
     o[0]        = '"';
@@ -86,9 +86,9 @@ static void sCollectAliased(const UfNode *alias, const UfNode *n,
       snprintf(p, need, "%s.%s", alias->path, suffix);
       out[*k].path    = p;
       out[*k].encoded = sEncDup(n);
-      if (n->vkind == UF_CONFIG_KIND_INT) out[*k].vtype = UF_PAIR_INT;
-      else if (n->vkind == UF_CONFIG_KIND_FLOAT) out[*k].vtype = UF_PAIR_FLOAT;
-      else if (n->vkind == UF_CONFIG_KIND_BOOL) out[*k].vtype = UF_PAIR_BOOL;
+      if (n->value_type == UF_CONFIG_VALUE_TYPE_INT) out[*k].vtype = UF_PAIR_INT;
+      else if (n->value_type == UF_CONFIG_VALUE_TYPE_FLOAT) out[*k].vtype = UF_PAIR_FLOAT;
+      else if (n->value_type == UF_CONFIG_VALUE_TYPE_BOOL) out[*k].vtype = UF_PAIR_BOOL;
       else out[*k].vtype = UF_PAIR_STRING;
       (*k)++;
     }
@@ -107,9 +107,9 @@ static void sCollect(const UfNode *n, UfConfigFieldPair *out, size_t *k)
   if (n->kind == UF_NODE_LEAF && n->path && n->path[0]) {
     out[*k].path    = strdup(n->path);
     out[*k].encoded = sEncDup(n);
-    if (n->vkind == UF_CONFIG_KIND_INT) out[*k].vtype = UF_PAIR_INT;
-    else if (n->vkind == UF_CONFIG_KIND_FLOAT) out[*k].vtype = UF_PAIR_FLOAT;
-    else if (n->vkind == UF_CONFIG_KIND_BOOL) out[*k].vtype = UF_PAIR_BOOL;
+    if (n->value_type == UF_CONFIG_VALUE_TYPE_INT) out[*k].vtype = UF_PAIR_INT;
+    else if (n->value_type == UF_CONFIG_VALUE_TYPE_FLOAT) out[*k].vtype = UF_PAIR_FLOAT;
+    else if (n->value_type == UF_CONFIG_VALUE_TYPE_BOOL) out[*k].vtype = UF_PAIR_BOOL;
     else out[*k].vtype                                      = UF_PAIR_STRING;
     (*k)++;
   }
@@ -128,7 +128,7 @@ static void sCollect(const UfNode *n, UfConfigFieldPair *out, size_t *k)
   for (UfNode *c = n->first_child; c; c = c->next_sibling) sCollect(c, out, k);
 }
 
-PUBLIC_API UfConfigStatus UfConfigFlattenHandle(const UfConfig *h, UfConfigFieldPair **out, size_t *np,
+PUBLIC_API UfConfigOpStatus UfConfigFlattenHandle(const UfConfig *h, UfConfigFieldPair **out, size_t *np,
                                                 UfConfigMeta *  meta)
 {
   if (!h || !out || !np) return UF_CONFIG_ERR_INVALID_ARG;
@@ -152,12 +152,12 @@ PUBLIC_API UfConfigStatus UfConfigFlattenHandle(const UfConfig *h, UfConfigField
   return UF_CONFIG_OK;
 }
 
-PUBLIC_API UfConfigStatus UfConfigPairsFromLua(const char *buf, size_t n, UfConfigFieldPair **out, size_t *np)
+PUBLIC_API UfConfigOpStatus UfConfigPairsFromLua(const char *buf, size_t n, UfConfigFieldPair **out, size_t *np)
 {
   UfConfig *h = NULL;
   ConfigCreate(&h);
-  UfConfigLoadOptions opt = {.size = sizeof(opt), .version = 1, .mode = UF_CONFIG_LOAD_LENIENT};
-  UfConfigStatus      st  = UfConfigLoadBuffer(h, buf, n, &opt, NULL);
+  UfConfigLoadOptions opt = {.mode = UF_CONFIG_LOAD_LENIENT};
+  UfConfigOpStatus      st  = UfConfigLoadBuffer(h, buf, n, &opt, NULL);
   if (st && st != UF_CONFIG_ERR_REQUIRED && st != UF_CONFIG_ERR_UNKNOWN_FIELD) {
     UfConfigDestroy(h);
     return st;
@@ -165,6 +165,40 @@ PUBLIC_API UfConfigStatus UfConfigPairsFromLua(const char *buf, size_t n, UfConf
   st = UfConfigFlattenHandle(h, out, np, NULL);
   UfConfigDestroy(h);
   return st;
+}
+
+UfConfigOpStatus ConfigPairsToLuaStyle(const UfConfigFieldPair *pairs, size_t n, char **out)
+{
+  if (!out || (!pairs && n)) return UF_CONFIG_ERR_INVALID_ARG;
+  *out = NULL;
+  UfConfig *h = NULL;
+  UfConfigOpStatus st = ConfigCreate(&h);
+  if (st) return st;
+  UfConfigLoadOptions opt = {.mode = UF_CONFIG_LOAD_LENIENT};
+  st = UfConfigLoadPairs(h, pairs, n, NULL, &opt, NULL);
+  if (st && st != UF_CONFIG_ERR_REQUIRED && st != UF_CONFIG_ERR_UNKNOWN_FIELD) {
+    UfConfigDestroy(h);
+    return st;
+  }
+  st = UfConfigToLuaStyleAlloc(h, out);
+  UfConfigDestroy(h);
+  if (st) return st;
+
+  char *p = *out;
+  while (*p == ' ' || *p == '\n' || *p == '\t') p++;
+  if (*p != '{') return UF_CONFIG_OK;
+  size_t len = strlen(*out);
+  char *doc = (char *)malloc(len + 8);
+  if (!doc) {
+    free(*out);
+    *out = NULL;
+    return UF_CONFIG_ERR_NO_MEMORY;
+  }
+  memcpy(doc, "return ", 7);
+  memcpy(doc + 7, *out, len + 1);
+  free(*out);
+  *out = doc;
+  return UF_CONFIG_OK;
 }
 
 static int sIsIndexName(const char *s)
@@ -175,11 +209,11 @@ static int sIsIndexName(const char *s)
   return 1;
 }
 
-static UfConfigStatus sMarkArrays(UfNode *n)
+static UfConfigOpStatus sMarkArrays(UfNode *n)
 {
   if (!n) return UF_CONFIG_OK;
   for (UfNode *c = n->first_child; c; c = c->next_sibling) {
-    UfConfigStatus st = sMarkArrays(c);
+    UfConfigOpStatus st = sMarkArrays(c);
     if (st) return st;
   }
   int           nchild = 0, numeric = 0, maxix = -1;
@@ -242,7 +276,7 @@ static UfNode *sEnsurePath(UfConfig *h, UfNode *root, const char *path)
   return cur;
 }
 
-PUBLIC_API UfConfigStatus UfConfigLoadPairs(UfConfig *          h, const UfConfigFieldPair *     pairs, size_t n,
+PUBLIC_API UfConfigOpStatus UfConfigLoadPairs(UfConfig *          h, const UfConfigFieldPair *     pairs, size_t n,
                                             const UfConfigMeta *meta, const UfConfigLoadOptions *opt,
                                             UfConfigLoadReport *report)
 {
@@ -279,19 +313,19 @@ PUBLIC_API UfConfigStatus UfConfigLoadPairs(UfConfig *          h, const UfConfi
     leaf->kind    = UF_NODE_LEAF;
     const char *e = pairs[i].encoded ? pairs[i].encoded : "";
     if (pairs[i].vtype == UF_PAIR_INT) {
-      leaf->vkind = UF_CONFIG_KIND_INT;
+      leaf->value_type = UF_CONFIG_VALUE_TYPE_INT;
       leaf->v.i.raw = leaf->v.i.eff = atoll(e);
     }
     else if (pairs[i].vtype == UF_PAIR_FLOAT) {
-      leaf->vkind = UF_CONFIG_KIND_FLOAT;
+      leaf->value_type = UF_CONFIG_VALUE_TYPE_FLOAT;
       leaf->v.f.raw = leaf->v.f.eff = atof(e);
     }
     else if (pairs[i].vtype == UF_PAIR_BOOL) {
-      leaf->vkind = UF_CONFIG_KIND_BOOL;
+      leaf->value_type = UF_CONFIG_VALUE_TYPE_BOOL;
       leaf->v.b.raw = leaf->v.b.eff = !strcmp(e, "true");
     }
     else {
-      leaf->vkind    = UF_CONFIG_KIND_STRING;
+      leaf->value_type    = UF_CONFIG_VALUE_TYPE_STRING;
       const char *s  = e;
       size_t      sl = strlen(s);
       if (sl >= 2 && s[0] == '"' && s[sl - 1] == '"') {
@@ -303,7 +337,7 @@ PUBLIC_API UfConfigStatus UfConfigLoadPairs(UfConfig *          h, const UfConfi
       leaf->v.s.eff     = leaf->v.s.raw;
     }
   }
-  UfConfigStatus ast = sMarkArrays(root);
+  UfConfigOpStatus ast = sMarkArrays(root);
   if (ast) {
     ConfigArenaFree(h->arena);
     h->arena = old_a;
@@ -311,11 +345,15 @@ PUBLIC_API UfConfigStatus UfConfigLoadPairs(UfConfig *          h, const UfConfi
     return ast;
   }
   UfConfigLoadMode mode = opt ? opt->mode : UF_CONFIG_LOAD_LENIENT;
-  UfConfigStatus   st   = ConfigApplySchema(h, root, mode, report);
-  if (st && st != UF_CONFIG_ERR_REQUIRED && st != UF_CONFIG_ERR_UNKNOWN_FIELD) {
+  UfConfigOpStatus   st   = ConfigApplySchema(h, root, mode, report, opt);
+  if (st) {
     ConfigArenaFree(h->arena);
     h->arena = old_a;
     pthread_mutex_unlock(&h->build_lock);
+    if (report) {
+      report->note_count = 0;
+      report->notes      = NULL;
+    }
     return st;
   }
   /* Into a local, not the handle: the digest is part of what a reader looks
@@ -359,7 +397,7 @@ PUBLIC_API void UfConfigFreePairs(UfConfigFieldPair *p, size_t n)
   free(p);
 }
 
-PUBLIC_API UfConfigStatus UfConfigRefreshField(UfConfig *h, const char *path, UfConfigValue *out)
+PUBLIC_API UfConfigOpStatus UfConfigRefreshField(UfConfig *h, const char *path, UfConfigValue *out)
 {
   if (!h || !path || !out) return UF_CONFIG_ERR_INVALID_ARG;
   return UfConfigGetField(h, path, out);

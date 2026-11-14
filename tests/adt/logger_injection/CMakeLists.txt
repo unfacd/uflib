@@ -15,7 +15,7 @@
 # reaches hashtable_v2's symbols has to name it for itself.  Same resolution as
 # tests/adt/hashtable_v2.
 
-find_library(UTF8PROC_LIBRARY utf8proc PATHS /opt/lib NO_DEFAULT_PATH)
+find_package(Utf8proc REQUIRED)
 
 add_c_test(
     NAME adt_logger_injection_tests

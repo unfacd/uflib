@@ -24,9 +24,14 @@ extern "C" {
 #include "ufconfig_test_schema.h"
 
 #include <algorithm>
+#include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <vector>
 
 namespace {
@@ -35,10 +40,88 @@ std::string SamplePath(const char *leaf) {
     return std::string(UFCONFIG_TEST_SAMPLE_DIR) + "/" + leaf;
 }
 
+std::string ReadWholeFile(const std::string &path) {
+    std::string out;
+    FILE *f = fopen(path.c_str(), "rb");
+    if (f == nullptr) return out;
+    char buf[4096];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, n);
+    fclose(f);
+    return out;
+}
+
+bool WriteWholeFile(const std::string &path, const std::string &bytes) {
+    FILE *f = fopen(path.c_str(), "wb");
+    if (f == nullptr) return false;
+    bool ok = fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+    fclose(f);
+    return ok;
+}
+
+// A directory owned by one test scope, removed with its files when the scope
+// ends, so an assertion failure part-way through leaves nothing behind.
+class TempDir {
+  public:
+    TempDir() {
+        char tmpl[] = "/tmp/ufconfig_persist_XXXXXX";
+        char *d = mkdtemp(tmpl);
+        if (d != nullptr) path_ = d;
+    }
+    ~TempDir() {
+        if (path_.empty()) return;
+        for (const std::string &leaf : files_) std::remove((path_ + "/" + leaf).c_str());
+        rmdir(path_.c_str());
+    }
+    TempDir(const TempDir &) = delete;
+    TempDir &operator=(const TempDir &) = delete;
+
+    bool ok() const { return !path_.empty(); }
+    const std::string &Directory() const { return path_; }
+    std::string Path(const std::string &leaf) {
+        files_.push_back(leaf);
+        return path_ + "/" + leaf;
+    }
+
+  private:
+    std::string path_;
+    std::vector<std::string> files_;
+};
+
+// Bounds every file write this process makes, so a store that writes through
+// its destination fails part-way rather than at open.  Restores both the limit
+// and the disposition of SIGXFSZ, which a write over the bound raises.
+class FileSizeLimit {
+  public:
+    explicit FileSizeLimit(rlim_t bytes) {
+        struct sigaction sa = {};
+        sa.sa_handler = SIG_IGN;
+        if (sigaction(SIGXFSZ, &sa, &old_sig_) == 0) sig_installed_ = true;
+        struct rlimit lim = {};
+        if (getrlimit(RLIMIT_FSIZE, &old_lim_) == 0) {
+            lim.rlim_cur = bytes;
+            lim.rlim_max = old_lim_.rlim_max;
+            if (setrlimit(RLIMIT_FSIZE, &lim) == 0) limit_set_ = true;
+        }
+    }
+    ~FileSizeLimit() {
+        if (limit_set_) setrlimit(RLIMIT_FSIZE, &old_lim_);
+        if (sig_installed_) sigaction(SIGXFSZ, &old_sig_, nullptr);
+    }
+    FileSizeLimit(const FileSizeLimit &) = delete;
+    FileSizeLimit &operator=(const FileSizeLimit &) = delete;
+
+    bool ok() const { return limit_set_ && sig_installed_; }
+
+  private:
+    struct rlimit old_lim_ = {};
+    struct sigaction old_sig_ = {};
+    bool limit_set_ = false;
+    bool sig_installed_ = false;
+};
+
 UfConfigLoadOptions Lenient() {
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_LENIENT;
     return opt;
 }
@@ -48,6 +131,39 @@ std::vector<unsigned char> DigestOf(UfConfig *h) {
     UfConfigDigest(h, d.data());
     return d;
 }
+
+UfConfigOpStatus CreateWithFileDestination(UfConfig **out, const char *dest) {
+    UfConfigDescriptor descriptor;
+    memset(&descriptor, 0, sizeof(descriptor));
+    descriptor.fields           = g_ufconfig_fields;
+    descriptor.field_count      = (size_t)g_ufconfig_field_count;
+    descriptor.lookup           = UfConfigLookupPath;
+    descriptor.backend             = UF_CONFIG_BACKEND_FILE;
+    descriptor.config_file_path = dest;
+    return UfConfigCreate(out, &descriptor);
+}
+
+// Restores the working directory when the scope ends, so a test that persists
+// to the cwd default cannot leak its chdir into the next one.
+class CwdGuard {
+  public:
+    explicit CwdGuard(const std::string &to) {
+        char buf[4096];
+        if (getcwd(buf, sizeof(buf)) != nullptr) old_ = buf;
+        ok_ = chdir(to.c_str()) == 0;
+    }
+    ~CwdGuard() {
+        if (!old_.empty()) chdir(old_.c_str());
+    }
+    CwdGuard(const CwdGuard &) = delete;
+    CwdGuard &operator=(const CwdGuard &) = delete;
+
+    bool ok() const { return ok_; }
+
+  private:
+    std::string old_;
+    bool ok_ = false;
+};
 
 }  // namespace
 
@@ -76,7 +192,7 @@ TEST(UfConfigDriver, BuiltInDriversAreRegistered) {
 
 TEST(UfConfigDriver, UnknownNameAndKindResolveToNothing) {
     EXPECT_EQ(UfConfigDriverFindName("no-such-driver"), nullptr);
-    EXPECT_EQ(UfConfigDriverFindKind(static_cast<UfConfigBackendKind>(9999)), nullptr);
+    EXPECT_EQ(UfConfigDriverFindKind(static_cast<UfConfigBackendStore>(9999)), nullptr);
 }
 
 TEST(UfConfigDriver, RegistrationRefusesAVersionItCannotDrive) {
@@ -117,7 +233,7 @@ TEST(UfConfigDriver, MemDriverRefusesAReadBeforeAnythingIsWritten) {
 
     void *ctx = nullptr;
     UfConfigBackendSpec spec = {};
-    spec.kind = UF_CONFIG_BACKEND_MEM;
+    spec.backend_store = UF_CONFIG_BACKEND_MEM;
     ASSERT_EQ(mem->open(&ctx, &spec), UF_CONFIG_OK);
 
     UfConfigFieldPair *pairs = nullptr;
@@ -134,7 +250,7 @@ TEST(UfConfigDriver, MemDriverRoundTripsAndAdvancesItsChangeToken) {
 
     void *ctx = nullptr;
     UfConfigBackendSpec spec = {};
-    spec.kind = UF_CONFIG_BACKEND_MEM;
+    spec.backend_store = UF_CONFIG_BACKEND_MEM;
     ASSERT_EQ(mem->open(&ctx, &spec), UF_CONFIG_OK);
 
     UfConfigFieldPair input[3] = {
@@ -296,7 +412,7 @@ TEST(UfConfigDriver, RedisDriverIsNamespacedAndRefusesBeforeAFirstWrite) {
 
     void *ctx = nullptr;
     UfConfigBackendSpec spec = {};
-    spec.kind = UF_CONFIG_BACKEND_REDIS;
+    spec.backend_store = UF_CONFIG_BACKEND_REDIS;
     spec.u.redis.host = rhost.c_str();
     spec.u.redis.port = rport;
     spec.u.redis.ns = "alice";
@@ -343,7 +459,7 @@ TEST(UfConfigDriver, TwoNamespacesDoNotSeeEachOther) {
 
     void *alice = nullptr;
     UfConfigBackendSpec alice_spec = {};
-    alice_spec.kind = UF_CONFIG_BACKEND_REDIS;
+    alice_spec.backend_store = UF_CONFIG_BACKEND_REDIS;
     alice_spec.u.redis.host = rhost.c_str();
     alice_spec.u.redis.port = rport;
     alice_spec.u.redis.ns = "alice";
@@ -353,7 +469,7 @@ TEST(UfConfigDriver, TwoNamespacesDoNotSeeEachOther) {
 
     void *bob = nullptr;
     UfConfigBackendSpec bob_spec = {};
-    bob_spec.kind = UF_CONFIG_BACKEND_REDIS;
+    bob_spec.backend_store = UF_CONFIG_BACKEND_REDIS;
     bob_spec.u.redis.host = rhost.c_str();
     bob_spec.u.redis.port = rport;
     bob_spec.u.redis.ns = "bob";
@@ -389,7 +505,7 @@ TEST(UfConfigDriver, SqlDriverReconstructsArraysRatherThanScalars) {
 
     void *ctx = nullptr;
     UfConfigBackendSpec spec = {};
-    spec.kind = UF_CONFIG_BACKEND_SQL;
+    spec.backend_store = UF_CONFIG_BACKEND_SQL;
     spec.u.sql.dsn = dsn;
     spec.u.sql.ns = "alice";
     spec.u.sql.config_name = "ufsrvwebsock";
@@ -433,7 +549,7 @@ TEST(UfConfigDriver, FileDriverReadsTheDocumentItWasGiven) {
     const std::string path = SamplePath("sample.config.lua");
     void *ctx = nullptr;
     UfConfigBackendSpec spec = {};
-    spec.kind = UF_CONFIG_BACKEND_FILE;
+    spec.backend_store = UF_CONFIG_BACKEND_FILE;
     spec.u.file.path = path.c_str();
     ASSERT_EQ(file->open(&ctx, &spec), UF_CONFIG_OK);
 
@@ -445,6 +561,164 @@ TEST(UfConfigDriver, FileDriverReadsTheDocumentItWasGiven) {
     UfConfigFreePairs(pairs, n);
 
     file->close(ctx);
+}
+
+TEST(UfConfigDriver, FileDriverWritesBackADocumentThatReloadsToTheSameConfiguration) {
+    TempDir dir;
+    ASSERT_TRUE(dir.ok());
+    const std::string path = dir.Path("persist.config");
+    const std::string seed = ReadWholeFile(SamplePath("sample.config.lua"));
+    ASSERT_FALSE(seed.empty());
+    ASSERT_TRUE(WriteWholeFile(path, seed));
+
+    UfConfigLoadOptions opt = Lenient();
+
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadFile(h, path.c_str(), &opt, nullptr), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigSetInt(h, "testharn.knob_a", 42), UF_CONFIG_OK);
+
+    char *before = nullptr;
+    ASSERT_EQ(UfConfigToJsonAlloc(h, &before), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigPersist(h), UF_CONFIG_OK);
+
+    UfConfig *back = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&back), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadFile(back, path.c_str(), &opt, nullptr), UF_CONFIG_OK)
+        << "the document the driver wrote cannot be loaded back:\n"
+        << ReadWholeFile(path).substr(0, 200);
+
+    UfConfigValue v;
+    ASSERT_EQ(UfConfigGetField(back, "testharn.knob_a", &v), UF_CONFIG_OK);
+    EXPECT_EQ(v.as.i, 42) << "a value the caller set did not survive write-back";
+
+    char *after = nullptr;
+    ASSERT_EQ(UfConfigToJsonAlloc(back, &after), UF_CONFIG_OK);
+    ASSERT_NE(before, nullptr);
+    ASSERT_NE(after, nullptr);
+    EXPECT_STREQ(before, after) << "write-back lost or altered fields";
+
+    free(before);
+    free(after);
+    UfConfigDestroy(h);
+    UfConfigDestroy(back);
+}
+
+TEST(UfConfigDriver, FileDriverLeavesTheDocumentIntactWhenTheWriteCannotComplete) {
+    TempDir dir;
+    ASSERT_TRUE(dir.ok());
+    const std::string path = dir.Path("persist.config");
+    const std::string seed = ReadWholeFile(SamplePath("sample.config.lua"));
+    ASSERT_FALSE(seed.empty());
+    ASSERT_TRUE(WriteWholeFile(path, seed));
+
+    UfConfigLoadOptions opt = Lenient();
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadFile(h, path.c_str(), &opt, nullptr), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigSetInt(h, "testharn.knob_a", 42), UF_CONFIG_OK);
+
+    {
+        FileSizeLimit limit(64);
+        ASSERT_TRUE(limit.ok()) << "cannot bound a file write in this environment";
+        EXPECT_NE(UfConfigPersist(h), UF_CONFIG_OK)
+            << "a write that could not be completed was reported as success";
+    }
+
+    EXPECT_EQ(ReadWholeFile(path), seed)
+        << "a write that could not be completed destroyed the document it was replacing";
+
+    UfConfigDestroy(h);
+}
+
+TEST(UfConfigDriver, FileDriverPreservesTheDocumentsMode) {
+    TempDir dir;
+    ASSERT_TRUE(dir.ok());
+    const std::string path = dir.Path("persist.config");
+    const std::string seed = ReadWholeFile(SamplePath("sample.config.lua"));
+    ASSERT_FALSE(seed.empty());
+    ASSERT_TRUE(WriteWholeFile(path, seed));
+    ASSERT_EQ(chmod(path.c_str(), 0600), 0);
+
+    UfConfigLoadOptions opt = Lenient();
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadFile(h, path.c_str(), &opt, nullptr), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigPersist(h), UF_CONFIG_OK);
+
+    struct stat sb = {};
+    ASSERT_EQ(stat(path.c_str(), &sb), 0);
+    EXPECT_EQ(sb.st_mode & 07777, 0600u) << "the write changed the mode the operator had set";
+
+    UfConfigDestroy(h);
+}
+
+TEST(UfConfigDriver, FilePersistWritesToTheDestinationTheDescriptorNames) {
+    TempDir dir;
+    ASSERT_TRUE(dir.ok());
+    const std::string loaded = dir.Path("loaded.config");
+    const std::string dest   = dir.Path("destination.config");
+    const std::string seed   = ReadWholeFile(SamplePath("sample.config.lua"));
+    ASSERT_FALSE(seed.empty());
+    ASSERT_TRUE(WriteWholeFile(loaded, seed));
+
+    UfConfigLoadOptions opt = Lenient();
+
+    UfConfig *h = nullptr;
+    ASSERT_EQ(CreateWithFileDestination(&h, dest.c_str()), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadFile(h, loaded.c_str(), &opt, nullptr), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigSetInt(h, "testharn.knob_a", 42), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigPersist(h), UF_CONFIG_OK);
+
+    EXPECT_TRUE(ReadWholeFile(loaded) == seed)
+        << "persist rewrote the document it was loaded from instead of the destination";
+
+    UfConfig *back = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&back), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadFile(back, dest.c_str(), &opt, nullptr), UF_CONFIG_OK)
+        << "the destination the descriptor named holds no usable document:\n"
+        << ReadWholeFile(dest).substr(0, 200);
+
+    UfConfigValue v;
+    ASSERT_EQ(UfConfigGetField(back, "testharn.knob_a", &v), UF_CONFIG_OK);
+    EXPECT_EQ(v.as.i, 42);
+
+    UfConfigDestroy(h);
+    UfConfigDestroy(back);
+}
+
+TEST(UfConfigDriver, FilePersistFallsBackToTheWorkingDirectoryWhenNoDestinationIsKnown) {
+    TempDir dir;
+    ASSERT_TRUE(dir.ok());
+    const std::string dumped = dir.Path("ufconfig.dumped.config");
+    const std::string seed   = ReadWholeFile(SamplePath("sample.config.lua"));
+    ASSERT_FALSE(seed.empty());
+
+    UfConfigLoadOptions opt = Lenient();
+
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadBuffer(h, seed.data(), seed.size(), &opt, nullptr), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigSetInt(h, "testharn.knob_a", 42), UF_CONFIG_OK);
+
+    {
+        CwdGuard cwd(dir.Directory());
+        ASSERT_TRUE(cwd.ok()) << "cannot enter the temporary directory";
+        ASSERT_EQ(UfConfigPersist(h), UF_CONFIG_OK)
+            << "persist had no destination and did not fall back to the working directory";
+    }
+
+    EXPECT_FALSE(ReadWholeFile(dumped).empty()) << "the default document was not written";
+
+    UfConfig *back = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&back), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigLoadFile(back, dumped.c_str(), &opt, nullptr), UF_CONFIG_OK);
+    UfConfigValue v;
+    ASSERT_EQ(UfConfigGetField(back, "testharn.knob_a", &v), UF_CONFIG_OK);
+    EXPECT_EQ(v.as.i, 42);
+
+    UfConfigDestroy(h);
+    UfConfigDestroy(back);
 }
 
 // ── Serialisers and mutation ─────────────────────────────────────────────────
@@ -527,6 +801,28 @@ TEST(UfConfigDriver, MutableFieldsAcceptWritesAndImmutableOnesDoNot) {
     // The listener port is not marked mutable, so a write must be refused
     // rather than applied and forgotten.
     EXPECT_EQ(UfConfigSetInt(h, "ufsrv.main_listener_port", 1234), UF_CONFIG_ERR_IMMUTABLE);
+
+    UfConfigDestroy(h);
+}
+
+TEST(UfConfigDriver, ARefusedSetLeavesTheValueInPlace) {
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+    UfConfigLoadOptions opt = Lenient();
+    ASSERT_EQ(UfConfigLoadFile(h, SamplePath("sample.config.lua").c_str(), &opt, nullptr),
+              UF_CONFIG_OK);
+
+    UfConfigValue before;
+    ASSERT_EQ(UfConfigGetField(h, "testharn.knob_b", &before), UF_CONFIG_OK);
+    ASSERT_EQ(before.value_type, UF_CONFIG_VALUE_TYPE_STRING);
+    const std::string kept(before.as.str.ptr, before.as.str.len);
+
+    EXPECT_EQ(UfConfigSetString(h, "testharn.knob_b", "not a valid value!"),
+              UF_CONFIG_ERR_VALIDATION);
+
+    UfConfigValue after;
+    ASSERT_EQ(UfConfigGetField(h, "testharn.knob_b", &after), UF_CONFIG_OK);
+    EXPECT_EQ(std::string(after.as.str.ptr, after.as.str.len), kept);
 
     UfConfigDestroy(h);
 }

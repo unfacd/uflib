@@ -8,19 +8,29 @@
 #   UTF8PROC_LIBRARIES     for target_link_libraries
 #   UTF8PROC_VERSION       from the pkg-config file, when it is there
 #
-# /opt first, then the default paths: this fleet installs it under /opt, but a
-# host that installs it system-wide should still be found.
+# A private-prefix install is reached by setting UTF8PROC_ROOT; otherwise the
+# default paths are searched, so a distro package needs no hint.
 
 include(FindPackageHandleStandardArgs)
 
+set(_utf8proc_include_hints)
+if(UTF8PROC_ROOT)
+    list(APPEND _utf8proc_include_hints "${UTF8PROC_ROOT}/include")
+endif()
+
 find_path(UTF8PROC_INCLUDE_DIR
     NAMES utf8proc.h
-    PATHS /opt/include
+    HINTS ${_utf8proc_include_hints}
 )
+
+set(_utf8proc_library_hints)
+if(UTF8PROC_ROOT)
+    list(APPEND _utf8proc_library_hints "${UTF8PROC_ROOT}/lib")
+endif()
 
 find_library(UTF8PROC_LIBRARY
     NAMES utf8proc
-    PATHS /opt/lib
+    HINTS ${_utf8proc_library_hints}
 )
 
 if(UTF8PROC_LIBRARY AND NOT UTF8PROC_VERSION)
@@ -45,4 +55,4 @@ if(Utf8proc_FOUND)
     set(UTF8PROC_LIBRARIES    "${UTF8PROC_LIBRARY}")
 endif()
 
-mark_as_advanced(UTF8PROC_INCLUDE_DIR UTF8PROC_LIBRARY)
+mark_as_advanced(UTF8PROC_ROOT UTF8PROC_INCLUDE_DIR UTF8PROC_LIBRARY)

@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
     ApplyDdl(g_cleanup_conn, UFCONFIG_DDL_PATH);
 
     /* ── The driver under test ────────────────────────────────────────────── */
-    UfConfigStatus st = UF_CONFIG_OK;
+    UfConfigOpStatus st = UF_CONFIG_OK;
 #ifdef UFCONFIG_LIVE_USE_LIBRARY_DRIVER
     /* Built by the second target in this directory, against a library
        configured with UFLIB_CAPABILITY_SQL=ON.  Nothing is registered here: the
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
     d.fields      = g_ufconfig_fields;
     d.field_count = (size_t)g_ufconfig_field_count;
     d.lookup      = UfConfigLookupPath;
-    d.kind        = UF_CONFIG_BACKEND_SQL;
+    d.backend        = UF_CONFIG_BACKEND_SQL;
     d.sql.address     = dsn;
     d.sql.ns          = ns;
     d.sql.config_name = cfg;
@@ -255,8 +255,6 @@ int main(int argc, char **argv) {
 
     UfConfigLoadOptions opt;
     memset(&opt, 0, sizeof(opt));
-    opt.size    = sizeof(opt);
-    opt.version = 1;
     opt.mode    = UF_CONFIG_LOAD_STRICT;
 
     st = UfConfigLoad(h, &opt, NULL);
@@ -282,7 +280,7 @@ int main(int argc, char **argv) {
 
     UfConfigBackendSpec spec;
     memset(&spec, 0, sizeof(spec));
-    spec.kind              = UF_CONFIG_BACKEND_SQL;
+    spec.backend_store              = UF_CONFIG_BACKEND_SQL;
     spec.u.sql.dsn         = dsn;
     spec.u.sql.ns          = ns;
     spec.u.sql.config_name = cfg;
@@ -315,9 +313,9 @@ int main(int argc, char **argv) {
             printf("  %-32s MISSING\n", probe[i]);
             continue;
         }
-        if (v.kind == UF_CONFIG_KIND_STRING)
+        if (v.kind == UF_CONFIG_VALUE_TYPE_STRING)
             printf("  %-32s \"%.*s\"\n", probe[i], (int)v.as.str.len, v.as.str.ptr);
-        else if (v.kind == UF_CONFIG_KIND_INT)
+        else if (v.kind == UF_CONFIG_VALUE_TYPE_INT)
             printf("  %-32s %lld\n", probe[i], (long long)v.as.i);
         else
             printf("  %-32s (kind %d)\n", probe[i], (int)v.kind);

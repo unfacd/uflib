@@ -17,15 +17,13 @@
 
 /**
  * @file utils_url.c
- * @brief URL path tokeniser — splits a path on '/' delimiters with
- *        escape-sequence ('\/') awareness.
+ * @brief URL helpers — path tokenisation and component percent-encoding.
  *
- * The tokeniser operates in-place on a sacrificial string, replacing
- * delimiters with NUL bytes.  Trailing slashes are ignored; leading
- * slashes are skipped.  Consecutive slashes produce empty tokens.
  */
 
+#include <stdbool.h>
 #include <stddef.h>
+#include <sys/types.h>
 
 #include <uflib/utils_urls.h>
 
@@ -84,4 +82,51 @@ void TokeniseUrlParams(char *str, UrlParamsDescriptor *tokens, size_t tokens_sz_
 
   tokens->tokens_sz = counter + 1; //return true index size (ie no 0-indexed)
 
+}
+
+/**
+ * @brief Percent-encode a string as a single URI component (RFC 3986 §2.1).
+ *
+ * The unreserved set is recognised by explicit ranges rather than isalnum(), so
+ * the result does not drift with the process locale.
+ *
+ * @param src     NUL-terminated input; NULL is treated as the empty string.
+ * @param dst     Destination buffer, NUL-terminated on return.
+ * @param dst_sz  Capacity of @p dst, terminator included.
+ *
+ * @return Bytes written excluding the terminator; -1 when the encoded form does
+ *         not fit, leaving @p dst holding the truncated prefix.
+ */
+ssize_t
+UrlEncodeComponent(const char *src, char *dst, size_t dst_sz)
+{
+  static const char hex[] = "0123456789ABCDEF";
+  size_t            written = 0;
+
+  if (dst == NULL || dst_sz == 0) return -1;
+
+  if (src != NULL) {
+    for (const unsigned char *p = (const unsigned char *)src; *p != '\0'; p++) {
+      const unsigned char c = *p;
+
+      const bool unreserved = ((c >= 'A' && c <= 'Z') ||
+                               (c >= 'a' && c <= 'z') ||
+                               (c >= '0' && c <= '9') ||
+                               c == '-' || c == '.' || c == '_' || c == '~');
+
+      if (unreserved) {
+        if (written + 1 >= dst_sz) { dst[written] = '\0'; return -1; }
+        dst[written++] = (char)c;
+      } else {
+        if (written + 3 >= dst_sz) { dst[written] = '\0'; return -1; }
+        dst[written++] = '%';
+        dst[written++] = hex[c >> 4];
+        dst[written++] = hex[c & 0x0f];
+      }
+    }
+  }
+
+  dst[written] = '\0';
+
+  return (ssize_t)written;
 }

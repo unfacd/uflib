@@ -3,7 +3,7 @@
 
 Every generated accessor is declared in ufconfig_fields_generated.h as
 
-    UfConfigStatus UfConfigGetXxxYyy(const struct UfConfig *h, UfConfigValue *out);
+    UfConfigOpStatus UfConfigXxxYyy(const struct UfConfig *h, UfConfigValue *out);
 
 so the names are read back from the artefact rather than recomputed from the
 paths: a second implementation of the naming scheme is a second thing to get
@@ -22,7 +22,7 @@ import re
 import sys
 from pathlib import Path
 
-DECL = re.compile(r'^UfConfigStatus\s+(UfConfigGet\w+)\s*\(\s*const struct UfConfig\s*\*\s*\w+\s*,\s*UfConfigValue\s*\*\s*\w+\s*\)\s*;', re.M)
+DECL = re.compile(r'^UfConfigOpStatus\s+(UfConfig\w+)\s*\(\s*const struct UfConfig\s*\*\s*\w+\s*,\s*UfConfigValue\s*\*\s*\w+\s*\)\s*;', re.M)
 # The enum carries the field path as a trailing doc comment:
 #   UF_CONFIG_FIELD_REQ_MUST = 0, ///< req.must
 ENUM = re.compile(r'^\s*(UF_CONFIG_FIELD_[A-Z0-9_]+)\s*=\s*(\d+)\s*,\s*///<\s*(\S+)', re.M)
@@ -60,7 +60,7 @@ def main() -> int:
         "typedef struct {",
         "  const char *path;   /*!< the field this accessor reads */",
         "  const char *name;   /*!< the accessor itself, for diagnostics */",
-        "  UfConfigStatus (*get)(const UfConfig *h, UfConfigValue *out);",
+        "  UfConfigOpStatus (*get)(const UfConfig *h, UfConfigValue *out);",
         "} UfConfigNamedGetter;",
         "",
         "/*!",

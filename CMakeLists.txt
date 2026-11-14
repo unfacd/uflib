@@ -57,10 +57,33 @@ else()
     set(UF_DEBUG_BUILD 0)
 endif()
 
+# ── Verbosity levels ─────────────────────────────────────────────────────────
+# L3 implies L2, and either implies the base debug build switch.
+option(UF_DEBUG_BUILD_L2 "Verbose level-2 debug logging" OFF)
+option(UF_DEBUG_BUILD_L3 "Very verbose level-3 debug logging (per-object traces)" OFF)
+if(UF_DEBUG_BUILD_L3)
+    set(UF_DEBUG_L3 1)
+    set(UF_DEBUG_L2 1)
+else()
+    set(UF_DEBUG_L3 0)
+    if(UF_DEBUG_BUILD_L2)
+        set(UF_DEBUG_L2 1)
+    else()
+        set(UF_DEBUG_L2 0)
+    endif()
+endif()
+if(UF_DEBUG_L2 OR UF_DEBUG_L3)
+    set(UF_DEBUG_BUILD 1)
+endif()
+add_compile_definitions(UF_DEBUG_BUILD=${UF_DEBUG_BUILD}
+                        UF_DEBUG_BUILD_L2=${UF_DEBUG_L2}
+                        UF_DEBUG_BUILD_L3=${UF_DEBUG_L3})
+
 # ── Build-time capabilities ──────────────────────────────────────────────────
 #
 option(UFLIB_CAPABILITY_HIREDIS "Build the Redis driver for the config module" OFF)
 option(UFLIB_CAPABILITY_SQL     "Build the SQL driver (libmariadb / MySQL) for the config module" OFF)
+option(UFLIB_CAPABILITY_SQLITE  "Build the SQLite driver for the config module" OFF)
 option(UFLIB_CAPABILITY_QUIRC   "Build QR-code reading: the vendored quirc library and src/qr_code/" OFF)
 option(UFLIB_CAPABILITY_QRENCODE "Build QR-code rendering, against the system libqrencode" OFF)
 option(UFLIB_CAPABILITY_UTF8PROC "Build the utf8proc-backed UTF-8 helpers, against the system libutf8proc" OFF)
@@ -80,12 +103,25 @@ if(UFLIB_CAPABILITY_ALL)
                  K12 LZF MJSON PROTOBUF_C ZLOG)
         set(UFLIB_CAPABILITY_${_cap} ON)
     endforeach()
-    message(STATUS "Capabilities: ALL — every capability forced on")
+    message(STATUS "Capabilities: ALL — every capability except SQLITE forced on")
 endif()
 
 if(UFLIB_CAPABILITY_SQL)
     find_package(MariaDB REQUIRED)
     message(STATUS "Config module: SQL capability — MariaDB ${MariaDB_VERSION}, ${MariaDB_LIBRARIES}")
+endif()
+
+set(UFLIB_PC_REQUIRES_PRIVATE "")
+
+if(UFLIB_CAPABILITY_SQLITE)
+    find_package(SQLite3 REQUIRED)
+    set(UFLIB_PC_REQUIRES_PRIVATE ", sqlite3")
+    message(STATUS "Config module: SQLite capability — SQLite ${SQLite3_VERSION}, exported to consumers")
+endif()
+
+set(_uflib_db_enabled OFF)
+if(UFLIB_CAPABILITY_SQL OR UFLIB_CAPABILITY_SQLITE)
+    set(_uflib_db_enabled ON)
 endif()
 
 if(UFLIB_CAPABILITY_QRENCODE)
@@ -166,7 +202,9 @@ if(NOT IS_ROOT_PROJECT AND UFSRV_LINKED_LIB_SSL STREQUAL "OPT" AND UFSRV_LINKED_
     set_target_properties(ssl PROPERTIES IMPORTED_LOCATION "${OPT_PACKAGE_SSL}")
     add_library(crypto SHARED IMPORTED)
     set_target_properties(crypto PROPERTIES IMPORTED_LOCATION "${OPT_PACKAGE_CRYPTO}")
-    set(OPENSSL_INCLUDE_DIR "/opt/include" CACHE PATH "OpenSSL include directory")
+    get_filename_component(_uflib_ssl_libdir "${OPT_PACKAGE_SSL}" DIRECTORY)
+    get_filename_component(_uflib_ssl_prefix "${_uflib_ssl_libdir}" DIRECTORY)
+    set(OPENSSL_INCLUDE_DIR "${_uflib_ssl_prefix}/include" CACHE PATH "OpenSSL include directory")
     message(STATUS "OpenSSL via OPT library package: ${OPT_PACKAGE_SSL}")
 else()
     find_package(OpenSSL REQUIRED)
@@ -180,7 +218,7 @@ endif()
 # ── Valgrind (optional — standard_valgrind_includes.h conditionally includes it) ──────
 
 find_path(VALGRIND_INCLUDE_DIR valgrind/valgrind.h
-    HINTS /opt/include /usr/include /usr/local/include
+    HINTS ${VALGRIND_ROOT}/include /usr/include /usr/local/include
 )
 if(VALGRIND_INCLUDE_DIR)
     message(STATUS "Found valgrind headers: ${VALGRIND_INCLUDE_DIR}")
@@ -197,13 +235,29 @@ if(IS_ROOT_PROJECT)
     set_target_properties(${_PROJECT_NAME}_static PROPERTIES OUTPUT_NAME ${_PROJECT_NAME})
 
     if(BUILD_SHARED_LIBS)
+        # Interim switch: until every public symbol carries PUBLIC_API, exporting
+        # all globals keeps the shared library usable by consumers. Set OFF to
+        # enforce the annotation sweep; a gap then fails at link time.
+        option(UFLIB_SHARED_EXPORT_ALL
+            "Export every global from the shared library (interim; disable once PUBLIC_API coverage is complete)" ON)
+
+        if(UFLIB_SHARED_EXPORT_ALL)
+            set(_UFLIB_SHARED_VISIBILITY default)
+        else()
+            set(_UFLIB_SHARED_VISIBILITY hidden)
+        endif()
+
+        # Sources compile once, in the OBJECT target, so visibility must be set
+        # there; a preset on the shared target would be inert (it compiles nothing).
+        set_target_properties(${_PROJECT_NAME} PROPERTIES
+            C_VISIBILITY_PRESET ${_UFLIB_SHARED_VISIBILITY}
+            VISIBILITY_INLINES_HIDDEN ON)
+
         add_library(${_PROJECT_NAME}_shared SHARED $<TARGET_OBJECTS:${_PROJECT_NAME}>)
         set_target_properties(${_PROJECT_NAME}_shared PROPERTIES
             OUTPUT_NAME ${_PROJECT_NAME}
             VERSION   ${${_PROJECT_NAME_X}_VERSION}
-            SOVERSION ${${_PROJECT_NAME_X}_MAJOR}
-            C_VISIBILITY_PRESET hidden
-            VISIBILITY_INLINES_HIDDEN ON)
+            SOVERSION ${${_PROJECT_NAME_X}_MAJOR})
         add_library(${_PROJECT_NAME}::${_PROJECT_NAME} ALIAS ${_PROJECT_NAME}_shared)
     else()
         add_library(${_PROJECT_NAME}::${_PROJECT_NAME} ALIAS ${_PROJECT_NAME}_static)
@@ -226,6 +280,19 @@ endif()
 # ── Include directories ──────────────────────────────────────────────────────
 
 # OBJECT target (build-tree consumers via add_subdirectory)
+# The include roots the discovered dependencies reported. A path that was not
+# found is left out rather than passed through: a NOTFOUND entry is a hard
+# generate-time error, not an empty search.
+set(_uflib_dependency_includes)
+foreach(_dep_include IN ITEMS
+        ${MariaDB_INCLUDE_DIRS} ${SQLite3_INCLUDE_DIRS} ${UTF8PROC_INCLUDE_DIRS} ${QRENCODE_INCLUDE_DIRS}
+        ${OPENSSL_INCLUDE_DIR} ${VALGRIND_INCLUDE_DIR})
+    if(_dep_include)
+        list(APPEND _uflib_dependency_includes "${_dep_include}")
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES _uflib_dependency_includes)
+
 target_include_directories(${_PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -233,10 +300,7 @@ target_include_directories(${_PROJECT_NAME}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/uflib>
         $<INSTALL_INTERFACE:include>
         $<INSTALL_INTERFACE:include/uflib>
-        "/opt/include"
-        "/opt/include/mariadb"
-        ${OPENSSL_INCLUDE_DIR}
-        ${VALGRIND_INCLUDE_DIR}
+        ${_uflib_dependency_includes}
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/adt
@@ -261,11 +325,10 @@ target_include_directories(${_PROJECT_NAME}
 set(_uflib_interface_includes
     $<INSTALL_INTERFACE:include>
     $<INSTALL_INTERFACE:include/uflib>
-    $<BUILD_INTERFACE:/opt/include>
-    $<BUILD_INTERFACE:/opt/include/mariadb>
-    $<BUILD_INTERFACE:${OPENSSL_INCLUDE_DIR}>
-    $<BUILD_INTERFACE:${VALGRIND_INCLUDE_DIR}>
 )
+foreach(_dep_include IN LISTS _uflib_dependency_includes)
+    list(APPEND _uflib_interface_includes $<BUILD_INTERFACE:${_dep_include}>)
+endforeach()
 set(_uflib_interface_libs
     OpenSSL::SSL OpenSSL::Crypto
 )
@@ -288,6 +351,9 @@ endif()
 if(UFLIB_CAPABILITY_QUIRC)
     list(APPEND _uflib_interface_libs uflib_quirc)
 endif()
+if(UFLIB_CAPABILITY_SQLITE)
+    list(APPEND _uflib_interface_libs SQLite3::SQLite3)
+endif()
 
 if(IS_ROOT_PROJECT)
     target_include_directories(${_PROJECT_NAME}_static INTERFACE ${_uflib_interface_includes})
@@ -304,6 +370,10 @@ if(NOT IS_ROOT_PROJECT AND UFSRV_LINKED_LIB_SSL STREQUAL "OPT" AND UFSRV_LINKED_
     target_link_libraries(${_PROJECT_NAME} PUBLIC ssl crypto)
 else()
     target_link_libraries(${_PROJECT_NAME} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+if(UFLIB_CAPABILITY_SQLITE)
+    target_link_libraries(${_PROJECT_NAME} PUBLIC SQLite3::SQLite3)
 endif()
 
 set(_uflib_packaged_libs)
@@ -436,6 +506,56 @@ end
     add_dependencies(${_PROJECT_NAME}_static ${_UFLIB_MERGE_DEPS})
 endif()
 
+# ── Link closure for the shared library ──────────────────────────────────────
+# Both archives are built from $<TARGET_OBJECTS:...>, which carries no usage
+# requirements, so nothing named above reaches them. The static archive is
+# repaired by the merge above; the shared one has to say the same thing again:
+# the folded set goes in whole (libuflib.a hands those APIs to its consumers, so
+# libuflib.so has to as well), and everything the code calls out to becomes a
+# DT_NEEDED entry. Without this the .so records no dependency beyond libc and
+# leaves every mysql_*, redis*, zlog_*, quirc_*, mjson_*, QRcode_* and
+# utf8proc_* call for the consumer to resolve by hand — which is how "-luflib
+# alone does not close the link" presented itself.
+#
+# Derived from the same capability flags as everything else, so a minimal
+# configuration gains no entry it does not use. Note that UFLIB_SHARED_EXPORT_ALL
+# currently exports the embedded vendored symbols too; that ends when the export
+# sweep turns the interim switch off.
+if(BUILD_SHARED_LIBS AND IS_ROOT_PROJECT)
+    set(_uflib_shared_link_libs)
+    foreach(_vendored IN LISTS _UFLIB_MERGE_DEPS)
+        list(APPEND _uflib_shared_link_libs "$<LINK_LIBRARY:WHOLE_ARCHIVE,${_vendored}>")
+    endforeach()
+
+    if(UFLIB_CAPABILITY_HIREDIS)
+        list(APPEND _uflib_shared_link_libs uflib_hiredis)
+    endif()
+    if(UFLIB_CAPABILITY_SQL)
+        list(APPEND _uflib_shared_link_libs ${MariaDB_LIBRARIES})
+    endif()
+    if(UFLIB_CAPABILITY_QRENCODE)
+        list(APPEND _uflib_shared_link_libs ${QRENCODE_LIBRARIES})
+    endif()
+    if(UFLIB_CAPABILITY_UTF8PROC)
+        list(APPEND _uflib_shared_link_libs ${UTF8PROC_LIBRARIES})
+    endif()
+    if(UFLIB_CAPABILITY_SQLITE)
+        list(APPEND _uflib_shared_link_libs SQLite3::SQLite3)
+    endif()
+
+    if(TARGET OpenSSL::SSL)
+        list(APPEND _uflib_shared_link_libs OpenSSL::SSL OpenSSL::Crypto)
+    else()
+        list(APPEND _uflib_shared_link_libs ssl crypto)
+    endif()
+
+    # floor/ceilf/ldexp: glibc does not export libm's names, and the .pc names
+    # -lm for static consumers for the same reason.
+    list(APPEND _uflib_shared_link_libs m)
+
+    target_link_libraries(${_PROJECT_NAME}_shared PRIVATE ${_uflib_shared_link_libs})
+endif()
+
 # Native uflib sources — all compiled into the single uflib OBJECT target
 target_sources(${_PROJECT_NAME} PRIVATE
     # ── Core (src/) ──────────────────────────────────────────────────────
@@ -452,6 +572,7 @@ target_sources(${_PROJECT_NAME} PRIVATE
     src/utils_file_loader.c
     src/utils_hex.c
     src/utils_iec_quantity.c
+    src/utils_json.c
     src/utils_random.c
     src/utils_secrets.c
     src/utils_str.c
@@ -459,6 +580,9 @@ target_sources(${_PROJECT_NAME} PRIVATE
     src/utils_time.c
     src/utils_threads.c
     src/utils_url.c
+
+    # ── Resource router (src/resource_router/) ───────────────────────────
+    src/resource_router/resource_router.c
 
     # ── ADT (src/adt/) ───────────────────────────────────────────────────
     src/adt/adt_doubly_linkedlist.c
@@ -477,6 +601,11 @@ target_sources(${_PROJECT_NAME} PRIVATE
 
     # ── buffer_descriptor  ────────────────────────────────────────────────────
     src/buffer_descriptor/buffer_descriptor.c
+
+    # ── CDT / alias_map ──────────────────────────────────────────────────
+    src/cdt/alias_map/alias_map.c
+    src/cdt/alias_map/alias_map_json.c
+    src/cdt/alias_map/alias_map_snapshot.c
 
     # ── CDT / chase_lev_stealing_queue ───────────────────────────────────
     src/cdt/chase_lev_stealing_queue/cdt_chase_lev_stealing_queue.c
@@ -503,13 +632,15 @@ target_sources(${_PROJECT_NAME} PRIVATE
     src/cdt/lockless_minheap/cdt_lockless_minheap.c
 
     # ── DB (src/db/) ─────────────────────────────────────────────────────
-    src/db/db_abstraction.c
-    src/db/db_mysql.c
-    src/db/db_ops.c
+    $<$<BOOL:${_uflib_db_enabled}>:${CMAKE_CURRENT_SOURCE_DIR}/src/db/db_abstraction.c>
+    $<$<BOOL:${UFLIB_CAPABILITY_SQL}>:${CMAKE_CURRENT_SOURCE_DIR}/src/db/db_mysql.c>
+    $<$<BOOL:${UFLIB_CAPABILITY_SQLITE}>:${CMAKE_CURRENT_SOURCE_DIR}/src/db/db_sqlite.c>
+    $<$<BOOL:${_uflib_db_enabled}>:${CMAKE_CURRENT_SOURCE_DIR}/src/db/db_ops.c>
 
     # ── Net (src/net/) ───────────────────────────────────────────────────
     src/net/utils_net.c
     src/net/network_socket_address.c
+    src/net/RFC4193.c
 
     # ── Recycler (src/recycler/) ─────────────────────────────────────────
     src/recycler/instances_list.c
@@ -575,6 +706,14 @@ target_sources(${_PROJECT_NAME} PRIVATE
     # so it is unconditional like every other module that carries none.
     src/optional/ufoptional.c
 
+    # ── Message framing: WebSocket (src/msg_framing/websocket/) ───────────
+    # RFC 6455 frame codec. Self-contained: no logger, socket or allocation.
+    src/msg_framing/websocket/ws_frame.c
+    src/msg_framing/websocket/ws_message.c
+    src/msg_framing/websocket/ws_utf8.c
+    src/msg_framing/websocket/ws_close.c
+    src/msg_framing/websocket/ws_handshake.c
+
 )
 
 # ── Config module — Redis driver (opt-in) ────────────────────────────────────
@@ -588,6 +727,10 @@ endif()
 # ── Config module — SQL driver (capability) ──────────────────────────────────
 if(UFLIB_CAPABILITY_SQL)
     message(STATUS "Config module: SQL driver enabled — link libmariadb in the consumer")
+endif()
+
+if(UFLIB_CAPABILITY_SQLITE)
+    message(STATUS "Config module: SQLite driver enabled — SQLite3::SQLite3 on the link interface")
 endif()
 
 # ── Dynamic version — generated into build directory ─────────────────────────
@@ -666,6 +809,11 @@ if(_PACKAGE_INSTALL)
         PATTERN "protobuf-c" EXCLUDE
         PATTERN "zlog" EXCLUDE
     )
+    # include/uflib is already an INSTALL_INTERFACE root, so the bare
+    # <config_uflib.h> the library itself uses resolves for consumers too.
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/config_uflib.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/uflib
+    )
     if(UFLIB_CAPABILITY_K12)
         install(DIRECTORY include/uflib/K12 DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/uflib)
     endif()
@@ -726,6 +874,38 @@ if(_PACKAGE_INSTALL)
     install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}Config.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}ConfigVersion.cmake
+        DESTINATION ${INSTALL_CONFIGDIR}
+    )
+
+    # ── IDE source manifest ──────────────────────────────────────────────────
+    # The installed package ships headers and a binary, never sources, so a
+    # consumer that links it has no definition to navigate to. Publish the
+    # translation units this library actually compiles, together with the
+    # checkout they were configured from, so a consumer can index them.
+    #
+    # Paths are absolute and machine-specific by design: the manifest records
+    # where the sources were when the package was built. A consumer must
+    # tolerate entries that do not exist on its machine and fall back to
+    # whatever it can resolve itself (other checkout location, another host).
+    get_target_property(_ufsrv_ide_sources ${_PROJECT_NAME} SOURCES)
+    set(_ufsrv_ide_manifest
+        "set(${_PROJECT_NAME_X}_IDE_SOURCE_DIR \"${CMAKE_CURRENT_SOURCE_DIR}\")\nset(${_PROJECT_NAME_X}_IDE_SOURCES\n")
+    foreach(_ufsrv_ide_src IN LISTS _ufsrv_ide_sources)
+        if(NOT IS_ABSOLUTE "${_ufsrv_ide_src}")
+            set(_ufsrv_ide_src "${CMAKE_CURRENT_SOURCE_DIR}/${_ufsrv_ide_src}")
+        endif()
+        # Generated sources live in the build tree, not the source checkout:
+        # there is no file for a consumer to navigate to.
+        string(FIND "${_ufsrv_ide_src}" "${CMAKE_CURRENT_BINARY_DIR}/" _ufsrv_ide_gen)
+        if(_ufsrv_ide_gen EQUAL 0)
+            continue()
+        endif()
+        string(APPEND _ufsrv_ide_manifest "    \"${_ufsrv_ide_src}\"\n")
+    endforeach()
+    string(APPEND _ufsrv_ide_manifest ")\n")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}-ide-sources.cmake"
+        "${_ufsrv_ide_manifest}")
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}-ide-sources.cmake
         DESTINATION ${INSTALL_CONFIGDIR}
     )
 

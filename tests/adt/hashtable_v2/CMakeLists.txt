@@ -1,6 +1,6 @@
 # ── Unit tests (registered with CTest) ──────────────────────────────────────
 
-find_library(UTF8PROC_LIBRARY utf8proc PATHS /opt/lib NO_DEFAULT_PATH)
+find_package(Utf8proc REQUIRED)
 
 add_c_test(
     NAME hashtable_v2_tests

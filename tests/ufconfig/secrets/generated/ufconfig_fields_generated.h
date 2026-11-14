@@ -12,8 +12,8 @@ typedef enum UfConfigFieldId {
 } UfConfigFieldId;
 _Static_assert(sizeof(UfConfigFieldId) <= sizeof(int), "UfConfigFieldId_is_int");
 struct UfConfig;
-UfConfigStatus UfConfigGetAppDbPassword(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetAppApiToken(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetAppShortSecret(const struct UfConfig *h, UfConfigValue *out);
-UfConfigStatus UfConfigGetAppDbAddress(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigAppDbPassword(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigAppApiToken(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigAppShortSecret(const struct UfConfig *h, UfConfigValue *out);
+UfConfigOpStatus UfConfigAppDbAddress(const struct UfConfig *h, UfConfigValue *out);
 #endif

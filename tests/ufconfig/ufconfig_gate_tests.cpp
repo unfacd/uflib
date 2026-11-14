@@ -22,6 +22,7 @@ extern "C" {
 #include <cstring>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 namespace {
 
@@ -31,16 +32,12 @@ std::string SamplePath(const char *leaf) {
 
 UfConfigLoadOptions Lenient() {
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_LENIENT;
     return opt;
 }
 
 UfConfigLoadOptions Strict() {
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_STRICT;
     return opt;
 }
@@ -96,6 +93,23 @@ std::string ReadFile(const std::string &path) {
     return out;
 }
 
+// Every field the test schema requires, so a pair-set built from these loads
+// without tripping the rule each of these tests is about, plus one ordinary
+// mutable field to read back afterwards.  The paths are borrowed literals: a
+// pair-set assembled this way must not be handed to UfConfigFreePairs.
+std::vector<UfConfigFieldPair> RequiredPairs() {
+    return {
+        {"ufsrv.ufsrv_geogroup", UF_PAIR_INT, "1"},
+        {"ufsrv.main_listener_port", UF_PAIR_INT, "19701"},
+        {"ufsrv.sys_runtime.chroot", UF_PAIR_STRING, "\"/\""},
+        {"ufnet.db_backend.port", UF_PAIR_INT, "19800"},
+        {"ufnet.db_backend.address", UF_PAIR_STRING, "\"db.example\""},
+        {"ufnet.db_backend.username", UF_PAIR_STRING, "\"ufsrv\""},
+        {"ufnet.db_backend.password", UF_PAIR_STRING, "\"secret\""},
+        {"testharn.knob_a", UF_PAIR_INT, "1"},
+    };
+}
+
 }  // namespace
 
 TEST(UfConfigGate, FailedLoadPublishesNothing) {
@@ -112,6 +126,95 @@ TEST(UfConfigGate, FailedLoadPublishesNothing) {
     memset(&v, 0, sizeof(v));
     EXPECT_EQ(UfConfigGetField(h, "ufsrv.main_listener_port", &v), UF_CONFIG_ERR_NOFIELD);
     EXPECT_FALSE(v.present);
+
+    UfConfigDestroy(h);
+}
+
+TEST(UfConfigGate, FailedPairsLoadPublishesNothing) {
+    // The pair-set path carries a store's contents, so a refused load through
+    // it must leave the working configuration in force exactly as a refused
+    // document load does.  A store that hands over an incomplete configuration
+    // must fail, not quietly replace a working one with half a tree.
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+
+    UfConfigLoadOptions opt = Strict();
+    std::vector<UfConfigFieldPair> good = RequiredPairs();
+    ASSERT_EQ(UfConfigLoadPairs(h, good.data(), good.size(), nullptr, &opt, nullptr), UF_CONFIG_OK);
+
+    UfConfigValue v;
+    ASSERT_EQ(UfConfigGetField(h, "ufsrv.main_listener_port", &v), UF_CONFIG_OK);
+    ASSERT_EQ(v.as.i, 19701);
+
+    // The same set with one required field removed.
+    std::vector<UfConfigFieldPair> incomplete;
+    for (const UfConfigFieldPair &p : good) {
+        if (strcmp(p.path, "ufsrv.main_listener_port") == 0) continue;
+        incomplete.push_back(p);
+    }
+    EXPECT_EQ(UfConfigLoadPairs(h, incomplete.data(), incomplete.size(), nullptr, &opt, nullptr),
+              UF_CONFIG_ERR_REQUIRED);
+
+    memset(&v, 0, sizeof(v));
+    ASSERT_EQ(UfConfigGetField(h, "ufsrv.main_listener_port", &v), UF_CONFIG_OK)
+        << "the refused load replaced the working configuration";
+    EXPECT_EQ(v.as.i, 19701);
+
+    UfConfigDestroy(h);
+}
+
+TEST(UfConfigGate, StrictPairsLoadRefusesAnUndeclaredPathAndPublishesNothing) {
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+
+    UfConfigLoadOptions opt = Strict();
+    std::vector<UfConfigFieldPair> good = RequiredPairs();
+    ASSERT_EQ(UfConfigLoadPairs(h, good.data(), good.size(), nullptr, &opt, nullptr), UF_CONFIG_OK);
+
+    std::vector<UfConfigFieldPair> with_unknown = good;
+    with_unknown.push_back({"no.such.path", UF_PAIR_INT, "7"});
+    EXPECT_EQ(UfConfigLoadPairs(h, with_unknown.data(), with_unknown.size(), nullptr, &opt, nullptr),
+              UF_CONFIG_ERR_UNKNOWN_FIELD);
+
+    UfConfigValue v;
+    memset(&v, 0, sizeof(v));
+    ASSERT_EQ(UfConfigGetField(h, "testharn.knob_a", &v), UF_CONFIG_OK)
+        << "the refused load replaced the working configuration";
+    EXPECT_EQ(v.as.i, 1);
+
+    memset(&v, 0, sizeof(v));
+    EXPECT_EQ(UfConfigGetField(h, "no.such.path", &v), UF_CONFIG_ERR_NOFIELD);
+
+    UfConfigDestroy(h);
+}
+
+TEST(UfConfigGate, LenientPairsLoadStillCarriesUndeclaredPaths) {
+    // Leniency is a mode, not a property of the path a configuration arrives
+    // by: an undeclared path a document may carry, a pair-set may carry too.
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+
+    UfConfigLoadOptions opt = Lenient();
+    std::vector<UfConfigFieldPair> pairs = RequiredPairs();
+    pairs.push_back({"no.such.path", UF_PAIR_INT, "7"});
+    ASSERT_EQ(UfConfigLoadPairs(h, pairs.data(), pairs.size(), nullptr, &opt, nullptr), UF_CONFIG_OK);
+
+    UfConfigValue v;
+    ASSERT_EQ(UfConfigGetField(h, "no.such.path", &v), UF_CONFIG_OK);
+    EXPECT_EQ(v.as.i, 7);
+
+    UfConfigDestroy(h);
+}
+
+TEST(UfConfigGate, FileLoadRefusesADocumentMissingARequiredField) {
+    // The same rule at the document level, so a change to the path a file is
+    // read by cannot weaken it unnoticed.
+    TempFile doc("ufsrv = { main_listener_port = 19701 }\nreturn { ufsrv = ufsrv }\n");
+
+    UfConfig *h = nullptr;
+    ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
+    UfConfigLoadOptions opt = Strict();
+    EXPECT_EQ(UfConfigLoadFile(h, doc.path().c_str(), &opt, nullptr), UF_CONFIG_ERR_REQUIRED);
 
     UfConfigDestroy(h);
 }

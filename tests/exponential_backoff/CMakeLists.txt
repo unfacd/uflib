@@ -14,7 +14,7 @@ add_c_test(
 
 # ── Whitebox DB-reconnection test (mocks DB I/O via linker --wrap) ─────────
 
-find_library(MARIADB_LIBRARY NAMES mariadb PATHS /opt/lib/mariadb NO_DEFAULT_PATH)
+find_package(MariaDB REQUIRED)
 
 add_c_test(
     NAME db_reconnect_tests
@@ -22,9 +22,8 @@ add_c_test(
     INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/include/uflib
         ${CMAKE_SOURCE_DIR}/include
-        /opt/include
-        /opt/include/mariadb
-    LIBRARIES uflib::uflib ${MARIADB_LIBRARY}
+        ${MariaDB_INCLUDE_DIRS}
+    LIBRARIES uflib::uflib ${MariaDB_LIBRARIES}
 )
 target_link_options(db_reconnect_tests PRIVATE
     "-Wl,--wrap=h_execute_query_mariadb"
@@ -57,10 +56,9 @@ target_include_directories(db_reconnect_driver PRIVATE
     ${CMAKE_SOURCE_DIR}/include/uflib
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}
-    /opt/include
-    /opt/include/mariadb
+    ${MariaDB_INCLUDE_DIRS}
 )
 target_link_libraries(db_reconnect_driver PRIVATE
-    uflib::uflib ${MARIADB_LIBRARY} m pthread
+    uflib::uflib ${MariaDB_LIBRARIES} m pthread
 )
 ufsrv_apply_build_options(db_reconnect_driver)

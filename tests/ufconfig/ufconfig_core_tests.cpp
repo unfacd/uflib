@@ -34,16 +34,12 @@ std::string SamplePath(const std::string &leaf) {
 
 UfConfigLoadOptions Lenient() {
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_LENIENT;
     return opt;
 }
 
 UfConfigLoadOptions Strict() {
     UfConfigLoadOptions opt = {};
-    opt.size = sizeof(opt);
-    opt.version = 1;
     opt.mode = UF_CONFIG_LOAD_STRICT;
     return opt;
 }
@@ -77,7 +73,7 @@ TEST(UfConfigCore, SchemaTransformIsAppliedOnRead) {
     UfConfigValue v;
     ASSERT_EQ(UfConfigGetField(h, "ufsrv.server_run_mode", &v), UF_CONFIG_OK);
     ASSERT_TRUE(v.present);
-    ASSERT_EQ(v.kind, UF_CONFIG_KIND_STRING);
+    ASSERT_EQ(v.value_type, UF_CONFIG_VALUE_TYPE_STRING);
     ASSERT_NE(v.as.str.ptr, nullptr);
     EXPECT_STREQ(v.as.str.ptr, "SHADOW");
 
@@ -158,7 +154,7 @@ TEST(UfConfigCore, DocumentRequiresValidationBeforeItIsTrusted) {
         "  intra_ufsrv_classname = \"ufsrv\", protocol_id = 0, ufsrv_geogroup = 1,\n"
         "  main_listener_port = 99999,\n"
         "}\n";
-    UfConfigStatus st =
+    UfConfigOpStatus st =
         UfConfigLoadBuffer(h, bad_value, strlen(bad_value), &opt, nullptr);
     EXPECT_TRUE(st == UF_CONFIG_ERR_VALIDATION || st == UF_CONFIG_ERR_REQUIRED)
         << "port 99999 must not be accepted; got " << UfConfigStatusString(st);
@@ -214,7 +210,7 @@ TEST(UfConfigCore, PathIndexAndGeneratedAccessorAgree) {
     ASSERT_EQ(UfConfigGetField(h, "ufsrv.main_listener_port", &by_path), UF_CONFIG_OK);
     ASSERT_EQ(UfConfigGetFieldByIndex(h, UF_CONFIG_FIELD_UFSRV_MAIN_LISTENER_PORT, &by_index),
               UF_CONFIG_OK);
-    ASSERT_EQ(UfConfigGetUfsrvMainListenerPort(h, &by_getter), UF_CONFIG_OK);
+    ASSERT_EQ(UfConfigUfsrvMainListenerPort(h, &by_getter), UF_CONFIG_OK);
 
     EXPECT_EQ(by_path.as.i, by_index.as.i);
     EXPECT_EQ(by_path.as.i, by_getter.as.i);
@@ -235,7 +231,7 @@ TEST(UfConfigCore, NestingBeyondTheCeilingIsRefusedNotTruncated) {
     ASSERT_EQ(UfConfigTestCreate(&h), UF_CONFIG_OK);
 
     UfConfigLoadOptions opt = Lenient();
-    UfConfigStatus st =
+    UfConfigOpStatus st =
         UfConfigLoadBuffer(h, deep.c_str(), deep.size(), &opt, nullptr);
     EXPECT_TRUE(st == UF_CONFIG_ERR_LIMIT_EXCEEDED || st == UF_CONFIG_ERR_PARSE)
         << "got " << UfConfigStatusString(st);

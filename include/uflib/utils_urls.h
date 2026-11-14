@@ -21,6 +21,7 @@
 #include <uflib/uflib_defs.h>
 
 #include <stddef.h>
+#include <sys/types.h>
 
 /*! Single token in a tokenised URL path — points into the sacrificial string. */
 typedef struct {
@@ -40,5 +41,23 @@ typedef struct {
 } UrlParamsDescriptor;
 
 PUBLIC_API void TokeniseUrlParams(char *str, UrlParamsDescriptor *tokens, size_t tokens_sz_hint);
+
+/*! Percent-encode @p src as a single URI component (RFC 3986 §2.1).
+ *
+ * The unreserved set — ALPHA / DIGIT / '-' / '.' / '_' / '~' — is copied
+ * verbatim and every other octet, '/' and '%' included, is written as an
+ * uppercase @c %XX escape.  One rule for every context: the result is safe as
+ * a query value, a path segment or a form field without a caller-specific
+ * variant.
+ *
+ * @param[in]  src     NUL-terminated input; @c NULL is treated as the empty
+ *                     string.
+ * @param[out] dst     Destination buffer, NUL-terminated on return.
+ * @param[in]  dst_sz  Capacity of @p dst, terminator included.
+ *
+ * @return Bytes written excluding the terminator, or -1 when the encoded form
+ *         does not fit; @p dst then holds the truncated prefix.
+ */
+PUBLIC_API ssize_t UrlEncodeComponent(const char *src, char *dst, size_t dst_sz);
 
 #endif //UFSRV_UTILS_URLS_H

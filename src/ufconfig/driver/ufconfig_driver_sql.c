@@ -497,7 +497,7 @@ static int sBumpVersion(SqlCtx *c, uint64_t config_id) {
     return ok;
 }
 
-static UfConfigStatus sSqlOpen(void **ctx, const UfConfigBackendSpec *spec) {
+static UfConfigOpStatus sSqlOpen(void **ctx, const UfConfigBackendSpec *spec) {
     if (!ctx || !spec || !spec->u.sql.dsn || !spec->u.sql.ns || !spec->u.sql.config_name)
         return UF_CONFIG_ERR_INVALID_ARG;
     if (strlen(spec->u.sql.ns) > SQL_NS_MAX || strlen(spec->u.sql.config_name) > SQL_NAME_MAX)
@@ -524,7 +524,7 @@ static UfConfigStatus sSqlOpen(void **ctx, const UfConfigBackendSpec *spec) {
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sSqlReadAll(void *ctx, UfConfigFieldPair **out, size_t *n, UfConfigMeta *meta) {
+static UfConfigOpStatus sSqlReadAll(void *ctx, UfConfigFieldPair **out, size_t *n, UfConfigMeta *meta) {
     SqlCtx *c = (SqlCtx *)ctx;
     if (!c || !out || !n) return UF_CONFIG_ERR_INVALID_ARG;
     *out = NULL; *n = 0;
@@ -613,7 +613,7 @@ static UfConfigStatus sSqlReadAll(void *ctx, UfConfigFieldPair **out, size_t *n,
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sSqlWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n, const UfConfigMeta *meta) {
+static UfConfigOpStatus sSqlWriteAll(void *ctx, const UfConfigFieldPair *in, size_t n, const UfConfigMeta *meta) {
     SqlCtx *c = (SqlCtx *)ctx;
     if (!c || (n && !in)) return UF_CONFIG_ERR_INVALID_ARG;
     if (n > 0) {
@@ -637,7 +637,7 @@ static UfConfigStatus sSqlWriteAll(void *ctx, const UfConfigFieldPair *in, size_
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sSqlReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
+static UfConfigOpStatus sSqlReadOne(void *ctx, const char *path, UfConfigFieldPair *out) {
     SqlCtx *c = (SqlCtx *)ctx;
     if (!c || !path || !out) return UF_CONFIG_ERR_INVALID_ARG;
     if (strlen(path) > SQL_PATH_MAX) return UF_CONFIG_ERR_LIMIT_EXCEEDED;
@@ -685,7 +685,7 @@ static UfConfigStatus sSqlReadOne(void *ctx, const char *path, UfConfigFieldPair
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sSqlWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
+static UfConfigOpStatus sSqlWriteOne(void *ctx, const char *path, const UfConfigFieldPair *in) {
     SqlCtx *c = (SqlCtx *)ctx;
     if (!c || !path || !in) return UF_CONFIG_ERR_INVALID_ARG;
     if (strlen(path) > SQL_PATH_MAX || (in->encoded && strlen(in->encoded) > 64000)) return UF_CONFIG_ERR_LIMIT_EXCEEDED;
@@ -715,7 +715,7 @@ static UfConfigStatus sSqlWriteOne(void *ctx, const char *path, const UfConfigFi
     return UF_CONFIG_OK;
 }
 
-static UfConfigStatus sSqlStat(void *ctx, UfConfigStamp *out) {
+static UfConfigOpStatus sSqlStat(void *ctx, UfConfigStamp *out) {
     SqlCtx *c = (SqlCtx *)ctx;
     if (!c || !out) return UF_CONFIG_ERR_INVALID_ARG;
     uint64_t version = 0;
@@ -753,7 +753,7 @@ static void sSqlClose(void *ctx) {
 const UfConfigDriver ufconfig_driver_sql = {
     .caps = {
         .api_version       = UF_CONFIG_DRIVER_API_VERSION,
-        .kind              = UF_CONFIG_BACKEND_SQL,
+        .backend_store              = UF_CONFIG_BACKEND_SQL,
         .atomic_write_all  = true,
         .atomic_write_one  = true,
         .per_field_read    = true,
