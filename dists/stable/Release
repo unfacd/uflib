@@ -1,20 +1,20 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Sun, 04 Oct 2026 09:59:25 +0000
+Date: Sat, 14 Nov 2026 23:18:18 +0000
 Description: unfacd apt repository
 Label: unfacd
 Origin: unfacd
 Suite: stable
 MD5Sum:
- 3ade4338a7a1a855a4b75ca0bd5d870c             2465 main/binary-amd64/Packages
- 2df0d7493f49d1d8e9b7b0310780218d             1014 main/binary-amd64/Packages.gz
+ d1f55d6244acca90396fe810c9be22ea             3194 main/binary-amd64/Packages
+ 8654059c5db4e9d556be38afa5beaef2             1267 main/binary-amd64/Packages.gz
 SHA1:
- b2d52e2fe6194beecaa67d742dadad2b42b327e4             2465 main/binary-amd64/Packages
- 16a2c5925c2b259114b2e6897551b1561340a3fe             1014 main/binary-amd64/Packages.gz
+ 6b587beebf95be630a2d6bd95a6098c63da7b0bc             3194 main/binary-amd64/Packages
+ 8037305fda1d8e474ce01a457f27a9808406e04d             1267 main/binary-amd64/Packages.gz
 SHA256:
- 9d794df579192c2bd19f9a1d54f47299a520ee6670797e61b6864d971b81e165             2465 main/binary-amd64/Packages
- ec5a458cbd653b9079ebd27a114ba872b825d4e2e761e629b333349ea94dd6f0             1014 main/binary-amd64/Packages.gz
+ 0f763b3d7d72800b082780280a7f7fdf311306a20e1e4f28b4973290f9496b5e             3194 main/binary-amd64/Packages
+ fe5b54cebe11767ed245021e9b5d0c8bb4d60f6815145bd431f9b08fd769b786             1267 main/binary-amd64/Packages.gz
 SHA512:
- 6e4f7003f68e848e48a2fa5b8b6213967bd98c886219331df710cfdc72225df21b4e96161012fdff9eebf3cef5bda2926f225a5cd50867661a5b61bf480e9824             2465 main/binary-amd64/Packages
- 78e47397f3924f93e2402ba96d85dba114f6ac764c0ea5733c640d20e9ed9a5e23eff03a86b8e46bbb768f87bfffedee5367547c1cf20e6f4c8cd7c38fac8e74             1014 main/binary-amd64/Packages.gz
+ 0002f0bb23c230d3a7f8f4c8e42190e71c1e1766d29eb7d4a89982af6c175ef7ec2b85ea92237e935e4e3f0a89a52350a6e9d257bc0b1632376dac43ec6742a6             3194 main/binary-amd64/Packages
+ dcf00f22444f067e445a03f26971026aaaf34e5963598b357d9551bb720d3e97c0d5562736e5705786ef0722e765a5417b371af590fa961b5bad82b2f87d41b7             1267 main/binary-amd64/Packages.gz
