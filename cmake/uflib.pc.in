@@ -13,7 +13,7 @@ Requires.private: openssl@UFLIB_PC_REQUIRES_PRIVATE@
 # resolved to whichever libzlog the loader found first rather than the one
 # installed beside libuflib, giving a pkg-config consumer a different backend
 # copy from the one uflib itself was built against.
-Libs: -L${libdir} -luflib
+Libs: -L${libdir} -l@UFLIB_PC_LIBNAME@
 # -lm is here because quirc's identify.o carries three libm relocations (rint
 # twice, sqrt once) and glibc does not export either from libc.so.6.  That
 # object is inside the folded archive whenever UFLIB_CAPABILITY_QUIRC was on,
@@ -28,5 +28,5 @@ Libs: -L${libdir} -luflib
 # consumer that calls UfUtilsQrCodeEncodeText adds it itself.  Adding it here
 # would make every uflib consumer depend on a library most of them never call —
 # the contract hiredis and libmariadb already follow.
-Libs.private: -lssl -lcrypto -lm
+Libs.private: -lssl -lcrypto -lm@UFLIB_PC_BLOCKS_RUNTIME@
 Cflags: -I${includedir} -I${includedir}/uflib

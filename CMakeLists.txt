@@ -113,6 +113,13 @@ endif()
 
 set(UFLIB_PC_REQUIRES_PRIVATE "")
 
+# The stream module's Apple Blocks runtime is a separate library off Apple.
+if(APPLE)
+    set(UFLIB_PC_BLOCKS_RUNTIME "")
+else()
+    set(UFLIB_PC_BLOCKS_RUNTIME " -lBlocksRuntime")
+endif()
+
 if(UFLIB_CAPABILITY_SQLITE)
     find_package(SQLite3 REQUIRED)
     set(UFLIB_PC_REQUIRES_PRIVATE ", sqlite3")
@@ -132,6 +139,23 @@ endif()
 if(UFLIB_CAPABILITY_UTF8PROC)
     find_package(Utf8proc REQUIRED)
     message(STATUS "UTF-8 helpers: utf8proc capability — libutf8proc ${UTF8PROC_VERSION}, ${UTF8PROC_LIBRARIES}")
+endif()
+
+find_path(VALGRIND_INCLUDE_DIR valgrind/valgrind.h
+    HINTS ${VALGRIND_ROOT}/include /opt/include /usr/include /usr/local/include
+)
+include(CheckIncludeFile)
+if(VALGRIND_INCLUDE_DIR)
+    set(CMAKE_REQUIRED_INCLUDES "${VALGRIND_INCLUDE_DIR}")
+endif()
+check_include_file(valgrind/valgrind.h HAVE_VALGRIND)
+check_include_file(valgrind/drd.h HAVE_VALGRIND_DRD)
+check_include_file(valgrind/memcheck.h HAVE_VALGRIND_MEMCHECK)
+unset(CMAKE_REQUIRED_INCLUDES)
+if(VALGRIND_INCLUDE_DIR)
+    message(STATUS "Found valgrind headers: ${VALGRIND_INCLUDE_DIR}")
+else()
+    message(STATUS "Valgrind headers not found — valgrind-dependent features will be unavailable")
 endif()
 
 configure_file(
@@ -215,17 +239,6 @@ else()
     endif()
 endif()
 
-# ── Valgrind (optional — standard_valgrind_includes.h conditionally includes it) ──────
-
-find_path(VALGRIND_INCLUDE_DIR valgrind/valgrind.h
-    HINTS ${VALGRIND_ROOT}/include /usr/include /usr/local/include
-)
-if(VALGRIND_INCLUDE_DIR)
-    message(STATUS "Found valgrind headers: ${VALGRIND_INCLUDE_DIR}")
-else()
-    message(STATUS "Valgrind headers not found — valgrind-dependent features will be unavailable")
-endif()
-
 # ── Build target — OBJECT library (dual-mode) ────────────────────────────────
 
 add_library(${_PROJECT_NAME} OBJECT)
@@ -241,6 +254,15 @@ if(IS_ROOT_PROJECT)
         option(UFLIB_SHARED_EXPORT_ALL
             "Export every global from the shared library (interim; disable once PUBLIC_API coverage is complete)" ON)
 
+        # A build that is installed beside the system copy (the CLI variant lives in
+        # its own prefix) must not claim the system SONAME: two libuflib.so.<major>
+        # objects with different capability sets would shadow each other at load
+        # time, and the loser is decided by search order, not by the caller. A
+        # distinct output name changes only the file the loader sees; the exported
+        # target names, and therefore every consumer's link line, stay the same.
+        set(UFLIB_SHARED_OUTPUT_NAME "${_PROJECT_NAME}" CACHE STRING
+            "File name stem of the shared library; set to a variant name when installing beside the system copy")
+
         if(UFLIB_SHARED_EXPORT_ALL)
             set(_UFLIB_SHARED_VISIBILITY default)
         else()
@@ -255,7 +277,7 @@ if(IS_ROOT_PROJECT)
 
         add_library(${_PROJECT_NAME}_shared SHARED $<TARGET_OBJECTS:${_PROJECT_NAME}>)
         set_target_properties(${_PROJECT_NAME}_shared PROPERTIES
-            OUTPUT_NAME ${_PROJECT_NAME}
+            OUTPUT_NAME ${UFLIB_SHARED_OUTPUT_NAME}
             VERSION   ${${_PROJECT_NAME_X}_VERSION}
             SOVERSION ${${_PROJECT_NAME_X}_MAJOR})
         add_library(${_PROJECT_NAME}::${_PROJECT_NAME} ALIAS ${_PROJECT_NAME}_shared)
@@ -353,6 +375,13 @@ if(UFLIB_CAPABILITY_QUIRC)
 endif()
 if(UFLIB_CAPABILITY_SQLITE)
     list(APPEND _uflib_interface_libs SQLite3::SQLite3)
+endif()
+
+# The stream module uses clang blocks, whose runtime is a separate library off
+# Apple platforms. Consumers of the public stream headers need it on their link
+# line, exactly as the in-tree test targets do.
+if(NOT APPLE)
+    list(APPEND _uflib_interface_libs BlocksRuntime)
 endif()
 
 if(IS_ROOT_PROJECT)
@@ -553,6 +582,12 @@ if(BUILD_SHARED_LIBS AND IS_ROOT_PROJECT)
     # -lm for static consumers for the same reason.
     list(APPEND _uflib_shared_link_libs m)
 
+    # The stream objects carry Apple Blocks references; the runtime is separate
+    # off Apple platforms.
+    if(NOT APPLE)
+        list(APPEND _uflib_shared_link_libs BlocksRuntime)
+    endif()
+
     target_link_libraries(${_PROJECT_NAME}_shared PRIVATE ${_uflib_shared_link_libs})
 endif()
 
@@ -580,6 +615,11 @@ target_sources(${_PROJECT_NAME} PRIVATE
     src/utils_time.c
     src/utils_threads.c
     src/utils_url.c
+
+    src/collection/collection.c
+    src/collection/arena.c
+    src/collection/stream/stream.c
+    src/collection/stream/stream_fluent.c
 
     # ── Resource router (src/resource_router/) ───────────────────────────
     src/resource_router/resource_router.c
@@ -612,6 +652,15 @@ target_sources(${_PROJECT_NAME} PRIVATE
 
     # ── CDT / hashmap ────────────────────────────────────────────────────
     src/cdt/hashmap/cdt_fixed_width_hashmap.c
+
+    # ── ADT / flow_table and its instantiations ─────────────────────────
+    src/adt/flow_table/flow_table.c
+    src/adt/robinhood_hashtable/flow4.c
+    src/adt/robinhood_hashtable/flow6.c
+    src/adt/robinhood_hashtable/id_64bit.c
+
+    # ── slab ────────────────────────────────────────────────────────────
+    src/slab/inlined_slab.c
 
     # ── CDT / lamport_queue ──────────────────────────────────────────────
     src/cdt/lamport_queue/cdt_lamport_queue.c
@@ -836,6 +885,13 @@ if(_PACKAGE_INSTALL)
     )
 
     # pkg-config
+    # The link name follows the installed object, which a variant build renames so
+    # that it cannot claim the system SONAME (see UFLIB_SHARED_OUTPUT_NAME above).
+    if(BUILD_SHARED_LIBS)
+        set(UFLIB_PC_LIBNAME "${UFLIB_SHARED_OUTPUT_NAME}")
+    else()
+        set(UFLIB_PC_LIBNAME "${_PROJECT_NAME}")
+    endif()
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/${_PROJECT_NAME}.pc.in
         ${CMAKE_CURRENT_BINARY_DIR}/${_PROJECT_NAME}.pc

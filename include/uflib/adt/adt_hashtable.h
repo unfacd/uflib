@@ -136,6 +136,24 @@ HashTable *HashTableInstantiate(HashTable *, int offset, int key_size, long key_
 PUBLIC_API HashTable *HashTableLockingInstantiate(HashTable *ht_ptr_in, int offset, int key_size, long key_is_ptr,
                                                   const char *, ItemExtractor item_extractor_callback);
 /**
+ * @brief Instantiate a table from a HashtableSpecs descriptor (no lock).
+ * @param[in,out] ht_ptr Caller storage, or NULL to allocate one.
+ * @param[in] specs Descriptor providing the key, name, extractor, and optional startup bucket count.
+ * @return Initialised table, or NULL for invalid specs or allocation failure.
+ * @note Buckets are allocated at first insertion. fTableSize of zero uses the
+ *       default count, and one is rounded to two. The table remains resizable.
+ */
+PUBLIC_API HashTable *HashTableInstantiateWithSpecs(HashTable *ht_ptr, const HashtableSpecs *specs);
+/**
+ * @brief Instantiate a locking table from a HashtableSpecs descriptor.
+ * @param[in,out] ht_ptr Caller storage, or NULL to allocate one.
+ * @param[in] specs Descriptor providing the key, name, extractor, and optional startup bucket count.
+ * @return Initialised table, or NULL for invalid specs or allocation failure.
+ * @note Buckets are allocated at first insertion, using the same count rules
+ *       as HashTableInstantiateWithSpecs().
+ */
+PUBLIC_API HashTable *HashTableLockingInstantiateWithSpecs(HashTable *ht_ptr, const HashtableSpecs *specs);
+/**
  * @brief Opt this table into key-value uniqueness. Fixed for the table's life.
  * @param[in,out] hash Initialised table.
  * @param[in] unique_keys true enforces uniqueness, false restores the default.

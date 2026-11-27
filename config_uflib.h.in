@@ -67,6 +67,10 @@
 #cmakedefine UFLIB_CAPABILITY_PROTOBUF_C 1
 #cmakedefine UFLIB_CAPABILITY_ZLOG 1
 
+#cmakedefine HAVE_VALGRIND
+#cmakedefine HAVE_VALGRIND_DRD
+#cmakedefine HAVE_VALGRIND_MEMCHECK
+
 #include <uflib/config_defs_uflib.h>
 
 #endif /* CONFIG_H */

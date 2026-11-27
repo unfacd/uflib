@@ -19,7 +19,7 @@
 #define UFLIB_VERSION_H
 
 #define UFLIB_MAJOR     4
-#define UFLIB_MINOR     1
+#define UFLIB_MINOR     2
 #define UFLIB_PATCH     0
 #define UFLIB_INTERNAL  0
 

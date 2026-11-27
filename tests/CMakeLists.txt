@@ -89,6 +89,7 @@ endfunction()
 
 # ── Test subdirectories ───────────────────────────────────────────────────
 
+add_subdirectory(slab)
 add_subdirectory(utils)
 add_subdirectory(exponential_backoff)
 add_subdirectory(ufsrvuid)
@@ -99,6 +100,9 @@ add_subdirectory(optional)
 
 # Resource router: path-keyed route registry
 add_subdirectory(resource_router)
+
+# Collection module: chunked arena and the descriptor-driven collector
+add_subdirectory(collection)
 
 # The vendored parser's extension, gated on the parser
 add_subdirectory(mjson)
@@ -113,6 +117,8 @@ add_subdirectory(adt/hashtable_v2)
 add_subdirectory(adt/hopscotch)
 add_subdirectory(adt/hopscotch_configurable)
 add_subdirectory(adt/hopscotch_hashtable_v2)
+add_subdirectory(adt/flow_table)
+add_subdirectory(adt/robinhood_hashtable)
 add_subdirectory(adt/minheap)
 add_subdirectory(adt/logger_injection)
 

@@ -13,6 +13,9 @@
 #ifndef UFLIB_DEFS_H
 #define UFLIB_DEFS_H
 
+#include <pthread.h>
+#include <syslog.h>
+
 /*!
  * Marker for public API functions — exported from the shared library.
  *
@@ -32,6 +35,33 @@
   #else
     #define PUBLIC_API
   #endif
+#endif
+
+/**
+ * Trace macros. Each names the emitting function and its thread, matching the
+ * rest of the library's syslog output, and compiles out unless the build
+ * selects its switch. UF_LOG() carries no level and follows the base debug
+ * switch, which either level implies.
+ */
+#if UF_DEBUG_BUILD
+# define UF_LOG(fmt, ...) \
+  syslog(LOG_DEBUG, "%s {pid:'%lu'}: " fmt, __func__, pthread_self(), ##__VA_ARGS__)
+#else
+# define UF_LOG(fmt, ...) ((void)0)
+#endif
+
+#if UF_DEBUG_BUILD_L2
+# define UF_LOG_L2(fmt, ...) \
+  syslog(LOG_DEBUG, "%s {pid:'%lu'}: " fmt, __func__, pthread_self(), ##__VA_ARGS__)
+#else
+# define UF_LOG_L2(fmt, ...) ((void)0)
+#endif
+
+#if UF_DEBUG_BUILD_L3
+# define UF_LOG_L3(fmt, ...) \
+  syslog(LOG_DEBUG, "%s {pid:'%lu'}: " fmt, __func__, pthread_self(), ##__VA_ARGS__)
+#else
+# define UF_LOG_L3(fmt, ...) ((void)0)
 #endif
 
 #endif /* UFLIB_DEFS_H */
