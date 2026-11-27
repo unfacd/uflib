@@ -21,6 +21,8 @@
 #include <config_uflib.h>
 #endif
 
+#include <limits.h>
+
 #include <string.h>
 #include <errno.h>
 #include <uflib/adt/adt_hashtable.h>
@@ -91,6 +93,7 @@ HashTableInstantiate(HashTable *   ht_ptr, int offset, int key_size, long key_is
 
   result->fTable                  = NULL;
   result->fTableSize              = 0;
+  result->startup_size            = 0;
   result->fNumEntries             = 0;
   result->fKeyOffset              = offset;
   result->fKeySize                = key_size;
@@ -139,6 +142,30 @@ HashTableLockingInstantiate(HashTable *   ht_ptr_in, int offset, int key_size, l
   }
 
   return NULL;
+}
+
+PUBLIC_API HashTable *
+HashTableInstantiateWithSpecs(HashTable *ht_ptr, const HashtableSpecs *specs)
+{
+  if (unlikely(IS_EMPTY(specs)) || specs->fTableSize > INT_MAX) return NULL;
+
+  HashTable *table = HashTableInstantiate(ht_ptr, (int)specs->fKeyOffset, (int)specs->fKeySize,
+                                          specs->fKeyIsPtr, specs->table_name,
+                                          specs->item_extractor_callback);
+  if (table) table->startup_size = specs->fTableSize;
+  return table;
+}
+
+PUBLIC_API HashTable *
+HashTableLockingInstantiateWithSpecs(HashTable *ht_ptr, const HashtableSpecs *specs)
+{
+  if (unlikely(IS_EMPTY(specs)) || specs->fTableSize > INT_MAX) return NULL;
+
+  HashTable *table = HashTableLockingInstantiate(ht_ptr, (int)specs->fKeyOffset, (int)specs->fKeySize,
+                                                 specs->fKeyIsPtr, specs->table_name,
+                                                 specs->item_extractor_callback);
+  if (table) table->startup_size = specs->fTableSize;
+  return table;
 }
 
 /**
@@ -300,17 +327,14 @@ ExpandTable(HashTable *ht_ptr)
    * on 64-bit before OOM) but correct. */
   if (oldSize > SIZE_MAX / 2) return -1;
 
-  size_t newSize = oldSize * 2;
-
-  if (ht_ptr->flag_resizable == 0) {
-    /* special condition for non-resizable tables, allowing for the size to be set separately from default */
-    if (ht_ptr->max_size > 0) newSize = ht_ptr->max_size;
-    else goto compute_size; //TODO: this is dumb: set newSize to zero and remove 'else' below and test if (newsize>0)
-  }
-  else {
-compute_size:
-    if (newSize == 0) newSize = _CONFIGDEFAULT_HASHTABLE_EXPANSION_SZ; /* bootstrapping the hashtable */
-    else newSize              = GetNextPrimeNumber(2 * oldSize);
+  size_t newSize;
+  if (!ht_ptr->flag_resizable && ht_ptr->max_size > 0) {
+    newSize = ht_ptr->max_size;
+  } else if (oldSize == 0) {
+    newSize = ht_ptr->startup_size ? ht_ptr->startup_size : _CONFIGDEFAULT_HASHTABLE_EXPANSION_SZ;
+    if (newSize == 1) newSize = 2;
+  } else {
+    newSize = GetNextPrimeNumber(2 * oldSize);
   }
 
   void **newTable = (void**)calloc(newSize, sizeof(void*));

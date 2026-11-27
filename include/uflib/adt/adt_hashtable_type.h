@@ -32,6 +32,21 @@
 typedef ClientContextData * (*ItemExtractor)(ItemContainer *);
 typedef char * (*ItemPrettyPrinter)(ItemContainer *);
 
+typedef struct HahTableSpecs
+{
+  const char 	*table_name;
+  size_t	fTableSize; ///< Requested bucket count for the first insertion.
+  size_t	max_size;
+  long	fKeyOffset;
+  long	fKeySize;
+  long	fKeyIsPtr;
+  unsigned  flag_locking:1,
+           flag_resizable:1,
+           flag_unique_keys:1;
+  ItemExtractor item_extractor_callback;
+  ItemPrettyPrinter item_pretty_printer_callback;
+} HashtableSpecs;
+
 typedef struct HashTable
 {
   void	**fTable;//user data
@@ -50,6 +65,7 @@ typedef struct HashTable
   unsigned  flag_locking:1,
             flag_resizable:1,
             flag_unique_keys:1;
+  size_t startup_size; ///< Bucket count requested for the first allocation, zero for the default.
 } HashTable;
 
 #endif //UFSRV_ADT_HASHTABLE_TYPE_H

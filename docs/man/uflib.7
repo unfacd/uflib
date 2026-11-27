@@ -1,4 +1,4 @@
-.TH UFLIB 7 "November 2026" "uflib 4.1.0" "UFSRV Programmer's Manual"
+.TH UFLIB 7 "November 2026" "uflib 4.2.0" "UFSRV Programmer's Manual"
 .\" ---------------------------------------------------------------------------
 .SH NAME
 uflib \- foundational C library for the ufsrv messaging-server platform
@@ -16,6 +16,10 @@ uflib \- foundational C library for the ufsrv messaging-server platform
 .B #include <uflib/ufconfig/ufconfig.h>
 .B #include <uflib/ufcommand/ufcommand.h>
 .B #include <uflib/buffer_descriptor/buffer_descriptor.h>
+.B #include <uflib/collection/collection.h>
+.B #include <uflib/collection/arena.h>
+.B #include <uflib/collection/stream/stream.h>
+.B #include <uflib/collection/stream/stream_fluent.h>
 .B #include <uflib/resource_router/resource_router.h>
 .B #include <uflib/optional/ufoptional.h>
 .B #include <uflib/msg_framing/websocket/ws_frame.h>
@@ -33,7 +37,8 @@ is the bottom layer of the ufsrv development stack.  It provides the
 general-purpose software primitives every higher layer builds on: abstract
 data types, lock-free concurrent data structures, an object recycler,
 crypto and DB abstractions, networking helpers, an owning optional
-container, a path-keyed route registry, a command registry, a
+container, a dense collection engine (descriptor-driven and lazy block-based
+streams), a path-keyed route registry, a command registry, a
 schema-driven configuration loader,
 compression, JSON, protobuf, UUID generation, a backend-agnostic logging
 interface, an RFC 6455 WebSocket codec, and utility routines.  Dependencies flow
@@ -356,6 +361,288 @@ when the container was already empty.
 What the module does not do: it is not thread-safe.  A container is
 single-owner, and if one is shared between threads synchronization belongs at
 that boundary, outside this API.
+.\" ===================================================
+.SS Collection \&(collection)
+A dense collection engine with two front ends: an eager descriptor-driven
+collector and a lazy, single-pass stream engine with an optional fluent
+facade.  Both produce the same
+.B CollectionResult
+and use the same
+.B Arena
+and
+.B CollectResult
+status model, so a consumer can move between them without changing its result
+handling.
+.sp
+A result is a dense array: a slot is consumed only for an accepted item.  On
+failure the result is empty, the source is released, and only the
+.B skipped
+count remains meaningful.  Release a collected result with
+.BR CollectionResultFree ()
+or
+.BR StreamResultFree ().
+A
+.B CollectionResult
+holds
+.BR items
+(a dense array of
+.B count
+elements),
+.BR count ,
+.B skipped
+and
+.BR arena .
+.sp
+.B Arena.
+The module includes a chunked bump allocator.  It never moves an existing
+allocation: growth adds a chunk.  This makes it suitable for element data whose
+pointers are stored in the result.  An
+.B Arena
+is a plain value with no self-references and may be moved by assignment; after
+moving it, do not use or destroy the original.
+.sp
+.TP
+.B ArenaInit(arena, chunk_sz) / ArenaAlloc(arena, size, align) / ArenaAllocZ(arena, size, align) / ArenaMemdup(arena, src, size) / ArenaStrdup(arena, string)
+Initialise and allocate.  A zero
+.I chunk_sz
+selects
+.BR ARENA_DEFAULT_CHUNK_SZ ;
+a zero
+.I align
+selects
+.BR max_align_t .
+.TP
+.B ArenaGetMark(arena) / ArenaRewind(arena, mark) / ArenaUsed(arena) / ArenaDestroy(arena)
+Take or rewind a stack-style mark; report bytes handed out; release every
+chunk.  Marks are rewound in LIFO order.  Destroying a zeroed or already
+destroyed arena is safe.
+.PP
+.B Descriptor collector.
+.B CollectorRun()
+performs one pass using the callbacks in a
+.BR CollectionDescriptorV2 .
+Its
+.B elem_sz
+is the size of one output element; the result array is dense at that stride.
+.B on_acquire
+opens the source (optional),
+.B on_validate
+checks it and may supply a size hint,
+.B on_next
+yields items,
+.B on_prefilter
+is a cheap raw-item gate,
+.B on_process
+validates, filters and converts one item into the destination slot, and
+.B on_release
+closes the source.  A process callback returns
+.BR COLLECT_TAKE ,
+.BR COLLECT_SKIP
+or
+.BR COLLECT_ABORT .
+The descriptor's
+.B limit
+stops after a number of kept items,
+.B max_skipped
+bounds skips, and
+.B allow_empty
+turns an empty result into success.
+.sp
+With
+.B use_arena
+false,
+.B on_process()
+owns any element data it copies and
+.B on_elem_destroy
+releases it; the collector calls it for rollback and
+.BR CollectionResultFree ()
+calls it for each kept element.  With
+.B use_arena
+true, the collector passes its
+.B Arena
+to
+.B on_process()
+and takes a mark before each item: allocations for a skipped or aborted item
+are rewound automatically, and
+.B on_elem_destroy
+is unnecessary.  In both modes the source is released before
+.BR CollectorRun ()
+returns, so result elements must not point into source memory.
+.sp
+.TP
+.B CollectorRun(descriptor, ctx, out)
+Run one descriptor pipeline.  For every call,
+.I out
+is initialised; on failure it is empty and clean.  The returned
+.B CollectResult
+is one of
+.BR COLLECT_OK ,
+.BR COLLECT_ERR_BAD_SPEC ,
+.BR COLLECT_ERR_ACQUIRE ,
+.BR COLLECT_ERR_VALIDATE ,
+.BR COLLECT_ERR_ALLOC ,
+.BR COLLECT_ERR_ABORTED ,
+.BR COLLECT_ERR_SKIP_LIMIT
+or
+.BR COLLECT_ERR_EMPTY .
+.TP
+.B CollectionResultFree(descriptor, out, ctx)
+Release a result: call the descriptor's
+.B on_elem_destroy
+for each kept element when set, free the array, and destroy the arena.  Safe
+on a cleared result and on NULL
+.IR out .
+Pass the same descriptor used for the run.
+.TP
+.B CollectorResultStr(status)
+Human-readable name for a
+.B CollectResult
+for logging.
+.PP
+.B Stream engine.
+.B StreamOfDescriptor()
+adapts an existing descriptor as a source;
+.B StreamOfArray()
+and
+.B StreamOfPointers()
+cover in-memory arrays;
+.B StreamOfBlocks()
+takes a
+.B StreamSource
+whose blocks receive state through
+.BR arg ,
+so non-capturing blocks can be used.
+Intermediate operations are
+.BR StreamFilter (),
+.BR StreamMap (),
+.BR StreamPeek (),
+.BR StreamSkip (),
+.BR StreamLimit (),
+.B StreamTakeWhile()
+and
+.BR StreamDropWhile ().
+Terminal operations are
+.BR StreamCollect (),
+.BR StreamCount (),
+.BR StreamForEach (),
+.BR StreamAnyMatch (),
+.B StreamAllMatch()
+and
+.BR StreamNoneMatch ();
+the match terminals stop at the first decisive item.
+A stream is single use: a terminal consumes it, and
+.B StreamClose()
+discards an unrun one.
+.sp
+.B StreamCollect()
+uses
+.B StreamCollectOpts
+to choose the element size, arena mode,
+.B on_copy
+(deep copy; a NULL copier uses
+.BR memcpy ),
+.B on_elem_destroy
+for heap elements,
+.B max_skipped
+and
+.BR allow_empty .
+A map stage receives a scratch output slot that is zeroed once per run, not per
+item, so it must fully write the slot on
+.BR STREAM_EMIT .
+Stages and source items are borrowed and valid only for the callback; only
+collect copies.
+.sp
+.TP
+.B StreamOfDescriptor(source, ctx) / StreamOfArray(base, n, stride) / StreamOfPointers(ptrs, n) / StreamOfBlocks(source)
+Stream sources.
+.TP
+.B StreamFilter(s, keep) / StreamMap(s, out_sz, map) / StreamPeek(s, observe) / StreamSkip(s, n) / StreamLimit(s, n) / StreamTakeWhile(s, pred) / StreamDropWhile(s, pred)
+Intermediate operations; each mutates and returns
+.IR s .
+.TP
+.B StreamCollect(s, opts, out) / StreamResultFree(opts, out)
+Collect into a
+.B CollectionResult
+and release it.  Pass the same options to the release call.
+.TP
+.B StreamCount(s, count) / StreamForEach(s, each) / StreamAnyMatch(s, pred, result) / StreamAllMatch(s, pred, result) / StreamNoneMatch(s, pred, result)
+Other terminals.  Each consumes
+.IR s .
+.TP
+.B StreamClose(s) / StreamThreadTrim()
+Discard an unrun stream; release the calling thread's stream and fluent pools.
+.PP
+.B Fluent facade.
+.B stream_fluent.h
+wraps a stream in
+.BR FStream .
+.BR FluentOfDescriptor (),
+.BR FluentOfArray (),
+.BR FluentOfPointers ()
+and
+.BR FluentOfBlocks ()
+start a chain; methods
+.BR filter ,
+.BR map ,
+.BR peek ,
+.BR skip ,
+.BR limit ,
+.BR takeWhile
+and
+.B dropWhile
+return the same object; terminals
+.BR collect ,
+.BR count ,
+.BR forEach ,
+.BR anyMatch ,
+.BR allMatch
+and
+.B noneMatch
+run and consume it.  Use
+.BR close ()
+to abandon a chain.
+.BR StreamFluent (NULL)
+and failed construction return an inert chain rather than NULL; an inert
+chain returns
+.B COLLECT_ERR_BAD_SPEC
+from its terminals.
+.sp
+.TP
+.B FluentOfDescriptor(source, ctx) / FluentOfArray(base, n, stride) / FluentOfPointers(ptrs, n) / FluentOfBlocks(source) / StreamFluent(s)
+Fluent chain starters and wrapper.
+.TP
+.B FStream methods filter(map_args) / map(out_sz, mapper) / peek(observer) / skip(n) / limit(n) / takeWhile(pred) / dropWhile(pred) / collect(opts, out) / count(count) / forEach(each) / anyMatch(pred, result) / allMatch(pred, result) / noneMatch(pred, result) / close()
+Method table.  Intermediate methods return the same
+.BR FStream ;
+terminals run the pipeline and consume it.
+.PP
+Streams require Clang blocks
+.RB ( \-fblocks );
+on platforms other than Apple, link
+.BR \-lBlocksRuntime .
+The stream and fluent objects are pooled per thread and recycled in steady
+state.  A thread may retain up to 16 of each until it exits or calls
+.BR StreamThreadTrim ().
+.PP
+.B Example
+.nf
+StreamCollectOpts opts = { .elem_sz = sizeof(long), .allow_empty = true };
+CollectionResult  out;
+CollectResult rc = FluentOfArray(values, n, sizeof *values)
+    ->filter(^bool(const void *p) { return *(const int *)p > 3; })
+    ->map(sizeof(long), ^StreamVerdict(const void *in, void *dst) {
+        *(long *)dst = (long)*(const int *)in * 10;
+        return STREAM_EMIT;
+    })
+    ->collect(opts, &out);
+
+if (rc == COLLECT_OK) {
+    long *kept = out.items;
+    for (size_t i = 0; i < out.count; i++) consume(kept[i]);
+    StreamResultFree(&opts, &out);
+}
+.fi
+.sp
 .\" ===================================================
 .SS Resource router \&(resource_router)
 A path-keyed registry: a tree of route paths, each carrying per-method

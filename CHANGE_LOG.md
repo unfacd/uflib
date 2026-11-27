@@ -1,5 +1,26 @@
 # Change Log — uflib
 
+## Release-261127 — 4.2.0
+`36682720` → `3c3dd180` · 2026-11-15 → 2026-11-27
+
+### New
+- **Flow table** — `adt/flow_table`: a library module keyed by IPv4/IPv6 flow, built on Robin Hood instantiations (`flow4`, `flow6`) under a shared template; the identifier map is now `id_64bit` and exposes iteration
+- **InlinedSlab** — an embeddable fixed-size slot pool (`slab/inlined_slab`), with the pool geometry described by `InlinedSlabDescriptor`
+- **Collection** — an arena and a descriptor-driven collector returning a `CollectionResult`, plus lazy streams with a fluent facade
+- **Hashtable** — init specs, and the configured startup size is honoured on first insertion
+
+### Fixes
+- **Install** — the SONAME is taken from the installed object, and superseded `.so` versions are pruned before `ldconfig`
+- **Build** — valgrind support is gated on probed capabilities, and a build directory pinned to a scratch companion prefix is rejected
+- **Recycler** — slots are reclaimed after a failed checkout
+- **Export surface** — the flow and identifier APIs are annotated `PUBLIC_API`
+
+### Deprecated
+- (none)
+
+### Removed
+- `standard_valgrind_includes.h` — the public valgrind include wrapper; valgrind support is now probed by the build
+
 ## Release-261115 — 4.1.0
 `59d8a99c` → `ac5afeaf` · 2026-10-04 → 2026-11-15
 

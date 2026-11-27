@@ -10,9 +10,9 @@ if(@UFLIB_CAPABILITY_SQLITE@)
     find_dependency(SQLite3)
 endif()
 
-# Valgrind is optional — standard_valgrind_includes.h conditionally includes it.
+# Valgrind is optional; config_uflib.h carries HAVE_VALGRIND_* for consumers.
 find_path(VALGRIND_INCLUDE_DIR valgrind/valgrind.h
-    HINTS ${VALGRIND_ROOT}/include /usr/include /usr/local/include
+    HINTS ${VALGRIND_ROOT}/include /opt/include /usr/include /usr/local/include
 )
 
 list(APPEND CMAKE_MODULE_PATH ${uflib_CMAKE_DIR})

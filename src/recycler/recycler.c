@@ -15,6 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <config_uflib.h>
+
 #include <uflib/standard_c_includes.h>
 #include <pthread.h>
 #include <uflib/recycler/recycler.h>
@@ -22,7 +24,9 @@
 #include <uflib/recycler/instance_type.h>
 #include <uflib/recycler/recycler_log_strings.h>
 
-//#include <uflib/standard_valgrind_includes.h>
+#if defined(HAVE_VALGRIND_MEMCHECK)
+# include <valgrind/memcheck.h>
+#endif
 
 
 //when we allocate types we allocate by factor of that many at once
@@ -34,6 +38,13 @@ typedef struct RecyclerPoolTypeEnvelop {
 	size_t oid;//sequential value used as object id which is fixed for the lifetime of the type. unique across Type
 	InstancesList instances_list;//The InstanceHolder is always a stable reference from the point of view of the client, but the underlying object is "highjackable" and can be given to another Instance. AT the moment only of reference isimplemented, so the list always contain one object per InstanceHolder
 } RecyclerPoolTypeEnvelop;
+
+size_t
+RecyclerPayloadAlignment(void)
+{
+  return _Alignof(RecyclerPoolTypeEnvelop);
+}
+
 
 //the actual memory pool (aka Recycler Pool), along with relevant meta data. This pool is of fixed size, multiple pools can be allocated
 //seperate groups for any given type under teh management of the pool. A management structure, RecyclerPoolDefinition, is responsible for tracking
@@ -231,7 +242,7 @@ sTypePoolExpandAllocationGroup(RecyclerPoolDefinition *pool_ptr, size_t group_al
 	//cast out (for  readability) the allocation group created above for further assignment
 	TypePoolAllocationGroup *alloc_group_ptr = pool_ptr->allocation_groups[pool_ptr->allocated_groups_sz];
 
-#if __VALGRIND_DRDx
+#if defined(HAVE_VALGRIND_MEMCHECK)
 	VALGRIND_CREATE_MEMPOOL(alloc_group_ptr, 0, 1);
 #endif
 
@@ -280,7 +291,7 @@ pthread_spin_init(&(alloc_group_ptr->spin_lock), 0);
 
 	syslog(LOG_DEBUG, LOGSTR_RECYCLER_ALLOC_GROUP_EXPANDED, __func__, pool_ptr->pool_handle.type_name, alloc_group_ptr->groupid, alloc_group_ptr->head, alloc_group_ptr->tail, pool_ptr->expasnion_threshold, pool_ptr->pool_handle.blocksz, group_allocation_sz, RECYCLER_POOL_CURRENT_MAX_CAPACITY(pool_ptr), LOGCODE_RECYCLER_ALLOC_GROUP_EXPANDED);
 
-#if __VALGRIND_DRDx
+#if defined(HAVE_VALGRIND_MEMCHECK)
 	VALGRIND_MAKE_MEM_NOACCESS(pool_ptr->pool_memory2[pool_ptr->allocated_groups_sz - 1], pool_ptr->expasnion_threshold * (sizeof(RecyclerPoolTypeEnvelop) + pool_ptr->pool_handle.blocksz));
 #endif
 
@@ -369,7 +380,7 @@ RecyclerPoolTypeEnvelop *sDeQueue(RecyclerPoolHandle *pool_handle, TypePoolAlloc
 {
 	RecyclerPoolTypeEnvelop *env_ptr = alloc_group_ptr->pool_queue[alloc_group_ptr->head];
 
-#if __VALGRIND_DRDx
+#if defined(HAVE_VALGRIND_MEMCHECK)
 	VALGRIND_MEMPOOL_ALLOC(alloc_group_ptr, env_ptr, sizeof(RecyclerPoolTypeEnvelop) + pool_handle->blocksz); //any later than here valgrind will bark, as we start accessing different memory addresses within the chunk
 #endif
 
@@ -383,7 +394,7 @@ RecyclerPoolTypeEnvelop *sDeQueue(RecyclerPoolHandle *pool_handle, TypePoolAlloc
 	  syslog(LOG_DEBUG, LOGSTR_RECYCLER_QUEUE_ITEM_REFCOUNT_ERROR, __func__, pthread_self(), ALLOCGROUP_TAIL(alloc_group_ptr), ALLOCGROUP_HEAD(alloc_group_ptr), p, ALLOCGROUP_GROUPID(alloc_group_ptr), env_ptr->oid, refcount_read, pool_handle->type_name, ALLOCGROUP_LEASEDSIZE(alloc_group_ptr), LOGCODE_RECYCLER_QUEUE_ITEM_REFCOUNT_ERROR,
 				"ITEM NOT DEQUEUED");
 
-#if __VALGRIND_DRDx
+#if defined(HAVE_VALGRIND_MEMCHECK)
 		VALGRIND_MEMPOOL_FREE(alloc_group_ptr, env_ptr);
 #endif
 
@@ -478,7 +489,7 @@ RecyclerPut(const unsigned type, InstanceHolder *instance_holder, ContextData *c
 
 	atomic_store_explicit(&(env_ptr->_refcount), 1, memory_order_release);
 
-#if __VALGRIND_DRDx
+#if defined(HAVE_VALGRIND_MEMCHECK)
 	//do it last, just before unlocking to ensure block doesnt get allocated by another thread
 		VALGRIND_MEMPOOL_FREE(alloc_group_ptr, env_ptr);
 #endif
@@ -574,9 +585,6 @@ RecyclerGet (const unsigned type, ContextData *context_data, unsigned long call_
 
     if (RECYCLER_TYPE_INITGET_CALLBACK(pool_ptr)) {
 			if (!(RECYCLER_TYPE_INITGET_CALLBACK_INVOKE(pool_ptr, CLIENT_CTX_DATA(ILIST_ITEM_PTR(list_item_ptr))/*client_data*/, context_data, env_ptr->oid, call_flags) == 0)) {
-//        RemoveFromInstancesList(&(env_ptr->instances_list), list_item_ptr); //don't do this here, as we lose reference to the InstanceHolder. This is done in RecyclerPut()
-				atomic_fetch_sub_explicit(&(env_ptr->_refcount), 1, memory_order_acq_rel);
-
 				pthread_spin_unlock(ALLOCGROUP_SPINLOCK_PTR(alloc_group_ptr));//gets locked in the function below
 
 				RecyclerPut(type, ILIST_ITEM_PTR(list_item_ptr), (ContextData *)NULL, CALLFLAGS_EMPTY);

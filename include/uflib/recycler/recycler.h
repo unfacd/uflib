@@ -38,6 +38,8 @@
 #define _INCREMENT_REFERENCE(x) (x)
 #define _DECREMENT_REFERENCE(x) (x)
 
+PUBLIC_API size_t RecyclerPayloadAlignment(void);
+
 PUBLIC_API RecyclerPoolHandle *
 RecyclerInitTypePool(const char *type_name, size_t blocksz, size_t group_allocation_sz, size_t expansion_threshold,
                      RecyclerPoolOps *pool_ops_ptr);
